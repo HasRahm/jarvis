@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jarvis · Mission Control</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #050403;
+      color: #F5E9D7;
+      font-family: 'Inter', sans-serif;
+      overflow: hidden;
+    }
+    #root { width: 100%; height: 100%; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,181,71,0.2); border-radius: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+
+    /* Setup overlay */
+    .setup-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(5,4,3,0.97);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .setup-box {
+      width: 480px; padding: 40px;
+      border: 1px solid rgba(255,181,71,0.25);
+      background: rgba(10,9,7,0.85);
+    }
+    .setup-eyebrow {
+      font-size: 9px; letter-spacing: 3px; color: #FFB547; margin-bottom: 32px;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .setup-eyebrow::before {
+      content: ''; display: block; width: 18px; height: 1px; background: #FFB547;
+    }
+    .setup-label {
+      font-size: 9px; letter-spacing: 1.6px; color: rgba(245,233,215,0.45); margin-bottom: 8px;
+    }
+    .setup-input {
+      width: 100%; padding: 12px 14px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,181,71,0.18);
+      color: #F5E9D7; font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      outline: none; margin-bottom: 18px;
+      transition: border-color 0.2s;
+    }
+    .setup-input:focus { border-color: rgba(255,181,71,0.5); }
+    .setup-btn {
+      width: 100%; padding: 14px;
+      background: #FFB547; color: #0a0907;
+      border: none; cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; font-weight: 700; letter-spacing: 2.5px;
+      transition: opacity 0.2s;
+    }
+    .setup-btn:hover { opacity: 0.9; }
+    .setup-hint {
+      margin-top: 16px; font-size: 10px;
+      color: rgba(245,233,215,0.3); line-height: 1.6; text-align: center;
+    }
+
+    /* Settings gear */
+    .hud-gear {
+      position: fixed; bottom: 20px; right: 20px; z-index: 500;
+      width: 34px; height: 34px;
+      background: rgba(10,9,7,0.75);
+      border: 1px solid rgba(255,181,71,0.2); border-radius: 2px;
+      color: rgba(255,181,71,0.5); font-size: 15px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color 0.2s, color 0.2s;
+      font-family: 'JetBrains Mono', monospace;
+      backdrop-filter: blur(8px);
+    }
+    .hud-gear:hover { border-color: rgba(255,181,71,0.6); color: rgba(255,181,71,0.9); }
+
+    /* Nav pill (top-right, outside HUD chrome) */
+    .hud-nav {
+      position: fixed; top: 14px; right: 20px; z-index: 500;
+      display: flex; gap: 8px; align-items: center;
+    }
+    .hud-nav a {
+      font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1.4px;
+      color: rgba(245,233,215,0.4); text-decoration: none; padding: 5px 10px;
+      border: 1px solid rgba(255,255,255,0.07); border-radius: 2px;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .hud-nav a:hover { color: rgba(245,233,215,0.9); border-color: rgba(255,181,71,0.3); }
+  </style>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="mc-engine.jsx"></script>
+<script type="text/babel" src="mc-shared.jsx"></script>
+<script type="text/babel" src="mc-hud.jsx"></script>
+
+<script type="text/babel">
+// ─── Viewport scaling hook ──────────────────────────────────────
+// The HUD was designed at 1440×920. We scale it to fit any screen
+// using CSS transform:scale (like Figma's "fit to page"), centering
+// it in the viewport. Nav + gear sit outside the scaled container
+// so they stay at a comfortable fixed size on every device.
+const HUD_W = 1440, HUD_H = 920;
+
+function useScale() {
+  function calc() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const scale = Math.min(vw / HUD_W, vh / HUD_H);
+    return {
+      scale,
+      offsetX: Math.round((vw - HUD_W * scale) / 2),
+      offsetY: Math.round((vh - HUD_H * scale) / 2),
+    };
+  }
+  const [state, setState] = React.useState(calc);
+  React.useEffect(() => {
+    const onResize = () => setState(calc());
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return state;
+}
+
+// ─── Token setup screen ─────────────────────────────────────────
+function TokenSetup({ onSave }) {
+  const [url,   setUrl]   = React.useState(localStorage.getItem('hermesUrl')   || 'http://localhost:9000');
+  const [token, setToken] = React.useState(localStorage.getItem('hermesToken') || '');
+  const [error, setError] = React.useState('');
+
+  function save() {
+    if (!token.trim()) { setError('HERMES_SECRET is required'); return; }
+    try { new URL(url); } catch (_) { setError('Server URL is not valid'); return; }
+    localStorage.setItem('hermesUrl',   url.trim());
+    localStorage.setItem('hermesToken', token.trim());
+    onSave();
+  }
+
+  return (
+    <div className="setup-overlay">
+      <div className="setup-box">
+        <div className="setup-eyebrow">HERMES UPLINK · INITIAL CONFIGURATION</div>
+
+        <div className="setup-label">SERVER URL</div>
+        <input className="setup-input" value={url}
+          onChange={e => { setUrl(e.target.value); setError(''); }}
+          placeholder="http://localhost:9000" />
+
+        <div className="setup-label">HERMES SECRET</div>
+        <input className="setup-input" type="password" value={token}
+          onChange={e => { setToken(e.target.value); setError(''); }}
+          onKeyDown={e => e.key === 'Enter' && save()}
+          placeholder="your HERMES_SECRET value" />
+
+        {error && (
+          <div style={{ color: '#F87171', fontSize: 10, letterSpacing: 1.2, marginBottom: 14 }}>
+            ✕ {error}
+          </div>
+        )}
+
+        <button className="setup-btn" onClick={save}>▸ ESTABLISH LINK</button>
+
+        <div className="setup-hint">
+          The secret is stored in localStorage only — never sent to any third party.<br />
+          Find your secret in <code>.env</code> as <code>HERMES_SECRET</code>.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Root app ───────────────────────────────────────────────────
+function HUDApp() {
+  const { scale, offsetX, offsetY } = useScale();
+  const hasToken = !!localStorage.getItem('hermesToken');
+  const [showSetup, setShowSetup] = React.useState(!hasToken);
+  const [live,      setLive]      = React.useState(hasToken);
+
+  function onTokenSaved() {
+    setShowSetup(false);
+    setLive(true);
+  }
+
+  return (
+    <>
+      {showSetup && <TokenSetup onSave={onTokenSaved} />}
+
+      {/* Scaled HUD canvas — always renders at 1440×920, then CSS-scaled to fit */}
+      <div style={{
+        position: 'fixed',
+        top: offsetY,
+        left: offsetX,
+        width: HUD_W,
+        height: HUD_H,
+        transform: `scale(${scale})`,
+        transformOrigin: 'top left',
+      }}>
+        <MCVariantHUD width={HUD_W} height={HUD_H} live={live} />
+      </div>
+
+      {/* Nav pill — sits outside scaled container, always comfortable size */}
+      {!showSetup && (
+        <nav className="hud-nav">
+          <a href="landing.html">HOME</a>
+          <a href="index.html">PHONE</a>
+          <a href="mission-control.html">DESIGN</a>
+        </nav>
+      )}
+
+      {/* Settings re-configure button — outside scaled container */}
+      {!showSetup && (
+        <button className="hud-gear" onClick={() => setShowSetup(true)} title="Reconfigure Hermes connection">
+          ⚙
+        </button>
+      )}
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<HUDApp />);
+</script>
+</body>
+</html>

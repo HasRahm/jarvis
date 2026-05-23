@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jarvis OS — Telemetry & Cost Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-gradient: linear-gradient(135deg, #0b0f19 0%, #111827 100%);
+            --glass-bg: rgba(17, 24, 39, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --accent-primary: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.4);
+            --accent-success: #10b981;
+            --accent-success-glow: rgba(16, 185, 129, 0.3);
+            --accent-error: #ef4444;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* Ambient glowing background circles */
+        .ambient-glow-1 {
+            position: absolute;
+            top: -10%;
+            left: -10%;
+            width: 40vw;
+            height: 40vw;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+            z-index: 0;
+            pointer-events: none;
+        }
+        .ambient-glow-2 {
+            position: absolute;
+            bottom: -10%;
+            right: -10%;
+            width: 50vw;
+            height: 50vw;
+            background: radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, transparent 70%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        header {
+            position: relative;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2rem 4rem;
+            border-bottom: 1px solid var(--glass-border);
+            background: rgba(11, 15, 25, 0.5);
+            backdrop-filter: blur(12px);
+        }
+
+        .header-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--accent-primary) 0%, #60a5fa 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 15px var(--accent-glow);
+            position: relative;
+            animation: pulse-glow 3s infinite ease-in-out;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 15px var(--accent-glow); }
+            50% { transform: scale(1.05); box-shadow: 0 0 25px var(--accent-glow); }
+        }
+
+        .header-title h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            background: linear-gradient(to right, #f3f4f6, #9ca3af);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-title p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .refresh-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: var(--accent-success);
+            background: var(--accent-success-glow);
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            font-weight: 500;
+        }
+
+        .refresh-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-success);
+            border-radius: 50%;
+            animation: blink 1.5s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1; }
+        }
+
+        main {
+            position: relative;
+            z-index: 10;
+            flex: 1;
+            padding: 2.5rem 4rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2.5rem;
+        }
+
+        @media (max-width: 1024px) {
+            main {
+                grid-template-columns: 1fr;
+            }
+            header {
+                padding: 1.5rem 2rem;
+            }
+            main {
+                padding: 1.5rem 2rem;
+            }
+        }
+
+        .dashboard-column {
+            display: flex;
+            flex-direction: column;
+            gap: 2.5rem;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 640px) {
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%);
+            pointer-events: none;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(59, 130, 246, 0.3);
+            box-shadow: 0 12px 40px 0 rgba(59, 130, 246, 0.15);
+        }
+
+        .metric-card {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 130px;
+        }
+
+        .metric-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(to right, #ffffff, #e5e7eb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin: 8px 0;
+        }
+
+        .metric-subtext {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .chart-card {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 350px;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .chart-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .chart-container {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            height: 100%;
+        }
+
+        .table-card {
+            display: flex;
+            flex-direction: column;
+            max-height: 480px;
+        }
+
+        .table-header {
+            margin-bottom: 1.2rem;
+        }
+
+        .table-container {
+            overflow-y: auto;
+            flex: 1;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+
+        th {
+            background: rgba(255, 255, 255, 0.02);
+            padding: 12px 16px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            backdrop-filter: blur(4px);
+        }
+
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            color: var(--text-primary);
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.01);
+        }
+
+        .badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .badge-success {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--accent-success);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .badge-error {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--accent-error);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .role-pill {
+            background: rgba(59, 130, 246, 0.1);
+            color: #93c5fd;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            font-family: monospace;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-glow-1"></div>
+    <div class="ambient-glow-2"></div>
+
+    <header>
+        <div class="header-logo">
+            <div class="logo-icon"></div>
+            <div class="header-title">
+                <h1>Jarvis OS</h1>
+                <p>System Telemetry & Cost Monitoring Terminal</p>
+            </div>
+        </div>
+        <div class="refresh-badge">
+            <div class="refresh-dot"></div>
+            <span>Live Data Sync Active</span>
+        </div>
+    </header>
+
+    <main>
+        <!-- Left Column: Metrics and charts -->
+        <div class="dashboard-column">
+            <div class="metrics-grid">
+                <!-- Card 1: Estimated Cost -->
+                <div class="card metric-card">
+                    <span class="metric-label">Estimated Cost</span>
+                    <span class="metric-value" id="stat-cost">$0.0000</span>
+                    <span class="metric-subtext">
+                        <span>USD total spend</span>
+                    </span>
+                </div>
+                <!-- Card 2: Total Calls -->
+                <div class="card metric-card">
+                    <span class="metric-label">API Invocations</span>
+                    <span class="metric-value" id="stat-calls">0</span>
+                    <span class="metric-subtext">
+                        <span>Total agent calls</span>
+                    </span>
+                </div>
+                <!-- Card 3: Avg Latency -->
+                <div class="card metric-card">
+                    <span class="metric-label">Avg Latency</span>
+                    <span class="metric-value" id="stat-latency">0.00s</span>
+                    <span class="metric-subtext">
+                        <span>Per request latency</span>
+                    </span>
+                </div>
+            </div>
+
+            <!-- Chart Card -->
+            <div class="card chart-card">
+                <div class="chart-header">
+                    <span class="chart-title">Model Cost Distribution</span>
+                    <span style="font-size: 0.8rem; color: var(--text-secondary)">Breakdown of USD spend</span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="costChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Audit Logs -->
+        <div class="dashboard-column">
+            <div class="card table-card" style="height: 100%;">
+                <div class="table-header">
+                    <h2 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 4px;">Operational Log Feed</h2>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary)">Real-time execution registry of active Jarvis agents</p>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Agent</th>
+                                <th>Model</th>
+                                <th>Latency</th>
+                                <th>Cost (Est.)</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="log-table-body">
+                            <!-- Populated dynamically -->
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 40px 0;">
+                                    Loading live execution logs...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let costChart = null;
+
+        async function fetchTelemetry() {
+            try {
+                const res = await fetch("/api/telemetry");
+                const data = await res.json();
+                
+                // Update metric counters
+                document.getElementById("stat-cost").innerText = `$${data.total_cost.toFixed(4)}`;
+                document.getElementById("stat-calls").innerText = data.total_calls;
+                document.getElementById("stat-latency").innerText = `${data.avg_latency.toFixed(2)}s`;
+                
+                // Update log table
+                const tbody = document.getElementById("log-table-body");
+                if (data.history.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: var(--text-secondary); padding: 40px 0;">
+                                No execution logs found in registry.
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    let html = "";
+                    // Show reverse chronological order
+                    const reversedHistory = [...data.history].reverse();
+                    reversedHistory.forEach(record => {
+                        const isSuccess = record.status === "success";
+                        const badgeClass = isSuccess ? "badge-success" : "badge-error";
+                        const latency = record.latency_sec ? `${record.latency_sec.toFixed(2)}s` : "0.00s";
+                        const cost = record.cost_usd ? `$${record.cost_usd.toFixed(4)}` : "$0.0000";
+                        
+                        html += `
+                            <tr>
+                                <td style="font-family: monospace; font-size: 0.8rem; color: var(--text-secondary);">${record.timestamp}</td>
+                                <td><span class="role-pill">${record.role}</span></td>
+                                <td>${record.model}</td>
+                                <td>${latency}</td>
+                                <td style="font-family: monospace;">${cost}</td>
+                                <td><span class="badge ${badgeClass}">${record.status}</span></td>
+                            </tr>
+                        `;
+                    });
+                    tbody.innerHTML = html;
+                }
+                
+                // Update Chart
+                updateChart(data.models);
+                
+            } catch (err) {
+                console.error("Telemetry fetch error:", err);
+            }
+        }
+
+        function updateChart(modelCounts) {
+            const ctx = document.getElementById('costChart').getContext('2d');
+            const labels = Object.keys(modelCounts);
+            const counts = Object.values(modelCounts);
+            
+            if (labels.length === 0) {
+                labels.push("No Active Sessions");
+                counts.push(1);
+            }
+            
+            if (costChart) {
+                costChart.data.labels = labels;
+                costChart.data.datasets[0].data = counts;
+                costChart.update();
+            } else {
+                costChart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: counts,
+                            backgroundColor: [
+                                '#3b82f6',
+                                '#10b981',
+                                '#8b5cf6',
+                                '#f59e0b',
+                                '#ef4444'
+                            ],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    color: '#f3f4f6',
+                                    font: {
+                                        family: 'Outfit'
+                                    }
+                                }
+                            }
+                        },
+                        cutout: '70%'
+                    }
+                });
+            }
+        }
+
+        // Fetch on startup and then poll every 5 seconds
+        fetchTelemetry();
+        setInterval(fetchTelemetry, 5000);
+    </script>
+</body>
+</html>

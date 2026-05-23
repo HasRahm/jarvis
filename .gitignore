@@ -1,0 +1,55 @@
+# ── Python ─────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Virtual environments ────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Secrets — NEVER commit these ───────────────────────────────────────────
+.env
+*.env
+!.env.example
+
+# ── Auto-generated runtime state (not source code) ─────────────────────────
+AGENTS.md
+workspaces/
+logs/
+tunnel_err.log
+*.log
+
+# ── Local databases ─────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Playwright browser binaries (installed separately via `playwright install`) ──
+# (Playwright stores browsers in ~/.cache/ms-playwright, not in this repo)
+
+# ── OS & editor artifacts ───────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Node / Bun (GBrain lives outside this repo, but guard anyway) ───────────
+node_modules/
+bun.lock
