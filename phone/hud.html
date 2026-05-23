@@ -133,11 +133,40 @@ function useScale() {
   return state;
 }
 
+// ─── Auto-discovery via GitHub Gist ─────────────────────────────
+// The startup script on the PC publishes the live tunnel URL here.
+// The HUD checks it on every load — phone never needs to remember a URL.
+const DISCOVERY_GIST = 'https://gist.githubusercontent.com/HasRahm/e99532bb52fd6b67e77f759d9921d5d8/raw/jarvis-url.json';
+
+async function discoverBackendUrl() {
+  try {
+    const res = await fetch(DISCOVERY_GIST + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.status === 'online' && data.url) return data.url;
+  } catch (_) {}
+  return null;
+}
+
 // ─── Token setup screen ─────────────────────────────────────────
 function TokenSetup({ onSave }) {
-  const [url,   setUrl]   = React.useState(localStorage.getItem('hermesUrl')   || 'http://localhost:9000');
-  const [token, setToken] = React.useState(localStorage.getItem('hermesToken') || '');
-  const [error, setError] = React.useState('');
+  const [url,        setUrl]        = React.useState(localStorage.getItem('hermesUrl') || 'http://localhost:9000');
+  const [token,      setToken]      = React.useState(localStorage.getItem('hermesToken') || '');
+  const [error,      setError]      = React.useState('');
+  const [detecting,  setDetecting]  = React.useState(false);
+  const [discovered, setDiscovered] = React.useState(false);
+
+  // Auto-detect URL from Gist on mount
+  React.useEffect(() => {
+    setDetecting(true);
+    discoverBackendUrl().then(found => {
+      setDetecting(false);
+      if (found && found !== url) {
+        setUrl(found);
+        setDiscovered(true);
+      }
+    });
+  }, []);
 
   function save() {
     if (!token.trim()) { setError('HERMES_SECRET is required'); return; }
@@ -152,9 +181,13 @@ function TokenSetup({ onSave }) {
       <div className="setup-box">
         <div className="setup-eyebrow">HERMES UPLINK · INITIAL CONFIGURATION</div>
 
-        <div className="setup-label">SERVER URL</div>
+        <div className="setup-label" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          SERVER URL
+          {detecting && <span style={{ color: '#FFB547', fontSize: 9 }}>· scanning…</span>}
+          {discovered && <span style={{ color: '#34D399', fontSize: 9 }}>· auto-detected ✓</span>}
+        </div>
         <input className="setup-input" value={url}
-          onChange={e => { setUrl(e.target.value); setError(''); }}
+          onChange={e => { setUrl(e.target.value); setError(''); setDiscovered(false); }}
           placeholder="http://localhost:9000" />
 
         <div className="setup-label">HERMES SECRET</div>
@@ -173,7 +206,7 @@ function TokenSetup({ onSave }) {
 
         <div className="setup-hint">
           The secret is stored in localStorage only — never sent to any third party.<br />
-          Find your secret in <code>.env</code> as <code>HERMES_SECRET</code>.
+          Server URL is auto-detected when your PC is running. Just enter the secret once.
         </div>
       </div>
     </div>
@@ -186,6 +219,21 @@ function HUDApp() {
   const hasToken = !!localStorage.getItem('hermesToken');
   const [showSetup, setShowSetup] = React.useState(!hasToken);
   const [live,      setLive]      = React.useState(hasToken);
+
+  // Auto-refresh the backend URL from Gist when already configured
+  React.useEffect(() => {
+    if (!hasToken) return;
+    discoverBackendUrl().then(found => {
+      if (found) {
+        const stored = localStorage.getItem('hermesUrl');
+        if (found !== stored) {
+          localStorage.setItem('hermesUrl', found);
+          // Reload so the engine reconnects to the new URL
+          window.location.reload();
+        }
+      }
+    });
+  }, []);
 
   function onTokenSaved() {
     setShowSetup(false);
