@@ -3,7 +3,8 @@
 
 $taskName   = "JarvisAutoStart"
 $scriptPath = "$PSScriptRoot\start_jarvis.ps1"
-$pwsh       = (Get-Command pwsh -ErrorAction SilentlyContinue)?.Source ?? "powershell"
+$pwshCmd    = Get-Command pwsh -ErrorAction SilentlyContinue
+$pwsh       = if ($pwshCmd) { $pwshCmd.Source } else { "powershell" }
 
 # Remove old task if it exists
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue

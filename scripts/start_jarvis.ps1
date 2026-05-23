@@ -8,6 +8,8 @@
 
 $GIST_ID     = "e99532bb52fd6b67e77f759d9921d5d8"
 $PROJECT     = "C:\Users\hasin\jarvis"
+# GH_TOKEN is set as a persistent Windows user environment variable (never in source).
+# If missing, Gist updates are skipped — tunnel still works, phone just keeps old URL.
 $PYTHON      = "C:\Users\hasin\AppData\Local\Programs\Python\Python313\Scripts\uvicorn.exe"
 $CLOUDFLARED = "C:\Program Files (x86)\cloudflared\cloudflared.exe"
 $HERMES_PORT = 9000
