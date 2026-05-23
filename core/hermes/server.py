@@ -547,6 +547,51 @@ async def hermes_endpoint(websocket: WebSocket):
 
 
 # ---------------------------------------------------------------------------
+# Cleanup API endpoints (Phase 15)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/cleanup/scan")
+async def cleanup_scan(_: None = Depends(_require_token)):
+    """Stage 1 — Return disk usage survey by category."""
+    from tools.disk_cleanup import scan
+    return scan()
+
+
+@app.post("/api/cleanup/safe")
+async def cleanup_safe(_: None = Depends(_require_token)):
+    """Stage 2 — Run safe auto-clean (dry_run=False, no confirmation needed for always-safe dirs)."""
+    from tools.disk_cleanup import safe_clean
+    return safe_clean(dry_run=False)
+
+
+@app.get("/api/cleanup/judge")
+async def cleanup_judge(_: None = Depends(_require_token)):
+    """Stage 3 — Return judgment-needed candidates with AI suggestions."""
+    from tools.disk_cleanup import judgment_scan
+    return judgment_scan()
+
+
+@app.post("/api/cleanup/delete")
+async def cleanup_delete(body: dict, _: None = Depends(_require_token)):
+    """Stage 4 — Delete a single path approved by the user from /api/cleanup/judge.
+
+    Body: {"path": "C:\\...\\something"}
+    Never-touch paths are rejected with 403.
+    """
+    from fastapi import HTTPException
+    from tools.disk_cleanup import delete_judgment_item, never_touch_check
+    path = body.get("path", "").strip()
+    if not path:
+        raise HTTPException(status_code=422, detail="Missing 'path' in request body")
+    if never_touch_check(path):
+        raise HTTPException(status_code=403, detail="Path is in the never-touch list and cannot be deleted.")
+    result = delete_judgment_item(path)
+    if not result["deleted"] and result["error"]:
+        raise HTTPException(status_code=500, detail=result["error"])
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Telemetry & phone endpoints
 # ---------------------------------------------------------------------------
 

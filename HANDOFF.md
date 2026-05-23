@@ -148,6 +148,16 @@ The project is currently being developed on a **Windows** environment, meaning s
 - **Launch URL**: `http://localhost:7890/hud.html` (local) · `https://<tunnel>/hud.html` (remote).
 
 
+### Phase 15: Intelligent Disk Cleanup (COMPLETED)
+- **4-Stage Pipeline**: `tools/disk_cleanup.py` implements scan → safe_clean → judgment_scan → delete_judgment_item. Each stage is independent and idempotent.
+- **Never-touch Guard**: `never_touch_check()` hard-blocks `C:\Windows`, `C:\Program Files`, the Jarvis project root, and Roaming\Microsoft from any deletion. Called before every removal.
+- **Safe Auto-Clean** (`safe_clean(dry_run=True/False)`): Temp folders, INet/browser cache, Windows Update download cache, and Jarvis rotated log backups. `dry_run=True` is the default. Directory list is injectable via `_SAFE_CLEAN_DIRS` for test isolation. `PermissionError` on system dirs is caught and silently skipped.
+- **Judgment Scan** (`judgment_scan()`): Flags (a) files >500 MB in user home, (b) Downloads items >90 days old, (c) stale `node_modules`/`.venv` dirs in projects with no recent git activity. Each candidate gets a one-sentence AI suggestion from Gemma via Ollama (`JARVIS_CI=true` skips LLM calls).
+- **API Endpoints** (protected by `_require_token`): `GET /api/cleanup/scan`, `POST /api/cleanup/safe`, `GET /api/cleanup/judge`, `POST /api/cleanup/delete` (body: `{"path": "..."}` — rejects never-touch with 403).
+- **CLI Script** (`scripts/cleanup.ps1`): Interactive menu (scan / safe / judge / delete <path>). Also callable as `.\scripts\cleanup.ps1 scan|safe|judge|delete <path>`.
+- **Tests**: 19 tests in `tests/test_phase15_cleanup.py`, all passing. Covers never-touch guards, scan keys, dry_run safety, actual deletion, judgment list structure, and API rejection of never-touch paths.
+- **Quick start**: `powershell -ExecutionPolicy Bypass -File scripts\cleanup.ps1`
+
 ## Important Architectural Rules
 
 1. **`AGENTS.md` is the only shared state between agents.** Agents must not call each other's APIs directly.
