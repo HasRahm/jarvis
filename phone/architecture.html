@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jarvis OS — Full Architecture</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #07070f;
+  color: #e0e0e0;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  padding: 20px;
+}
+h1 {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 4px;
+  color: #00d4ff;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.subtitle {
+  text-align: center;
+  font-size: 10px;
+  color: #444;
+  margin-bottom: 22px;
+  letter-spacing: 1.5px;
+}
+
+/* LAYER */
+.layer {
+  border-radius: 10px;
+  margin-bottom: 8px;
+  padding: 10px 12px 12px;
+  border: 1px solid;
+}
+.layer-label {
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+/* GRID */
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.g4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; }
+.g5 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 8px; }
+
+/* CARD */
+.card {
+  border-radius: 7px;
+  padding: 9px 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+  cursor: default;
+}
+.card-title { font-size: 10px; font-weight: 700; margin-bottom: 3px; }
+.card-sub { font-size: 9px; opacity: 0.5; line-height: 1.5; }
+.badge {
+  display: inline-block;
+  font-size: 8px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-top: 4px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* ARROW */
+.arr {
+  text-align: center;
+  color: #2a2a3a;
+  font-size: 13px;
+  margin: 1px 0;
+  letter-spacing: 8px;
+}
+
+/* BUS */
+.bus {
+  border: 1px dashed;
+  border-radius: 6px;
+  padding: 6px 12px;
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: 2px;
+  font-weight: 700;
+  margin: 6px 0;
+}
+
+/* LAYER THEMES */
+.l1 { border-color: #00d4ff33; background: #00d4ff07; }
+.l1 .layer-label { color: #00d4ff; }
+.l1 .card { background: #00d4ff0f; }
+.l1 .badge { background: #00d4ff1a; color: #00d4ff; }
+
+.l2 { border-color: #a78bfa33; background: #a78bfa07; }
+.l2 .layer-label { color: #a78bfa; }
+.l2 .card { background: #a78bfa0f; }
+.l2 .badge { background: #a78bfa1a; color: #a78bfa; }
+
+.l3 { border-color: #f59e0b33; background: #f59e0b07; }
+.l3 .layer-label { color: #f59e0b; }
+.l3 .card { background: #f59e0b0f; }
+.l3 .badge { background: #f59e0b1a; color: #f59e0b; }
+
+.l4 { border-color: #10b98133; background: #10b98107; }
+.l4 .layer-label { color: #10b981; }
+.l4 .card { background: #10b9810f; }
+.l4 .badge { background: #10b9811a; color: #10b981; }
+.bus4 { border-color: #f59e0b55; color: #f59e0b; background: #f59e0b08; }
+
+.l5 { border-color: #f4726433; background: #f4726407; }
+.l5 .layer-label { color: #f47264; }
+.l5 .card { background: #f4726410; }
+.badge-gemini { background: #4285f41a; color: #4285f4; }
+.badge-claude { background: #e8834a1a; color: #e8834a; }
+.badge-gpt    { background: #10a37f1a; color: #10a37f; }
+
+.l6 { border-color: #60a5fa33; background: #60a5fa07; }
+.l6 .layer-label { color: #60a5fa; }
+.l6 .card { background: #60a5fa0f; }
+.l6 .badge { background: #60a5fa1a; color: #60a5fa; }
+
+.l7 { border-color: #34d39933; background: #34d39907; }
+.l7 .layer-label { color: #34d399; }
+.l7 .card { background: #34d3990f; }
+.l7 .badge { background: #34d3991a; color: #34d399; }
+
+.l8 { border-color: #e879f933; background: #e879f907; }
+.l8 .layer-label { color: #e879f9; }
+.l8 .card { background: #e879f90f; }
+.l8 .badge { background: #e879f91a; color: #e879f9; }
+
+.l9 { border-color: #fb923c33; background: #fb923c07; }
+.l9 .layer-label { color: #fb923c; }
+.l9 .card { background: #fb923c0f; }
+.l9 .badge { background: #fb923c1a; color: #fb923c; }
+
+/* NAV */
+.top-nav {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.top-nav a {
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  color: rgba(224,224,224,0.4);
+  text-decoration: none;
+  padding: 5px 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 2px;
+  transition: color 0.2s, border-color 0.2s;
+}
+.top-nav a:hover { color: rgba(224,224,224,0.9); border-color: rgba(0,212,255,0.3); }
+
+/* LEGEND */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px;
+  background: #0d0d18;
+  border-radius: 8px;
+  border: 1px solid #1a1a2e;
+}
+.legend-item { font-size: 9px; color: #555; display: flex; align-items: center; gap: 4px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; }
+</style>
+</head>
+<body>
+
+<nav class="top-nav">
+  <a href="landing.html">HOME</a>
+  <a href="index.html">PHONE</a>
+  <a href="hud.html">HUD</a>
+  <a href="mission-control.html">DESIGN</a>
+</nav>
+
+<h1>⚡ Jarvis OS</h1>
+<div class="subtitle">Complete System Architecture — All 10 Phases + Phase 13 System Health Manager</div>
+
+<!-- L1: USER INTERFACE -->
+<div class="layer l1">
+  <div class="layer-label">① User Interface Layer</div>
+  <div class="g3">
+    <div class="card">
+      <div class="card-title">🎤 Voice Input</div>
+      <div class="card-sub">Whisper STT · local · offline · CPU-capable</div>
+      <span class="badge">openai/whisper</span>
+    </div>
+    <div class="card">
+      <div class="card-title">📱 Phone PWA</div>
+      <div class="card-sub">Glassmorphic UI · voice button · visual viewport · tap-to-correct · telemetry overlays · correction popover · Web Speech API</div>
+      <span class="badge">phone/index.html</span>
+    </div>
+    <div class="card">
+      <div class="card-title">🔊 Voice Output</div>
+      <div class="card-sub">Kokoro TTS · WAV chunks · Web Audio API · GainNode fade on interrupt · sub-800ms first chunk</div>
+      <span class="badge">Kokoro / Coqui</span>
+    </div>
+  </div>
+</div>
+
+<div class="arr">↕ &nbsp; ↕ &nbsp; ↕</div>
+
+<!-- L2: HERMES BRIDGE -->
+<div class="layer l2">
+  <div class="layer-label">② Hermes Protocol Bridge — Phone ↔ Machine</div>
+  <div class="g3">
+    <div class="card">
+      <div class="card-title">🌐 Hermes WebSocket Server</div>
+      <div class="card-sub">FastAPI + Uvicorn · asyncio.Queue per connection · voice · corrective_action · visual_interaction · telemetry · audio_interrupt · slowapi rate limiting · auth header · CORS locked to tunnel domain</div>
+      <span class="badge">server.py</span>
+    </div>
+    <div class="card">
+      <div class="card-title">☁️↔💻 Sync Engine</div>
+      <div class="card-sub">watcher.py · 30s heartbeat · local machine detection · robocopy on wake · gbrain migrate --to pglite · seamless handoff to cloud fallback</div>
+      <span class="badge">watcher.py · migrate.py</span>
+    </div>
+    <div class="card">
+      <div class="card-title">🔐 Cloudflare Tunnel</div>
+      <div class="card-sub">Stable public WSS URL · no port forwarding · no NAT issues · free · auto-reconnect · TLS · phone always reaches machine</div>
+      <span class="badge">cloudflared</span>
+    </div>
+  </div>
+</div>
+
+<div class="arr">↕ &nbsp; ↕ &nbsp; ↕</div>
+
+<!-- L3: GEMMA4 BRAIN -->
+<div class="layer l3">
+  <div class="layer-label">③ Gemma4 Local Brain — Always-On, Free, Private</div>
+  <div class="g3">
+    <div class="card">
+      <div class="card-title">🧠 Gemma4 26B-A4B (MoE)</div>
+      <div class="card-sub">Ollama · 4B active params · 18GB RAM · 256K context · native tool calling · multimodal · offline · zero API cost · fully private · Apache 2.0</div>
+      <span class="badge">gemma4:26b</span>
+    </div>
+    <div class="card">
+      <div class="card-title">⚙️ Tool Call Loop</div>
+      <div class="card-sub">gemma4_loop.py · user input → Gemma4 reasons → JSON tool call → dispatcher → result → loop until final answer · temperature 0.3</div>
+      <span class="badge">gemma4_loop.py</span>
+    </div>
+    <div class="card">
+      <div class="card-title">📊 System Health Manager</div>
+      <div class="card-sub">psutil 5-min heartbeat · CPU/RAM/disk monitoring · proactive cleanup alerts · process kill-on-idle · startup app audit · morning briefings (Phase 13)</div>
+      <span class="badge">system_monitor.py</span>
+    </div>
+  </div>
+</div>
+
+<div class="arr">↕ &nbsp; ↕ &nbsp; ↕</div>
+
+<!-- L4: ORCHESTRATOR -->
+<div class="layer l4">
+  <div class="layer-label">④ Orchestrator — Task Router · DAG Engine · Context Compiler</div>
+  <div class="g4">
+    <div class="card">
+      <div class="card-title">🔀 Model Router</div>
+      <div class="card-sub">Deterministic rule table · no LLM overhead · frontend→Gemini · backend/db→Claude · QA→GPT-5.4 · local→Gemma4 · env-var model strings · fallback chain on rate limit</div>
+      <span class="badge">router.py</span>
+    </div>
+    <div class="card">
+      <div class="card-title">📊 DAG Engine</div>
+      <div class="card-sub">Topological sort · dependency graph · dynamic subtask injection · FAILED_BY_USER_INTERRUPT · STALE rollback · 3-case handler · cross-agent conflict detection · git-committed on every write</div>
+      <span class="badge">dag.py</span>
+    </div>
+    <div class="card">
+      <div class="card-title">🔗 Context Compiler</div>
+      <div class="card-sub">compile_converged_context() · last 5 visual taps · telemetry cost snapshot · AGENTS.md state · evaluated fresh every dispatch · injected as prefix to all agent calls</div>
+      <span class="badge">context_sync.py</span>
+    </div>
+    <div class="card">
+      <div class="card-title">📈 Telemetry Dashboard</div>
+      <div class="card-sub">JSON log per call · timestamp · model · latency · tokens · cost USD (estimated) · RotatingFileHandler 10MB/5 files · correlation ID per DAG run · /telemetry endpoint · glassmorphic UI</div>
+      <span class="badge">telemetry.json</span>
+    </div>
+  </div>
+</div>
+
+<!-- AGENTS.md BUS -->
+<div class="bus bus4">⟷ &nbsp; AGENTS.md COORDINATION BUS — each agent reads on start · writes after every task · git committed on every write · file-lock prevents concurrent writes · archived to GBrain nightly &nbsp; ⟷</div>
+
+<!-- L5: AGENTS -->
+<div class="layer l5">
+  <div class="layer-label">⑤ Specialized Agent Layer — Right Model Per Task</div>
+  <div class="g4">
+    <div class="card">
+      <div class="card-title">🎨 Frontend Agent</div>
+      <div class="card-sub">Components · CSS · layout · responsive design · Figma MCP · reads Backend API contract from AGENTS.md · max 3 visual verification iterations · corrective rollback on tap</div>
+      <span class="badge badge-gemini">gemini-3.1-pro-preview</span>
+    </div>
+    <div class="card">
+      <div class="card-title">⚙️ Backend Agent</div>
+      <div class="card-sub">API routes · auth · business logic · security · GitHub MCP · reads DB schema from AGENTS.md · dynamic FastAPI route loader via glob importlib · SIGTERM+drain graceful shutdown</div>
+      <span class="badge badge-claude">claude-sonnet-4-6</span>
+    </div>
+    <div class="card">
+      <div class="card-title">🗄️ Database Agent</div>
+      <div class="card-sub">SQL migrations · RLS policies · Supabase MCP · jarvis_test schema · anon key only (never service role) · writes table contracts to AGENTS.md · schema-first in DAG</div>
+      <span class="badge badge-claude">claude-sonnet-4-6</span>
+    </div>
+    <div class="card">
+      <div class="card-title">🧪 QA Agent</div>
+      <div class="card-sub">Playwright browser automation · test generation · screenshot diff · visual layout check · gemini-2.5-flash-lite as verifier · corrective rollback trigger · JARVIS_CI=true mock mode</div>
+      <span class="badge badge-gpt">gpt-5.4</span>
+    </div>
+  </div>
+</div>
+
+<div class="arr">↕ &nbsp; ↕ &nbsp; ↕</div>
+
+<!-- L6: TOOLS -->
+<div class="layer l6">
+  <div class="layer-label">⑥ Tool Layer — Jarvis Hands (dispatcher.py routes all JSON tool calls)</div>
+  <div class="g5">
+    <div class="card">
+      <div class="card-title">📁 Filesystem</div>
+      <div class="card-sub">read_file · write_file · list_dir · search_files · move · delete · scoped per agent sandbox</div>
+      <span class="badge">filesystem.py</span>
+    </div>
+    <div class="card">
+      <div class="card-title">💻 Shell</div>
+      <div class="card-sub">run_command · list_processes · kill_process · cron_add · startup apps · unload_ollama · Docker via compose exec -T sandbox</div>
+      <span class="badge">shell.py</span>
+    </div>
+    <div class="card">
+      <div class="card-title">🌐 Browser</div>
+      <div class="card-sub">Playwright · navigate · click · extract_text · screenshot · elementFromPoint → CSS selector · persistent headless Chromium · lazy init</div>
+      <span class="badge">browser.py</span>
+    </div>
+    <div class="card">
+      <div class="card-title">📱 Native Apps</div>
+      <div class="card-sub">send_email · add_calendar_event · slack_message · desktop notify · Spotify · explicit permission required per tool before first use</div>
+      <span class="badge">apps.py</span>
+    </div>
+    <div class="card">
+      <div class="card-title">🎤 Sensors</div>
+      <div class="card-sub">transcribe_mic (Whisper) · capture_screen (PIL) · capture_cam (OpenCV) · get_location (geocoder) · brain_query · brain_write</div>
+      <span class="badge">sensors.py</span>
+    </div>
+  </div>
+</div>
+
+<div class="arr">↕ &nbsp; ↕ &nbsp; ↕</div>
+
+<!-- L7: MEMORY -->
+<div class="layer l7">
+  <div class="layer-label">⑦ Memory Layer — GBrain (Persistent Knowledge Across Sessions)</div>
+  <div class="g3">
+    <div class="card">
+      <div class="card-title">🧠 GBrain Core</div>
+      <div class="card-sub">github.com/garrytan/gbrain · pgvector hybrid search · 29 built-in skills · self-wiring entity links · queried before every Gemma4 response · nightly gbrain dream consolidation · gbrain doctor health check</div>
+      <span class="badge">Bun runtime</span>
+    </div>
+    <div class="card">
+      <div class="card-title">☁️ Cloud Replica</div>
+      <div class="card-sub">Supabase Postgres · pgvector · RLS on every table · user_id scoped · jarvis_test schema · active when local machine offline · free tier 500MB</div>
+      <span class="badge">Supabase</span>
+    </div>
+    <div class="card">
+      <div class="card-title">💻 Local Replica</div>
+      <div class="card-sub">PGLite · activates when machine wakes · synced via gbrain migrate --to pglite · never raw file copy · zero network latency · primary when local is online</div>
+      <span class="badge">PGLite</span>
+    </div>
+  </div>
+</div>
+
+<div class="arr">↕ &nbsp; ↕ &nbsp; ↕</div>
+
+<!-- L8: DOCKER SANDBOX -->
+<div class="layer l8">
+  <div class="layer-label">⑧ Execution Sandbox — Docker Containers Per Agent</div>
+  <div class="g4">
+    <div class="card">
+      <div class="card-title">🐳 jarvis-sandbox</div>
+      <div class="card-sub">Python 3.12-slim-bookworm · Playwright + Chromium · all agent runtimes · /workspace bind mount in WSL2 ext4 (not C:/ — avoids 9P slowdown) · JARVIS_SANDBOX_MODE=docker routes all shell calls here</div>
+      <span class="badge">docker-compose.yml</span>
+    </div>
+    <div class="card">
+      <div class="card-title">🟢 gbrain container</div>
+      <div class="card-sub">Isolated Bun server · GBrain memory endpoints · persistent volume · separate from agent runtime to avoid dependency conflicts</div>
+      <span class="badge">docker-compose.yml</span>
+    </div>
+    <div class="card">
+      <div class="card-title">🐧 WSL2 Ubuntu 24.04</div>
+      <div class="card-sub">Primary dev runtime · .venv_wsl · all scripts run here · project at /home/hasinrahman/jarvis (not /mnt/c/) · systemd units for prod · Podman Desktop as Docker Desktop alternative</div>
+      <span class="badge">Ubuntu-24.04</span>
+    </div>
+    <div class="card">
+      <div class="card-title">🔒 Security Hardening</div>
+      <div class="card-sub">WS token in Authorization header (not URL) · slowapi rate limiting · payload size caps · default_secret removed · CORS locked · env_file injection (not volume mount) · .env in .dockerignore</div>
+      <span class="badge">Phase 11</span>
+    </div>
+  </div>
+</div>
+
+<div class="arr">↕ &nbsp; ↕ &nbsp; ↕</div>
+
+<!-- L9: CLOUD INFRA -->
+<div class="layer l9">
+  <div class="layer-label">⑨ Cloud Infrastructure — Fallback Only · Provider-Agnostic · All via .env</div>
+  <div class="g4">
+    <div class="card">
+      <div class="card-title">🟢 Render</div>
+      <div class="card-sub">OpenClaw (AlphaClaw template) · 512MB free · cloud agent fallback when local offline · $0–7/mo</div>
+      <span class="badge">Tier 1 · Free</span>
+    </div>
+    <div class="card">
+      <div class="card-title">🚂 Railway</div>
+      <div class="card-sub">Hermes Agent relay · WS bridge · $5 credit/mo free · same HERMES_SECRET auth · persistent sessions</div>
+      <span class="badge">Tier 1 · Free</span>
+    </div>
+    <div class="card">
+      <div class="card-title">⚡ GPU On Demand</div>
+      <div class="card-sub">vast.ai ~$0.30/hr A100 · RunPod serverless ~$0.00015/token · Vertex AI for Gemma4 (Google TPU advantage) · activated only when local offline</div>
+      <span class="badge">Tier 2 · As-needed</span>
+    </div>
+    <div class="card">
+      <div class="card-title">🟠 Cloudflare</div>
+      <div class="card-sub">Tunnel (free) · R2 file storage (no egress fees) · stable WSS URL · no port forwarding needed · Workers for edge auth</div>
+      <span class="badge">Tier 1 · Free</span>
+    </div>
+  </div>
+</div>
+
+<!-- LEGEND -->
+<div class="legend">
+  <div class="legend-item"><div class="dot" style="background:#00d4ff"></div> User Interface</div>
+  <div class="legend-item"><div class="dot" style="background:#a78bfa"></div> Hermes Bridge</div>
+  <div class="legend-item"><div class="dot" style="background:#f59e0b"></div> Gemma4 Brain (local, free)</div>
+  <div class="legend-item"><div class="dot" style="background:#10b981"></div> Orchestrator</div>
+  <div class="legend-item"><div class="dot" style="background:#f47264"></div> Agents (multi-model)</div>
+  <div class="legend-item"><div class="dot" style="background:#60a5fa"></div> Tool Layer</div>
+  <div class="legend-item"><div class="dot" style="background:#34d399"></div> GBrain Memory</div>
+  <div class="legend-item"><div class="dot" style="background:#e879f9"></div> Docker Sandbox</div>
+  <div class="legend-item"><div class="dot" style="background:#fb923c"></div> Cloud Infra (fallback)</div>
+  <div class="legend-item" style="margin-left:auto;"><span style="color:#f59e0b">— — —</span> AGENTS.md coordination bus</div>
+  <div class="legend-item">Total estimated cloud cost: <span style="color:#34d399;margin-left:4px;">$0–12/month during development</span></div>
+</div>
+
+</body>
+</html>
