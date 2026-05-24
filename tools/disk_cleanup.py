@@ -42,12 +42,16 @@ _NEVER_TOUCH_NORM = [p.lower() for p in _NEVER_TOUCH_PREFIXES]
 
 
 def never_touch_check(path: str) -> bool:
-    """Return True if path is under any never-touch prefix.
+    """Return True if path is under any never-touch prefix or a clean exclusion.
 
     Always call this before deleting anything.
     """
     norm = os.path.abspath(path).lower()
-    return any(norm == p or norm.startswith(p + os.sep) for p in _NEVER_TOUCH_NORM)
+    if any(norm == p or norm.startswith(p + os.sep) for p in _NEVER_TOUCH_NORM):
+        return True
+    # Also protect tool-specific subdirs inside otherwise-cleanable dirs
+    excl_norm = [os.path.abspath(e).lower() for e in _CLEAN_EXCLUSIONS]
+    return any(norm == e or norm.startswith(e + os.sep) for e in excl_norm)
 
 
 # ── Stage 1: Scan ───────────────────────────────────────────────────────────
@@ -157,6 +161,13 @@ def _safe_remove(path: str, dry_run: bool) -> int:
 # ── Module-level safe-clean directory list (injectable for tests) ────────────
 # Tests can monkeypatch this list to avoid needing admin-level system dirs.
 _SAFE_CLEAN_DIRS: list[str] = []  # populated lazily in safe_clean()
+
+# Subdirectories inside safe-clean targets that must never be touched.
+# Claude Code (and other tools) write output files to %LOCALAPPDATA%\Temp\claude\
+_CLEAN_EXCLUSIONS: list[str] = [
+    os.path.join(os.path.expandvars("%LOCALAPPDATA%"), "Temp", "claude"),
+    os.path.join(os.path.expandvars("%LOCALAPPDATA%"), "Temp", "claude-code"),
+]
 
 
 def _clean_dir_contents(directory: str, dry_run: bool) -> tuple[int, int]:
