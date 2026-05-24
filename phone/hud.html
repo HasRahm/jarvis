@@ -144,7 +144,7 @@ async function discoverConfig() {
     if (!res.ok) return null;
     const data = await res.json();
     if (data.status === 'online' && data.url) {
-      return { url: data.url, token: data.token || null };
+      return { url: data.url, token: data.token || 'jarvis_hermes_2026' };
     }
   } catch (_) {}
   return null;
@@ -154,7 +154,7 @@ async function discoverConfig() {
 // Only shown when PC is offline or Gist fetch fails.
 function TokenSetup({ onSave }) {
   const [url,             setUrl]             = React.useState(localStorage.getItem('hermesUrl') || 'http://localhost:9000');
-  const [token,           setToken]           = React.useState(localStorage.getItem('hermesToken') || '');
+  const [token,           setToken]           = React.useState(localStorage.getItem('hermesToken') || 'jarvis_hermes_2026');
   const [error,           setError]           = React.useState('');
   const [detecting,       setDetecting]       = React.useState(false);
   const [discoveredUrl,   setDiscoveredUrl]   = React.useState(false);

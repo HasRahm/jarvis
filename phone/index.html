@@ -418,7 +418,7 @@
       if (data.status === 'online' && data.url) {
         // Convert https://tunnel → wss://tunnel/ws for WebSocket use
         const wsUrl = data.url.replace(/^http/, 'ws') + '/ws';
-        return { url: wsUrl, token: data.token || null };
+        return { url: wsUrl, token: data.token || 'jarvis_hermes_2026' };
       }
     } catch (_) {}
     return null;
