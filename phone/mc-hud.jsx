@@ -133,10 +133,10 @@ function MCVariantHUD({ width = 1440, height = 920, palette: paletteOverride, de
         </HudFramePanel>
       </div>
 
-      {/* ── Bottom: DAG + log strip (left + center only) ─ */}
+      {/* ── Bottom: DAG + log + storage ─────────────────── */}
       <div style={{
         position: 'absolute', left: 32, right: 470, bottom: 20, height: 240,
-        display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 14,
+        display: 'grid', gridTemplateColumns: '1.2fr 0.8fr 1fr', gap: 14,
       }}>
         <HudFramePanel label="05 · DIRECTED ACYCLIC GRAPH" palette={palette}>
           <div style={{ padding: 12, height: '100%' }}>
@@ -145,6 +145,9 @@ function MCVariantHUD({ width = 1440, height = 920, palette: paletteOverride, de
         </HudFramePanel>
         <HudFramePanel label="06 · SYSTEM LOG · live" palette={palette}>
           <MCLogStream logs={mc.logs} palette={palette} density={density} />
+        </HudFramePanel>
+        <HudFramePanel label="07 · STORAGE · disk cleanup" palette={palette}>
+          <HudCleanupPanel palette={palette} />
         </HudFramePanel>
       </div>
 
@@ -437,6 +440,176 @@ function HudTranscript({ messages, activeVoice, palette }) {
           <div style={{ fontSize: 12, lineHeight: 1.5, color: '#F5E9D7' }}>{m.text}</div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ─── Storage / Disk Cleanup Panel ───────────────────────────
+function HudCleanupPanel({ palette }) {
+  const scan   = useApi('GET',  '/api/cleanup/scan');
+  const safeCl = useApi('POST', '/api/cleanup/safe');
+  const judge  = useApi('GET',  '/api/cleanup/judge');
+  const del    = useApi('POST', '/api/cleanup/delete');
+
+  const [view,     setView]     = React.useState('overview'); // 'overview' | 'judge'
+  const [confirm,  setConfirm]  = React.useState(false);
+  const [deleting, setDeleting] = React.useState(null); // path currently being deleted
+
+  // Auto-scan on mount
+  React.useEffect(() => { scan.call(); }, []);
+
+  // Re-scan after a safe clean so numbers refresh automatically
+  React.useEffect(() => { if (safeCl.data) scan.call(); }, [safeCl.data]);
+
+  async function confirmSafeClean() {
+    setConfirm(false);
+    await safeCl.call();
+  }
+
+  async function handleJudge() {
+    setView('judge');
+    if (!judge.data) await judge.call();
+  }
+
+  async function handleDelete(path) {
+    setDeleting(path);
+    const r = await del.call({ path });
+    setDeleting(null);
+    if (r) {
+      judge.setData(prev => Array.isArray(prev) ? prev.filter(i => i.path !== path) : prev);
+      scan.call(); // refresh totals
+    }
+  }
+
+  const s = scan.data || {};
+  const anyLoading = scan.loading || safeCl.loading || judge.loading;
+  const anyError   = scan.error || safeCl.error || judge.error || del.error;
+
+  function fmtMB(bytes) {
+    if (bytes == null) return '—';
+    const mb = bytes / 1048576;
+    return mb >= 1000 ? (mb / 1024).toFixed(1) + ' GB' : mb.toFixed(0) + ' MB';
+  }
+
+  const mono = { fontFamily: "'JetBrains Mono', monospace" };
+  const dim  = { color: 'rgba(245,233,215,0.45)', fontSize: 8, letterSpacing: 1.2, ...mono };
+
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '8px 10px', gap: 6, overflow: 'hidden' }}>
+
+      {/* ── Disk summary ─────────────────────────── */}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        {[
+          { label: 'TEMP',  val: fmtMB(s.temp_bytes)        },
+          { label: 'CACHE', val: fmtMB(s.cache_bytes)       },
+          { label: 'SAFE',  val: fmtMB(s.total_safe_bytes)  },
+        ].map(({ label, val }) => (
+          <div key={label} style={{ flex: 1, background: 'rgba(255,181,71,0.05)', border: `1px solid ${hexA(palette.accent, 0.15)}`, padding: '4px 6px' }}>
+            <div style={dim}>{label}</div>
+            <div style={{ ...mono, fontSize: 13, fontWeight: 600, color: palette.accent, lineHeight: 1.2 }}>{val}</div>
+          </div>
+        ))}
+        <button onClick={() => scan.call()} disabled={anyLoading} title="Refresh" style={{
+          ...mono, fontSize: 11, padding: '4px 7px', cursor: 'pointer', flexShrink: 0,
+          background: 'transparent', color: hexA(palette.accent, 0.55),
+          border: `1px solid ${hexA(palette.accent, 0.2)}`,
+        }}>↻</button>
+      </div>
+
+      {/* ── Error strip ──────────────────────────── */}
+      {anyError && (
+        <div style={{ ...mono, fontSize: 9, color: '#F87171', letterSpacing: 0.8, padding: '3px 6px',
+          background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)',
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          ✕ {anyError}
+        </div>
+      )}
+
+      {/* ── Safe clean result banner ─────────────── */}
+      {safeCl.data && !confirm && (
+        <div style={{ ...mono, fontSize: 9, color: '#34D399', letterSpacing: 0.8, padding: '3px 6px',
+          background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)' }}>
+          ✓ freed {fmtMB(safeCl.data.freed_bytes)} · {safeCl.data.deleted_files} files
+        </div>
+      )}
+
+      {/* ── Confirm modal ────────────────────────── */}
+      {confirm ? (
+        <div style={{ padding: '6px 8px', background: 'rgba(255,181,71,0.08)', border: `1px solid ${palette.accent}` }}>
+          <div style={{ ...mono, fontSize: 9, color: palette.accent, marginBottom: 6 }}>
+            Delete all temp + cache files?
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={confirmSafeClean} style={{
+              ...mono, fontSize: 9, padding: '4px 10px', cursor: 'pointer',
+              background: palette.accent, color: '#0a0907', border: 'none', fontWeight: 700, letterSpacing: 1.2,
+            }}>CONFIRM</button>
+            <button onClick={() => setConfirm(false)} style={{
+              ...mono, fontSize: 9, padding: '4px 10px', cursor: 'pointer',
+              background: 'transparent', color: hexA(palette.accent, 0.7), border: `1px solid ${hexA(palette.accent, 0.3)}`,
+            }}>CANCEL</button>
+          </div>
+        </div>
+      ) : (
+        /* ── Action buttons ───────────────────── */
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={() => setConfirm(true)} disabled={anyLoading} style={{
+            flex: 1, ...mono, fontSize: 9, letterSpacing: 1.2, fontWeight: 700, padding: '6px 8px', cursor: 'pointer',
+            background: safeCl.loading ? 'transparent' : hexA(palette.accent, 0.85),
+            color: safeCl.loading ? palette.accent : '#0a0907',
+            border: `1px solid ${palette.accent}`,
+          }}>
+            {safeCl.loading ? '…CLEANING' : '⚡ SAFE CLEAN'}
+          </button>
+          <button
+            onClick={view === 'judge' ? () => { setView('overview'); judge.reset(); } : handleJudge}
+            disabled={anyLoading}
+            style={{
+              flex: 1, ...mono, fontSize: 9, letterSpacing: 1.2, padding: '6px 8px', cursor: 'pointer',
+              background: view === 'judge' ? hexA(palette.accent2, 0.15) : 'transparent',
+              color: view === 'judge' ? palette.accent2 : hexA(palette.accent, 0.7),
+              border: `1px solid ${view === 'judge' ? palette.accent2 : hexA(palette.accent, 0.3)}`,
+            }}>
+            {judge.loading ? '…SCANNING' : view === 'judge' ? '✕ CLOSE' : '🔍 SCAN ITEMS'}
+          </button>
+        </div>
+      )}
+
+      {/* ── Judgment items list ──────────────────── */}
+      {view === 'judge' && (
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {judge.loading && <div style={dim}>scanning disk…</div>}
+          {!judge.data && !judge.loading && <div style={dim}>Click SCAN ITEMS to find candidates.</div>}
+          {Array.isArray(judge.data) && judge.data.length === 0 && (
+            <div style={{ ...dim, color: '#34D399' }}>✓ Nothing to remove</div>
+          )}
+          {Array.isArray(judge.data) && judge.data.map((item, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '4px 6px', background: 'rgba(255,255,255,0.02)',
+              border: `1px solid ${hexA(palette.accent, 0.1)}`,
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ ...mono, fontSize: 8, color: '#F5E9D7', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {item.path.split(/[/\\]/).pop()}
+                </div>
+                <div style={{ ...dim, fontSize: 7 }}>
+                  {fmtMB(item.size_bytes)} · {item.reason || item.suggestion || ''}
+                </div>
+              </div>
+              <button
+                onClick={() => handleDelete(item.path)}
+                disabled={deleting === item.path || del.loading}
+                style={{
+                  ...mono, fontSize: 8, padding: '2px 6px', cursor: 'pointer', flexShrink: 0,
+                  background: 'transparent', color: '#F87171', border: '1px solid rgba(248,113,113,0.4)',
+                }}>
+                {deleting === item.path ? '…' : 'DEL'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

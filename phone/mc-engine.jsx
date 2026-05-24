@@ -405,4 +405,45 @@ function useMissionControl(opts = {}) {
   };
 }
 
-Object.assign(window, { useMissionControl, TASKS, SEED_MESSAGES, SEED_LOGS, ROLE_META, fmtTime });
+// ── useApi — reusable REST event caller ─────────────────────
+// Constructor pattern: useApi(method, path) → { data, loading, error, call, setData, reset }
+// Reads hermesUrl + hermesToken from localStorage on every call() so credentials are always fresh.
+function useApi(method, path) {
+  const [state, setState] = React.useState({ data: null, loading: false, error: null });
+
+  async function call(body) {
+    const rawUrl = localStorage.getItem('hermesUrl') || 'http://localhost:9000';
+    const token  = localStorage.getItem('hermesToken') || '';
+    let url;
+    try { url = new URL(path, new URL(rawUrl).origin).href; } catch (_) { return null; }
+
+    setState(s => ({ ...s, loading: true, error: null }));
+    try {
+      const opts = { method, headers: { Authorization: `Bearer ${token}` } };
+      if (body !== undefined) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(body);
+      }
+      const res = await fetch(url, opts);
+      if (!res.ok) {
+        const msg = await res.text().catch(() => `HTTP ${res.status}`);
+        throw new Error(msg || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setState({ data, loading: false, error: null });
+      return data;
+    } catch (e) {
+      setState(s => ({ ...s, loading: false, error: e.message || 'Request failed' }));
+      return null;
+    }
+  }
+
+  function setData(fn) {
+    setState(s => ({ ...s, data: typeof fn === 'function' ? fn(s.data) : fn }));
+  }
+  function reset() { setState({ data: null, loading: false, error: null }); }
+
+  return { ...state, call, setData, reset };
+}
+
+Object.assign(window, { useMissionControl, useApi, TASKS, SEED_MESSAGES, SEED_LOGS, ROLE_META, fmtTime });
