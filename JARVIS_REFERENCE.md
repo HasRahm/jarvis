@@ -24,23 +24,20 @@
 ---
 
 ## Vercel Frontend (deploy once)
-1. Go to https://vercel.com/new
-2. Log in with **rahmanhasin5@gmail.com**
-3. Import **HasRahm/jarvis** from GitHub
-4. Click Deploy — no settings to change
+Already deployed — auto-deploys on every `git push` to master.
 
-| Page | URL (after deploy) |
-|------|--------------------|
-| Landing | `your-project.vercel.app/` |
-| HUD (Mission Control) | `your-project.vercel.app/hud` |
-| Phone PWA | `your-project.vercel.app/phone` |
-| Design canvas | `your-project.vercel.app/design` |
-| Architecture | `your-project.vercel.app/architecture` |
+| Page | URL |
+|------|-----|
+| Landing | https://jarvis-henna-nu.vercel.app/ |
+| HUD (Mission Control) | https://jarvis-henna-nu.vercel.app/hud |
+| Phone PWA | https://jarvis-henna-nu.vercel.app/phone |
+| Design canvas | https://jarvis-henna-nu.vercel.app/design |
+| Architecture | https://jarvis-henna-nu.vercel.app/architecture |
 
 ---
 
 ## First-time phone setup
-1. Open `your-project.vercel.app/hud` on phone
+1. Open https://jarvis-henna-nu.vercel.app/hud on phone
 2. URL is auto-detected from Gist (shows "auto-detected ✓")
 3. Enter secret: `jarvis_hermes_2026`
 4. Click **▸ ESTABLISH LINK**
