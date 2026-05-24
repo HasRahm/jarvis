@@ -407,8 +407,40 @@
   const wsUrlInput  = document.getElementById('ws-url');
   const wsTokenInput= document.getElementById('ws-token');
 
+  /* ── Gist auto-discovery ───────────────────────────── */
+  const DISCOVERY_GIST = 'https://gist.githubusercontent.com/HasRahm/e99532bb52fd6b67e77f759d9921d5d8/raw/jarvis-url.json';
+
+  async function discoverConfig() {
+    try {
+      const res = await fetch(DISCOVERY_GIST + '?t=' + Date.now(), { cache: 'no-store' });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data.status === 'online' && data.url) {
+        // Convert https://tunnel → wss://tunnel/ws for WebSocket use
+        const wsUrl = data.url.replace(/^http/, 'ws') + '/ws';
+        return { url: wsUrl, token: data.token || null };
+      }
+    } catch (_) {}
+    return null;
+  }
+
   /* ── Boot ──────────────────────────────────────────── */
-  window.onload = () => {
+  window.onload = async () => {
+    initSpeech();
+    initVisualizer();
+
+    // 1. Try Gist auto-discovery — works on any new device with no setup
+    const config = await discoverConfig();
+    if (config && config.url && config.token) {
+      localStorage.setItem('jarvis_ws_url', config.url);
+      localStorage.setItem('jarvis_token',  config.token);
+      wsUrlInput.value   = config.url;
+      wsTokenInput.value = config.token;
+      connectWs(config.url, config.token);
+      return;
+    }
+
+    // 2. Fall back to stored credentials
     const savedUrl   = localStorage.getItem('jarvis_ws_url');
     const savedToken = localStorage.getItem('jarvis_token');
     if (savedUrl) {
@@ -419,8 +451,6 @@
       toggleSettings();
       appendMsg('jarvis', 'Configuration required — enter your Hermes endpoint and token.');
     }
-    initSpeech();
-    initVisualizer();
   };
 
   /* ── UI toggles ────────────────────────────────────── */

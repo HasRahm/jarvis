@@ -6,13 +6,15 @@
 # Gist: https://gist.github.com/HasRahm/e99532bb52fd6b67e77f759d9921d5d8
 # ─────────────────────────────────────────────────────────────────────────────
 
-$GIST_ID     = "e99532bb52fd6b67e77f759d9921d5d8"
-$PROJECT     = "C:\Users\hasin\jarvis"
+$GIST_ID       = "e99532bb52fd6b67e77f759d9921d5d8"
+$PROJECT       = "C:\Users\hasin\jarvis"
 # GH_TOKEN is set as a persistent Windows user environment variable (never in source).
 # If missing, Gist updates are skipped — tunnel still works, phone just keeps old URL.
-$PYTHON      = "C:\Users\hasin\AppData\Local\Programs\Python\Python313\Scripts\uvicorn.exe"
-$CLOUDFLARED = "C:\Program Files (x86)\cloudflared\cloudflared.exe"
-$HERMES_PORT = 9000
+$PYTHON        = "C:\Users\hasin\AppData\Local\Programs\Python\Python313\Scripts\uvicorn.exe"
+$CLOUDFLARED   = "C:\Program Files (x86)\cloudflared\cloudflared.exe"
+$HERMES_PORT   = 9000
+# Published to Gist so phone/HUD auto-connect with zero manual config.
+$HERMES_SECRET = if ($env:HERMES_SECRET) { $env:HERMES_SECRET } else { "jarvis_hermes_2026" }
 
 Set-Location $PROJECT
 
@@ -77,6 +79,7 @@ Write-Host "[3/4] Publishing URL to discovery Gist..." -ForegroundColor Cyan
 if ($tunnelUrl) {
     $payload = @{
         url     = $tunnelUrl
+        token   = $HERMES_SECRET
         updated = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
         status  = "online"
     } | ConvertTo-Json -Compress
@@ -115,7 +118,7 @@ try {
     Stop-Process -Id $cfProc.Id  -Force -ErrorAction SilentlyContinue
 
     # Mark offline in Gist
-    $offlinePayload = '{"url":"","updated":"' + (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ") + '","status":"offline"}'
+    $offlinePayload = '{"url":"","token":"","updated":"' + (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ") + '","status":"offline"}'
     $tmp = Join-Path $env:TEMP "jarvis-url.json"
     $offlinePayload | Set-Content $tmp -Encoding UTF8
     gh gist edit $GIST_ID $tmp 2>&1 | Out-Null
