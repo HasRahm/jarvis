@@ -1,4 +1,4 @@
-/* j2-app.jsx — shell: nav rail + router + run simulation + Hermes integration */
+/* j2-app.jsx — shell: nav rail + router + Hermes WS + simulation fallback */
 const { useState: useJ2State, useEffect: useJ2Effect, useRef: useJ2Ref } = React;
 
 let _j2uid = 0;
@@ -15,7 +15,33 @@ const J2_NAV = [
 
 const J2_ACCENTS = ["#C2603C", "#5E7066", "#7C6A86"];
 
-function J2Rail({ page, setPage, running }) {
+// ── WS status dot ───────────────────────────────────────────
+function J2WsDot({ status }) {
+  const map = {
+    online:     { color: "#6E8B73", label: "LIVE" },
+    connecting: { color: "#C2603C", label: "CONNECTING" },
+    error:      { color: "#B06A57", label: "ERR" },
+    offline:    { color: "#928C80", label: "LOCAL" },
+  };
+  const { color, label } = map[status] || map.offline;
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 5,
+      padding: "2px 8px", border: `1px solid ${color}33`,
+      borderRadius: 4, fontFamily: "var(--mono)", fontSize: 8,
+      letterSpacing: 1.2, color,
+    }}>
+      <span style={{
+        width: 5, height: 5, borderRadius: "50%", background: color, flexShrink: 0,
+        boxShadow: status === "online" ? `0 0 5px ${color}` : "none",
+        animation: status === "online" ? "j2-ring 2s infinite" : "none",
+      }} />
+      {label}
+    </div>
+  );
+}
+
+function J2Rail({ page, setPage, running, wsStatus }) {
   return (
     <aside className="j2-rail">
       <div className="j2-rail-brand" onClick={() => setPage("home")}>
@@ -41,6 +67,9 @@ function J2Rail({ page, setPage, running }) {
       </nav>
 
       <div className="j2-rail-foot">
+        <div style={{ marginBottom: 10, paddingLeft: 8 }}>
+          <J2WsDot status={wsStatus} />
+        </div>
         <div className="j2-rail-user">
           <span className="j2-rail-avatar">H</span>
           <div className="j2-rail-user-meta">
@@ -53,7 +82,7 @@ function J2Rail({ page, setPage, running }) {
   );
 }
 
-function J2ConsoleView({ messages, onSend, running, statuses, plan, revealed, telemetry, activity, tab, setTab, onNew, task }) {
+function J2ConsoleView({ messages, onSend, running, statuses, plan, revealed, telemetry, activity, tab, setTab, onNew, task, wsStatus }) {
   const empty = messages.length === 0;
   return (
     <div className="j2-console">
@@ -61,6 +90,7 @@ function J2ConsoleView({ messages, onSend, running, statuses, plan, revealed, te
         <div className="j2-console-bar-left">
           <span className={`j2-run-status ${running ? "running" : empty ? "idle" : "done"}`} />
           <span className="j2-console-task">{empty ? "New build" : (task || J2_TASK)}</span>
+          <J2WsDot status={wsStatus} />
         </div>
         <button className="j2-ghost-btn" onClick={onNew}>+ New build</button>
       </div>
@@ -73,7 +103,9 @@ function J2ConsoleView({ messages, onSend, running, statuses, plan, revealed, te
                   <span className="j2-home-spark"><IconSpark size={20} /></span>
                   <p className="serif">Describe a build to begin.</p>
                   <span className="j2-console-empty-sub">
-                    Jarvis will plan it, run the agents, and stream the work into the panel on the right.
+                    {wsStatus === "online"
+                      ? "Connected to Jarvis — agents will run for real."
+                      : "Jarvis will plan it, run the agents, and stream the work into the panel on the right."}
                   </span>
                 </div>
               </div>
@@ -107,7 +139,12 @@ function J2App() {
   const [tab,       setTab]       = useJ2State("plan");
   const [running,   setRunning]   = useJ2State(false);
   const [task,      setTask]      = useJ2State("");
-  const timers = useJ2Ref([]);
+  const [wsStatus,  setWsStatus]  = useJ2State("offline");
+
+  const timers     = useJ2Ref([]);
+  const wsRef      = useJ2Ref(null);
+  const streamRef  = useJ2Ref(null); // id of message currently streaming in
+  const taskRef    = useJ2Ref("");   // task text to send after auth_ok
 
   /* Apply tweaks to :root */
   useJ2Effect(() => {
@@ -121,7 +158,8 @@ function J2App() {
   const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = []; };
   useJ2Effect(() => clearTimers, []);
 
-  const applyEvent = (ev) => {
+  // ── Simulation fallback ──────────────────────────────────────
+  const simulationApplyEvent = (ev) => {
     setStatuses(prev => {
       const n = { ...prev };
       (ev.done || []).forEach(id => { n[id] = "done"; });
@@ -130,9 +168,7 @@ function J2App() {
       r.forEach(id => { if (n[id] !== "done") n[id] = "running"; });
       return n;
     });
-    if (ev.doneOne && J2_AGENTS[ev.doneOne]) {
-      setRevealed(p => p.includes(ev.doneOne) ? p : [...p, ev.doneOne]);
-    }
+    if (ev.doneOne && J2_AGENTS[ev.doneOne]) setRevealed(p => p.includes(ev.doneOne) ? p : [...p, ev.doneOne]);
     if (ev.plan)   setPlan(ev.plan);
     if (ev.tokens != null) setTelemetry({ tokens: ev.tokens, cost: ev.cost });
     if (ev.tab)    setTab(ev.tab);
@@ -142,8 +178,123 @@ function J2App() {
     }
   };
 
+  const runSimulation = () => {
+    let acc = 0;
+    J2_TIMELINE.forEach(ev => {
+      acc += ev.wait;
+      timers.current.push(setTimeout(() => simulationApplyEvent(ev), acc));
+    });
+    timers.current.push(setTimeout(() => setRunning(false), acc + 300));
+  };
+
+  // ── WS event handler ────────────────────────────────────────
+  const handleWsMessage = (evt) => {
+    // Binary frames are audio — ignore in Console 2.0
+    if (evt.data instanceof ArrayBuffer || evt.data instanceof Blob) return;
+
+    let msg;
+    try { msg = JSON.parse(evt.data); } catch (_) { return; }
+
+    const type = msg.type;
+
+    if (type === "auth_ok") {
+      setWsStatus("online");
+      setActivity(p => [...p, "Hermes connected — dispatching task to agents"]);
+      wsRef.current && wsRef.current.send(JSON.stringify({ type: "run_task", text: taskRef.current }));
+      return;
+    }
+
+    if (type === "task_status") {
+      const s = msg.status;
+      setActivity(p => [...p, `Task ${s.toLowerCase()}${msg.task ? ` · ${msg.task.slice(0, 60)}` : ""}`]);
+      if (s === "PLANNING") {
+        setStatuses(prev => ({ ...prev, input: "done", plan: "running" }));
+        setTab("plan");
+      } else if (s === "EXECUTING") {
+        setStatuses(prev => ({ ...prev, plan: "done" }));
+      } else if (s === "COMPLETED") {
+        setStatuses(prev => ({ ...prev, done: "done" }));
+        setRunning(false);
+      } else if (s === "FAILED" || s === "ERROR") {
+        setRunning(false);
+        const errMsg = msg.error || "Task failed.";
+        setMessages(p => [...p, { id: j2uid(), role: "jarvis", text: `Something went wrong: ${errMsg}`, stream: false }]);
+      }
+      return;
+    }
+
+    if (type === "dag_update") {
+      const role   = msg.role;
+      const status = msg.status; // "active" | "done" | "error"
+      if (!role) return;
+      if (status === "active") {
+        setStatuses(prev => ({ ...prev, [role]: "running" }));
+        setRevealed(p => p.includes(role) ? p : [...p, role]);
+        setActivity(p => [...p, `${role} agent started`]);
+        if (role === "backend" || role === "frontend") setTab("files");
+        if (role === "qa") setTab("preview");
+      } else if (status === "done") {
+        setStatuses(prev => ({ ...prev, [role]: "done" }));
+        const files = msg.files || [];
+        if (files.length) setActivity(p => [...p, `${role} wrote ${files.length} file${files.length > 1 ? "s" : ""}`]);
+      } else if (status === "error") {
+        setStatuses(prev => ({ ...prev, [role]: "error" }));
+        setActivity(p => [...p, `${role} agent errored`]);
+      }
+      return;
+    }
+
+    // ── Text streaming ─────────────────────────────────────────
+    if (type === "text_start") {
+      const id = j2uid();
+      streamRef.current = id;
+      setMessages(p => [...p, { id, role: "jarvis", text: "", stream: false }]);
+      return;
+    }
+
+    if (type === "text" && streamRef.current != null) {
+      const id = streamRef.current;
+      setMessages(p => p.map(m => m.id === id ? { ...m, text: m.text + (msg.content || "") } : m));
+      return;
+    }
+
+    if (type === "done") {
+      if (streamRef.current != null) {
+        const id = streamRef.current;
+        // Capture final text to activity log
+        setMessages(p => {
+          const m = p.find(x => x.id === id);
+          if (m) setActivity(act => [...act, m.text.slice(0, 80)]);
+          return p;
+        });
+        streamRef.current = null;
+      }
+      return;
+    }
+
+    if (type === "interrupt") {
+      streamRef.current = null;
+      return;
+    }
+  };
+
+  // ── Close WS helper ─────────────────────────────────────────
+  const closeWs = () => {
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.onerror = null;
+      wsRef.current.onmessage = null;
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+  };
+
+  useJ2Effect(() => () => closeWs(), []);
+
+  // ── startRun — try Hermes first, fall back to simulation ────
   const startRun = (taskText) => {
     clearTimers();
+    closeWs();
     setPage("console");
     setRunning(true);
     setTask(taskText);
@@ -151,21 +302,84 @@ function J2App() {
     setPlan(null);
     setRevealed([]);
     setTelemetry({ tokens: 0, cost: 0 });
-    setActivity([`Task received · ${taskText.slice(0, 48)}`]);
+    setActivity([`Task received · ${taskText.slice(0, 60)}`]);
     setTab("plan");
     setMessages([{ id: j2uid(), role: "user", text: taskText }]);
+    taskRef.current = taskText;
 
-    // Simulate run using the timeline
-    let acc = 0;
-    J2_TIMELINE.forEach(ev => {
-      acc += ev.wait;
-      timers.current.push(setTimeout(() => applyEvent(ev), acc));
-    });
-    timers.current.push(setTimeout(() => setRunning(false), acc + 300));
+    const rawUrl = localStorage.getItem("hermesUrl") || "http://localhost:9000";
+    const token  = localStorage.getItem("hermesToken") || "jarvis_hermes_2026";
+    let wsUrl;
+    try { wsUrl = new URL("/ws", rawUrl.replace(/^http/, "ws")).href; } catch (_) { wsUrl = null; }
+
+    if (!wsUrl) { runSimulation(); return; }
+
+    setWsStatus("connecting");
+    let authed = false;
+
+    // If no auth_ok within 4s, fall back to simulation
+    const failTimer = setTimeout(() => {
+      if (!authed) {
+        setWsStatus("offline");
+        setActivity(p => [...p, "Hermes unreachable — running simulation"]);
+        closeWs();
+        runSimulation();
+      }
+    }, 4000);
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      ws.binaryType = "arraybuffer";
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: "auth", token }));
+      };
+
+      ws.onmessage = (evt) => {
+        // Watch for auth_ok before handing off to main handler
+        if (!authed) {
+          try {
+            const m = JSON.parse(evt.data);
+            if (m.type === "auth_ok") {
+              authed = true;
+              clearTimeout(failTimer);
+            } else if (m.type === "auth_error") {
+              clearTimeout(failTimer);
+              setWsStatus("error");
+              setActivity(p => [...p, "Auth failed — check HERMES_SECRET"]);
+              runSimulation();
+              return;
+            }
+          } catch (_) {}
+        }
+        handleWsMessage(evt);
+      };
+
+      ws.onerror = () => {
+        clearTimeout(failTimer);
+        if (!authed) {
+          setWsStatus("error");
+          setActivity(p => [...p, "WS error — running simulation"]);
+          runSimulation();
+        }
+      };
+
+      ws.onclose = () => {
+        clearTimeout(failTimer);
+        setWsStatus("offline");
+        if (running) setRunning(false);
+      };
+    } catch (_) {
+      clearTimeout(failTimer);
+      runSimulation();
+    }
   };
 
   const onNew = () => {
     clearTimers();
+    closeWs();
+    setWsStatus("offline");
     setRunning(false); setMessages([]); setStatuses({});
     setPlan(null); setRevealed([]); setTelemetry({ tokens: 0, cost: 0 });
     setActivity([]); setTask(""); setPage("home");
@@ -173,7 +387,7 @@ function J2App() {
 
   return (
     <div className="j2-shell">
-      <J2Rail page={page} setPage={setPage} running={running} />
+      <J2Rail page={page} setPage={setPage} running={running} wsStatus={wsStatus} />
       <main className="j2-stage">
         {page === "home"    && <J2Home onSend={startRun} onOpenRun={() => startRun(J2_TASK)} onViewAll={() => setPage("runs")} />}
         {page === "console" && (
@@ -181,7 +395,7 @@ function J2App() {
             messages={messages} onSend={startRun} running={running} task={task}
             statuses={statuses} plan={plan} revealed={revealed}
             telemetry={telemetry} activity={activity} tab={tab} setTab={setTab}
-            onNew={onNew}
+            onNew={onNew} wsStatus={wsStatus}
           />
         )}
         {page === "runs"    && <J2RunsPage    onOpenRun={() => startRun(J2_TASK)} />}
@@ -192,11 +406,11 @@ function J2App() {
 
       <TweaksPanel>
         <TweakSection label="Theme" />
-        <TweakRadio  label="Mode"    value={t.theme}    options={["light","dark"]}                    onChange={v => setTweak("theme", v)} />
-        <TweakColor  label="Accent"  value={t.accent}   options={J2_ACCENTS}                          onChange={v => setTweak("accent", v)} />
+        <TweakRadio  label="Mode"    value={t.theme}    options={["light","dark"]}             onChange={v => setTweak("theme", v)} />
+        <TweakColor  label="Accent"  value={t.accent}   options={J2_ACCENTS}                   onChange={v => setTweak("accent", v)} />
         <TweakSection label="Type & density" />
-        <TweakToggle label="Serif headings"  value={t.showSerif}                                      onChange={v => setTweak("showSerif", v)} />
-        <TweakRadio  label="Density" value={t.density}  options={["compact","regular","comfy"]}        onChange={v => setTweak("density", v)} />
+        <TweakToggle label="Serif headings"  value={t.showSerif}                               onChange={v => setTweak("showSerif", v)} />
+        <TweakRadio  label="Density" value={t.density}  options={["compact","regular","comfy"]} onChange={v => setTweak("density", v)} />
       </TweaksPanel>
     </div>
   );
