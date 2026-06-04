@@ -51,11 +51,24 @@ def never_touch_check(path: str) -> bool:
 
     Always call this before deleting anything.
     """
-    norm = os.path.abspath(path).lower()
-    if any(norm == p or norm.startswith(p + os.sep) for p in _NEVER_TOUCH_NORM):
+    # Normalize slashes to match current OS
+    normalized_path = path.replace("\\", "/").replace("/", os.sep)
+    norm = os.path.abspath(normalized_path).lower()
+    
+    # Normalize prefixes to match current OS slashes and get their abspath
+    normalized_prefixes = [
+        os.path.abspath(p.replace("\\", "/").replace("/", os.sep)).lower()
+        for p in _NEVER_TOUCH_PREFIXES
+    ]
+    
+    if any(norm == p or norm.startswith(p + os.sep) for p in normalized_prefixes):
         return True
+        
     # Also protect tool-specific subdirs inside otherwise-cleanable dirs
-    excl_norm = [os.path.abspath(e).lower() for e in _CLEAN_EXCLUSIONS]
+    excl_norm = [
+        os.path.abspath(e.replace("\\", "/").replace("/", os.sep)).lower()
+        for e in _CLEAN_EXCLUSIONS
+    ]
     return any(norm == e or norm.startswith(e + os.sep) for e in excl_norm)
 
 
