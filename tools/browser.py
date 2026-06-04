@@ -103,7 +103,8 @@ def _browser_navigate_impl(url: str) -> str:
         if url.startswith("/") and not url.startswith("file://") and os.path.exists(url):
             url = f"file://{url}"
         elif url.startswith("C:") or url.startswith("c:"):
-            url = f"file:///{url.replace('\\', '/')}"
+            clean_url = url.replace('\\', '/')
+            url = f"file:///{clean_url}"
             
         page = _get_browser_page_impl()
         response = page.goto(url, wait_until="load", timeout=15000)

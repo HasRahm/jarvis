@@ -5,7 +5,11 @@ try:
     import pyautogui
 except (ImportError, KeyError, Exception):
     pass
-import pygetwindow as gw
+gw = None
+try:
+    import pygetwindow as gw
+except (ImportError, NotImplementedError, Exception):
+    pass
 
 logger = logging.getLogger(__name__)
 

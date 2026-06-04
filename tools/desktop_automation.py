@@ -2,7 +2,11 @@ import os
 import time
 import random
 import logging
-import pygetwindow as gw
+gw = None
+try:
+    import pygetwindow as gw
+except (ImportError, NotImplementedError, Exception):
+    pass
 
 logger = logging.getLogger(__name__)
 
