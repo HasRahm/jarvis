@@ -1,15 +1,21 @@
 import ctypes
 import logging
+import os
+
 pyautogui = None
-try:
-    import pyautogui
-except (ImportError, KeyError, Exception):
-    pass
+if os.environ.get("JARVIS_CI") != "true":
+    try:
+        import pyautogui
+    except (ImportError, KeyError, Exception):
+        pass
+
 gw = None
-try:
-    import pygetwindow as gw
-except (ImportError, NotImplementedError, Exception):
-    pass
+if os.environ.get("JARVIS_CI") != "true":
+    try:
+        import pygetwindow as gw
+    except (ImportError, NotImplementedError, Exception):
+        pass
+
 
 logger = logging.getLogger(__name__)
 

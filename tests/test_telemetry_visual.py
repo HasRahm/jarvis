@@ -71,6 +71,12 @@ def test_visual_verifier_escalation():
     with open(dummy_img, "wb") as f:
         f.write(b"dummy png bytes")
     
+    import sys
+    mock_genai = mock.MagicMock()
+    # Save the original module if it was already imported, although it shouldn't be
+    original_genai = sys.modules.get("google.generativeai")
+    sys.modules["google.generativeai"] = mock_genai
+    
     try:
         with mock.patch.dict(os.environ, {"JARVIS_CI": "false"}):
             # Case A: High confidence returns immediately
@@ -81,10 +87,13 @@ def test_visual_verifier_escalation():
                 "confidence": 0.95
             })
             
-            with mock.patch("google.generativeai.GenerativeModel.generate_content", return_value=mock_high_confidence) as mock_gen:
-                res = qa.verify_ui_layout_visually(dummy_img, "<html></html>")
-                assert res["passed"] is True
-                assert mock_gen.call_count == 1  # Only default model was invoked
+            mock_model_instance = mock.MagicMock()
+            mock_model_instance.generate_content.return_value = mock_high_confidence
+            mock_genai.GenerativeModel.return_value = mock_model_instance
+            
+            res = qa.verify_ui_layout_visually(dummy_img, "<html></html>")
+            assert res["passed"] is True
+            assert mock_model_instance.generate_content.call_count == 1  # Only default model was invoked
 
             # Case B: Low confidence (< 0.8) escalates to pro model
             mock_low_confidence = mock.MagicMock()
@@ -101,12 +110,21 @@ def test_visual_verifier_escalation():
                 "confidence": 0.9
             })
             
-            with mock.patch("google.generativeai.GenerativeModel.generate_content", side_effect=[mock_low_confidence, mock_escalation]) as mock_gen_esc:
-                res_esc = qa.verify_ui_layout_visually(dummy_img, "<html></html>")
-                assert res_esc["passed"] is False
-                assert "Overlap resolved" in res_esc["issues"][0]["message"]
-                assert mock_gen_esc.call_count == 2  # Both flash-lite and 3.1-pro-preview called!
+            mock_model_instance_esc = mock.MagicMock()
+            mock_model_instance_esc.generate_content.side_effect = [mock_low_confidence, mock_escalation]
+            mock_genai.GenerativeModel.return_value = mock_model_instance_esc
+            
+            res_esc = qa.verify_ui_layout_visually(dummy_img, "<html></html>")
+            assert res_esc["passed"] is False
+            assert "Overlap resolved" in res_esc["issues"][0]["message"]
+            assert mock_model_instance_esc.generate_content.call_count == 2  # Both flash-lite and 3.1-pro-preview called!
     finally:
+        # Restore original module state
+        if original_genai is not None:
+            sys.modules["google.generativeai"] = original_genai
+        else:
+            sys.modules.pop("google.generativeai", None)
+
         if os.path.exists(dummy_img):
             try:
                 os.remove(dummy_img)

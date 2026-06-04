@@ -2,11 +2,15 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.orchestrator.dag import active_orchestrator
+import core.orchestrator.dag as dag_mod
+
+# Ensure we have an active orchestrator instance for testing
+if dag_mod.active_orchestrator is None:
+    dag_mod.active_orchestrator = dag_mod.ActiveOrchestrator()
 
 def test_corrective_subtask_injection_case_a():
     # Setup standard orchestrator state
-    orch = active_orchestrator
+    orch = dag_mod.active_orchestrator
     orch.reset()
     
     orch.is_running = True
@@ -35,7 +39,7 @@ def test_corrective_subtask_injection_case_a():
 
 def test_corrective_subtask_injection_case_b():
     # Setup standard orchestrator state
-    orch = active_orchestrator
+    orch = dag_mod.active_orchestrator
     orch.reset()
     
     orch.is_running = True
@@ -72,7 +76,7 @@ def test_corrective_subtask_injection_case_b():
 
 def test_corrective_subtask_injection_case_c():
     # Setup standard orchestrator state
-    orch = active_orchestrator
+    orch = dag_mod.active_orchestrator
     orch.reset()
     
     orch.is_running = False

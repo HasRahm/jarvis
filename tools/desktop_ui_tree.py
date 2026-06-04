@@ -4,7 +4,13 @@ import json
 import time
 import logging
 import tempfile
-import pyautogui
+pyautogui = None
+if os.environ.get("JARVIS_CI") != "true":
+    try:
+        import pyautogui
+    except (ImportError, KeyError, Exception):
+        pass
+
 
 logger = logging.getLogger(__name__)
 
