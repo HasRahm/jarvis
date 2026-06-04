@@ -16,6 +16,11 @@ ollama>=0.1.0
 # After installing, run: playwright install chromium
 playwright>=1.40.0
 
+# Desktop & Vision automation
+pyautogui>=0.9.53
+pillow>=10.0.0
+numpy>=1.24.0
+
 # Utilities
 psutil>=5.9.0
 colorama>=0.4.6
