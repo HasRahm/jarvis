@@ -1,6 +1,10 @@
 import ctypes
 import logging
-import pyautogui
+pyautogui = None
+try:
+    import pyautogui
+except (ImportError, KeyError, Exception):
+    pass
 import pygetwindow as gw
 
 logger = logging.getLogger(__name__)

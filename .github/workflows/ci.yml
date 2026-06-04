@@ -39,7 +39,7 @@ jobs:
           OPENAI_API_KEY: "sk-placeholder"
           GEMINI_API_KEY: "placeholder"
         run: |
-          python -m pytest tests/ -v --tb=short
+          xvfb-run python -m pytest tests/ -v --tb=short
 
       - name: Verify no personal paths remain
         run: |

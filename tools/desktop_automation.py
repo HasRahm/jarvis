@@ -2,17 +2,22 @@ import os
 import time
 import random
 import logging
-import pyautogui
 import pygetwindow as gw
 
 logger = logging.getLogger(__name__)
 
-# Safe PyAutoGUI defaults
-pyautogui.FAILSAFE = True
-pyautogui.PAUSE = 0.01
+pyautogui = None
+try:
+    import pyautogui
+    # Safe PyAutoGUI defaults
+    pyautogui.FAILSAFE = True
+    pyautogui.PAUSE = 0.01
+except (ImportError, KeyError, Exception) as e:
+    logger.warning(f"Could not import pyautogui: {e}. GUI automation features will be disabled.")
 
 def desktop_smooth_click(x: int, y: int, duration: float = 1.5) -> str:
     """Moves mouse smoothly from current position to (x, y) and performs a click."""
+    if not pyautogui: return "ERROR: pyautogui not installed"
     try:
         start_x, start_y = pyautogui.position()
         print(f"  [DESKTOP] Gliding mouse from ({start_x}, {start_y}) to ({x}, {y}) over {duration}s...")
