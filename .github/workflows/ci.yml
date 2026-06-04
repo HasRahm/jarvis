@@ -44,7 +44,7 @@ jobs:
       - name: Verify no personal paths remain
         run: |
           echo "Checking for hardcoded personal usernames..."
-          if grep -r "hasinrahman\|C:/Users/hasin\b" --include="*.py" --include="*.sh" --include="*.yml" .; then
+          if grep -r "has[i]nrahman\|C:/Users/has[i]n\b" --include="*.py" --include="*.sh" --include="*.yml" .; then
             echo "ERROR: Hardcoded personal paths found. Fix before merging."
             exit 1
           fi
