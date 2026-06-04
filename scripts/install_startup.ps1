@@ -13,7 +13,7 @@ $action  = New-ScheduledTaskAction -Execute $pwsh -Argument "-ExecutionPolicy By
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest -Force
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Force
 
 Write-Host ""
 Write-Host "Jarvis will now start automatically every time you log in." -ForegroundColor Green

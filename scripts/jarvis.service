@@ -1,0 +1,30 @@
+[Unit]
+Description=Jarvis Hermes Bridge (WebSocket + REST API)
+Documentation=https://github.com/hasinrahman/jarvis
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=jarvis
+Group=jarvis
+WorkingDirectory=/opt/jarvis
+EnvironmentFile=/opt/jarvis/.env
+ExecStart=/opt/jarvis/.venv/bin/uvicorn core.hermes.server:app \
+    --host 0.0.0.0 \
+    --port 9000 \
+    --workers 1 \
+    --log-level info
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+KillMode=mixed
+TimeoutStopSec=15
+StandardOutput=append:/opt/jarvis/logs/hermes.log
+StandardError=append:/opt/jarvis/logs/hermes.log
+
+[Install]
+WantedBy=multi-user.target

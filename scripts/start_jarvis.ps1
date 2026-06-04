@@ -1,16 +1,16 @@
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 # Jarvis Startup Script
 # Starts Hermes + Cloudflare Tunnel, publishes the live URL to GitHub Gist
 # so your phone auto-discovers it with no manual config.
 #
 # Gist: https://gist.github.com/HasRahm/e99532bb52fd6b67e77f759d9921d5d8
-# ─────────────────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------------------
 
 $GIST_ID       = "e99532bb52fd6b67e77f759d9921d5d8"
 $PROJECT       = "C:\Users\hasin\jarvis"
 # GH_TOKEN is set as a persistent Windows user environment variable (never in source).
-# If missing, Gist updates are skipped — tunnel still works, phone just keeps old URL.
-$PYTHON        = "C:\Users\hasin\AppData\Local\Programs\Python\Python313\Scripts\uvicorn.exe"
+# If missing, Gist updates are skipped - tunnel still works, phone just keeps old URL.
+$PYTHON        = "$PROJECT\.venv\Scripts\uvicorn.exe"
 $CLOUDFLARED   = "C:\Program Files (x86)\cloudflared\cloudflared.exe"
 $HERMES_PORT   = 9000
 # Published to Gist so phone/HUD auto-connect with zero manual config.
@@ -18,14 +18,14 @@ $HERMES_SECRET = if ($env:HERMES_SECRET) { $env:HERMES_SECRET } else { "jarvis_h
 
 Set-Location $PROJECT
 
-# ── 1. Kill anything already on port 9000 ────────────────────────────────────
+# -- 1. Kill anything already on port 9000 ------------------------------------
 $old = Get-NetTCPConnection -LocalPort $HERMES_PORT -ErrorAction SilentlyContinue
 if ($old) {
     Stop-Process -Id ($old | Select-Object -First 1).OwningProcess -Force -ErrorAction SilentlyContinue
     Start-Sleep 1
 }
 
-# ── 2. Start Hermes in a hidden background window ────────────────────────────
+# -- 2. Start Hermes in a hidden background window ----------------------------
 Write-Host "[1/4] Starting Hermes on port $HERMES_PORT..." -ForegroundColor Cyan
 $hermes = Start-Process $PYTHON `
     -ArgumentList "core.hermes.server:app --host 0.0.0.0 --port $HERMES_PORT" `
@@ -37,17 +37,17 @@ $ready = $false
 for ($i = 0; $i -lt 15; $i++) {
     Start-Sleep 2
     try {
-        $r = Invoke-WebRequest "http://localhost:$HERMES_PORT/health" -UseBasicParsing -TimeoutSec 1
+        $r = Invoke-WebRequest "http://127.0.0.1:$HERMES_PORT/health" -UseBasicParsing -TimeoutSec 1
         if ($r.StatusCode -eq 200) { $ready = $true; break }
     } catch {}
 }
 if (-not $ready) { Write-Error "Hermes failed to start."; exit 1 }
 Write-Host "    Hermes is ready." -ForegroundColor Green
 
-# ── 3. Start Cloudflare Tunnel and capture the public URL ────────────────────
+# -- 3. Start Cloudflare Tunnel and capture the public URL --------------------
 Write-Host "[2/4] Starting Cloudflare Tunnel..." -ForegroundColor Cyan
 
-# cloudflared writes the URL to stderr — capture it via a temp file
+# cloudflared writes the URL to stderr - capture it via a temp file
 $cfLog  = [System.IO.Path]::GetTempFileName()
 $cfProc = Start-Process $CLOUDFLARED `
     -ArgumentList "tunnel --url http://localhost:$HERMES_PORT" `
@@ -74,15 +74,16 @@ if (-not $tunnelUrl) {
     Write-Host "    Tunnel live: $tunnelUrl" -ForegroundColor Green
 }
 
-# ── 4. Publish URL to GitHub Gist so phone auto-discovers it ─────────────────
+# -- 4. Publish URL to GitHub Gist so phone auto-discovers it -----------------
 Write-Host "[3/4] Publishing URL to discovery Gist..." -ForegroundColor Cyan
 if ($tunnelUrl) {
-    $payload = @{
+    $hash = @{
         url     = $tunnelUrl
         token   = $HERMES_SECRET
         updated = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
         status  = "online"
-    } | ConvertTo-Json -Compress
+    }
+    $payload = $hash | ConvertTo-Json -Compress
 
     # Write to temp file and update gist
     $tmp = [System.IO.Path]::GetTempFileName() + ".json"
@@ -92,14 +93,14 @@ if ($tunnelUrl) {
 
     try {
         & gh gist edit $GIST_ID $tmp 2>&1 | Out-Null
-        Write-Host "    Gist updated — phone will auto-connect." -ForegroundColor Green
+        Write-Host "    Gist updated - phone will auto-connect." -ForegroundColor Green
     } catch {
         Write-Warning "Gist update failed: $_"
     }
     Remove-Item $tmp -Force -ErrorAction SilentlyContinue
 }
 
-# ── 5. Done ──────────────────────────────────────────────────────────────────
+# -- 5. Done ------------------------------------------------------------------
 Write-Host ""
 Write-Host "[4/4] Jarvis is live." -ForegroundColor Green
 if ($tunnelUrl) {
@@ -109,7 +110,7 @@ Write-Host "    Local URL  : http://localhost:$HERMES_PORT" -ForegroundColor Yel
 Write-Host ""
 Write-Host "Press Ctrl+C to stop everything." -ForegroundColor DarkGray
 
-# Keep script alive — kill children on exit
+# Keep script alive - kill children on exit
 try {
     Wait-Process -Id $hermes.Id
 } finally {

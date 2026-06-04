@@ -1,0 +1,32 @@
+{
+  "name": "jarvis-desktop",
+  "version": "1.0.0",
+  "description": "Jarvis Desktop Application",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win"
+  },
+  "author": "HasRahm",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.jarvis.desktop",
+    "productName": "Jarvis",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "phone/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "publish": null
+  }
+}

@@ -1,0 +1,107 @@
+"""
+core/auth.py — Dual-mode authentication for Jarvis.
+
+Self-hosted mode: validates against HERMES_SECRET (shared secret, original behaviour).
+SaaS / multi-user mode: validates a Supabase JWT and extracts the user_id claim.
+
+Which mode is active is determined by whether SUPABASE_JWT_SECRET is set in the
+environment.  When it is set, every token that arrives over the WebSocket is treated
+as a Supabase access token rather than the raw HERMES_SECRET string.
+"""
+
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+# ── JWT validation (Supabase SaaS mode) ──────────────────────────────────────
+
+def _validate_supabase_jwt(token: str) -> dict | None:
+    """
+    Decode and validate a Supabase-issued JWT.
+
+    Returns the payload dict on success, or None on failure.
+    Requires PyJWT (`pip install PyJWT`).
+    """
+    jwt_secret = os.getenv("SUPABASE_JWT_SECRET", "")
+    if not jwt_secret:
+        return None
+    try:
+        import jwt
+        payload = jwt.decode(
+            token,
+            jwt_secret,
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+        return payload
+    except Exception as exc:
+        logger.warning(f"[auth] Supabase JWT validation failed: {exc}")
+        return None
+
+
+# ── Public API ────────────────────────────────────────────────────────────────
+
+def authenticate(token: str) -> tuple[bool, str | None]:
+    """
+    Authenticate an incoming WebSocket token.
+
+    Returns:
+        (ok: bool, user_id: str | None)
+
+    Behaviour:
+        • If SUPABASE_JWT_SECRET is set → validate as Supabase JWT.
+          On success, user_id is extracted from the JWT 'sub' claim.
+        • Otherwise → compare directly against HERMES_SECRET (self-hosted mode).
+          On success, user_id is None (single-user; no per-user scoping needed).
+    """
+    supabase_jwt_secret = os.getenv("SUPABASE_JWT_SECRET", "")
+
+    if supabase_jwt_secret:
+        # ── SaaS mode: Supabase JWT ──────────────────────────────────────────
+        payload = _validate_supabase_jwt(token)
+        if payload is None:
+            return False, None
+        user_id = payload.get("sub") or payload.get("user_id")
+        if not user_id:
+            logger.warning("[auth] Supabase JWT missing 'sub' claim.")
+            return False, None
+        return True, str(user_id)
+
+    # ── Self-hosted mode: shared secret ─────────────────────────────────────
+    hermes_secret = os.getenv("HERMES_SECRET", "default_secret")
+    if token == hermes_secret:
+        return True, None   # single-user; no user_id scoping
+    return False, None
+
+
+def get_agents_md_path(user_id: str | None = None) -> str:
+    """
+    Return the path to AGENTS.md, scoped to user_id when running in SaaS mode.
+
+    Self-hosted (user_id=None): <project_root>/AGENTS.md
+    SaaS       (user_id set):   <project_root>/workspaces/<user_id>/AGENTS.md
+    """
+    import sys
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if user_id:
+        workspace = os.path.join(project_root, "workspaces", user_id)
+        os.makedirs(workspace, exist_ok=True)
+        return os.path.join(workspace, "AGENTS.md")
+    return os.path.join(project_root, "AGENTS.md")
+
+
+def get_workspace_path(role: str, user_id: str | None = None) -> str:
+    """
+    Return the agent workspace path, scoped to user_id in SaaS mode.
+
+    Self-hosted: <project_root>/workspaces/<role>/
+    SaaS:        <project_root>/workspaces/<user_id>/<role>/
+    """
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if user_id:
+        path = os.path.join(project_root, "workspaces", user_id, role)
+    else:
+        path = os.path.join(project_root, "workspaces", role)
+    os.makedirs(path, exist_ok=True)
+    return path

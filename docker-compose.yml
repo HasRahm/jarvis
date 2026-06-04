@@ -1,0 +1,20 @@
+services:
+  sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jarvis-sandbox
+    volumes:
+      # Set JARVIS_PROJECT_ROOT in your .env to the absolute path of this repo.
+      # Linux/macOS example: JARVIS_PROJECT_ROOT=/home/user/jarvis
+      # Windows WSL example: JARVIS_PROJECT_ROOT=/home/user/jarvis  (WSL path)
+      - ${JARVIS_PROJECT_ROOT:-.}:/workspace
+    env_file:
+      # Inject env keys directly into container variables at boot
+      - .env
+    ports:
+      - "9000:9000"
+    tty: true
+    stdin_open: true
+    working_dir: /workspace
+    restart: always

@@ -1,0 +1,51 @@
+name: Jarvis CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: Unit Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run test suite
+        env:
+          JARVIS_CI: "true"
+          HERMES_SECRET: "ci-test-secret"
+          # All LLM / GBrain calls are stubbed when JARVIS_CI=true
+          ANTHROPIC_API_KEY: "sk-ant-placeholder"
+          OPENAI_API_KEY: "sk-placeholder"
+          GEMINI_API_KEY: "placeholder"
+        run: |
+          python -m pytest tests/ -v --tb=short
+
+      - name: Verify no personal paths remain
+        run: |
+          echo "Checking for hardcoded personal usernames..."
+          if grep -r "hasinrahman\|C:/Users/hasin\b" --include="*.py" --include="*.sh" --include="*.yml" .; then
+            echo "ERROR: Hardcoded personal paths found. Fix before merging."
+            exit 1
+          fi
+          echo "OK - no personal paths found."

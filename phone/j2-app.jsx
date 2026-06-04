@@ -158,34 +158,33 @@ function J2App() {
   const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = []; };
   useJ2Effect(() => clearTimers, []);
 
-  // ── Simulation fallback ──────────────────────────────────────
-  const simulationApplyEvent = (ev) => {
-    setStatuses(prev => {
-      const n = { ...prev };
-      (ev.done || []).forEach(id => { n[id] = "done"; });
-      if (ev.doneOne) n[ev.doneOne] = "done";
-      const r = ev.running ? (Array.isArray(ev.running) ? ev.running : [ev.running]) : [];
-      r.forEach(id => { if (n[id] !== "done") n[id] = "running"; });
-      return n;
-    });
-    if (ev.doneOne && J2_AGENTS[ev.doneOne]) setRevealed(p => p.includes(ev.doneOne) ? p : [...p, ev.doneOne]);
-    if (ev.plan)   setPlan(ev.plan);
-    if (ev.tokens != null) setTelemetry({ tokens: ev.tokens, cost: ev.cost });
-    if (ev.tab)    setTab(ev.tab);
-    if (ev.say) {
-      setMessages(p => [...p, { id: j2uid(), role: ev.say.role, text: ev.say.text, stream: true }]);
-      setActivity(p => [...p, ev.say.text]);
-    }
-  };
+  // ── Telemetry Polling ─────────────────────────────────────────
+  useJ2Effect(() => {
+    const rawUrl = localStorage.getItem("hermesUrl") || "http://localhost:9000";
+    const token  = localStorage.getItem("hermesToken") || "jarvis_hermes_2026";
+    let apiBase;
+    try { apiBase = new URL(rawUrl).origin; } catch (_) { apiBase = "http://localhost:9000"; }
 
-  const runSimulation = () => {
-    let acc = 0;
-    J2_TIMELINE.forEach(ev => {
-      acc += ev.wait;
-      timers.current.push(setTimeout(() => simulationApplyEvent(ev), acc));
-    });
-    timers.current.push(setTimeout(() => setRunning(false), acc + 300));
-  };
+    let pollId;
+    async function pollTelemetry() {
+      try {
+        const res = await fetch(`${apiBase}/api/telemetry`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) return;
+        const d = await res.json();
+        setTelemetry({
+          tokens: d.total_calls * 1800 || 0,
+          cost:   +(d.total_cost   || 0).toFixed(4),
+          calls:  d.total_calls    || 0,
+          latency: Math.round((d.avg_latency || 0) * 1000),
+        });
+      } catch (_) {}
+    }
+    pollTelemetry();
+    pollId = setInterval(pollTelemetry, 5000);
+    return () => clearInterval(pollId);
+  }, []);
 
   // ── WS event handler ────────────────────────────────────────
   const handleWsMessage = (evt) => {
@@ -312,18 +311,23 @@ function J2App() {
     let wsUrl;
     try { wsUrl = new URL("/ws", rawUrl.replace(/^http/, "ws")).href; } catch (_) { wsUrl = null; }
 
-    if (!wsUrl) { runSimulation(); return; }
+    if (!wsUrl) {
+      setWsStatus("error");
+      setActivity(p => [...p, "No Hermes URL configured"]);
+      setRunning(false);
+      return;
+    }
 
     setWsStatus("connecting");
     let authed = false;
 
-    // If no auth_ok within 4s, fall back to simulation
+    // If no auth_ok within 4s, fail cleanly
     const failTimer = setTimeout(() => {
       if (!authed) {
-        setWsStatus("offline");
-        setActivity(p => [...p, "Hermes unreachable — running simulation"]);
+        setWsStatus("error");
+        setActivity(p => [...p, "Hermes unreachable — connection timeout"]);
         closeWs();
-        runSimulation();
+        setRunning(false);
       }
     }, 4000);
 
@@ -348,7 +352,7 @@ function J2App() {
               clearTimeout(failTimer);
               setWsStatus("error");
               setActivity(p => [...p, "Auth failed — check HERMES_SECRET"]);
-              runSimulation();
+              setRunning(false);
               return;
             }
           } catch (_) {}
@@ -360,8 +364,8 @@ function J2App() {
         clearTimeout(failTimer);
         if (!authed) {
           setWsStatus("error");
-          setActivity(p => [...p, "WS error — running simulation"]);
-          runSimulation();
+          setActivity(p => [...p, "WS error — check backend"]);
+          setRunning(false);
         }
       };
 
@@ -372,7 +376,8 @@ function J2App() {
       };
     } catch (_) {
       clearTimeout(failTimer);
-      runSimulation();
+      setWsStatus("error");
+      setRunning(false);
     }
   };
 

@@ -21,19 +21,24 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # ── Never-touch paths ───────────────────────────────────────────────────────
-# Resolved at import time using env vars so they work on any machine.
+# Resolved at import time dynamically so they work on any machine.
+_DEFAULT_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _PROJECT_ROOT = os.environ.get(
     "JARVIS_WIN_PROJECT_ROOT",
-    r"C:\Users\hasin\jarvis"
+    _DEFAULT_PROJECT_ROOT
 ).replace("/", "\\")
+
+_USER_PROFILE = os.environ.get("USERPROFILE", os.path.expanduser("~"))
+_APPDATA_ROAMING = os.path.join(_USER_PROFILE, "AppData", "Roaming")
+_APPDATA_LOCAL = os.path.join(_USER_PROFILE, "AppData", "Local")
 
 _NEVER_TOUCH_PREFIXES = [
     r"C:\Windows",
     r"C:\Program Files",
     r"C:\Program Files (x86)",
     r"C:\ProgramData\Microsoft",
-    r"C:\Users\hasin\AppData\Roaming\Microsoft",
-    r"C:\Users\hasin\AppData\Local\Microsoft\WindowsApps",
+    os.path.join(_APPDATA_ROAMING, "Microsoft"),
+    os.path.join(_APPDATA_LOCAL, "Microsoft", "WindowsApps"),
     _PROJECT_ROOT,   # Jarvis project root — never auto-clean
 ]
 
@@ -56,8 +61,8 @@ def never_touch_check(path: str) -> bool:
 
 # ── Stage 1: Scan ───────────────────────────────────────────────────────────
 
-def _dir_size_mb(path: str) -> float:
-    """Return total size of a directory tree in MB (0 if inaccessible)."""
+def _dir_size_bytes(path: str) -> int:
+    """Return total size of a directory tree in bytes (0 if inaccessible)."""
     total = 0
     try:
         for dirpath, _dirs, files in os.walk(path):
@@ -68,7 +73,12 @@ def _dir_size_mb(path: str) -> float:
                     pass
     except (PermissionError, OSError):
         pass
-    return round(total / (1024 * 1024), 2)
+    return total
+
+
+def _dir_size_mb(path: str) -> float:
+    """Return total size of a directory tree in MB (0 if inaccessible)."""
+    return round(_dir_size_bytes(path) / (1024 * 1024), 2)
 
 
 def _file_size_mb(path: str) -> float:
@@ -81,49 +91,52 @@ def _file_size_mb(path: str) -> float:
 def scan() -> dict:
     """Stage 1 — read-only disk usage survey.
 
-    Returns a dict with keys:
-        temp_mb      — Windows Temp folders
-        cache_mb     — Browser / INet caches
-        win_update_mb — Windows Update download cache
-        jarvis_logs_mb — Jarvis log backups (rotated .log.1 etc.)
-        user_downloads_mb — C:\\Users\\hasin\\Downloads
-        total_safe_mb — sum of safely-cleanable bytes (temp + cache + win_update + jarvis_logs)
-        total_mb     — sum of all surveyed categories
+    Returns a dict with keys in both bytes and MB for complete frontend compatibility.
     """
-    temp_mb = (
-        _dir_size_mb(r"C:\Windows\Temp") +
-        _dir_size_mb(os.path.expandvars(r"%LOCALAPPDATA%\Temp"))
+    temp_bytes = (
+        _dir_size_bytes(r"C:\Windows\Temp") +
+        _dir_size_bytes(os.path.expandvars(r"%LOCALAPPDATA%\Temp"))
     )
 
-    cache_mb = _dir_size_mb(
+    cache_bytes = _dir_size_bytes(
         os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Windows\INetCache")
     )
 
-    win_update_mb = _dir_size_mb(r"C:\Windows\SoftwareDistribution\Download")
+    win_update_bytes = _dir_size_bytes(r"C:\Windows\SoftwareDistribution\Download")
 
     # Jarvis rotated log backups: logs/*.log.1, logs/*.log.2 etc.
     logs_dir = os.path.join(_PROJECT_ROOT, "logs")
-    jarvis_logs_mb = 0.0
+    jarvis_logs_bytes = 0
     if os.path.isdir(logs_dir):
         for fname in os.listdir(logs_dir):
-            # RotatingFileHandler names: service.log.1, service.log.2 …
             if fname.endswith(tuple(f".{i}" for i in range(1, 10))):
-                jarvis_logs_mb += _file_size_mb(os.path.join(logs_dir, fname))
-    jarvis_logs_mb = round(jarvis_logs_mb, 2)
+                try:
+                    jarvis_logs_bytes += os.path.getsize(os.path.join(logs_dir, fname))
+                except OSError:
+                    pass
 
-    user_downloads_mb = _dir_size_mb(os.path.expandvars(r"%USERPROFILE%\Downloads"))
+    user_downloads_bytes = _dir_size_bytes(os.path.expandvars(r"%USERPROFILE%\Downloads"))
 
-    total_safe_mb = round(temp_mb + cache_mb + win_update_mb + jarvis_logs_mb, 2)
-    total_mb = round(total_safe_mb + user_downloads_mb, 2)
+    total_safe_bytes = temp_bytes + cache_bytes + win_update_bytes + jarvis_logs_bytes
+    total_bytes = total_safe_bytes + user_downloads_bytes
 
     return {
-        "temp_mb": temp_mb,
-        "cache_mb": cache_mb,
-        "win_update_mb": win_update_mb,
-        "jarvis_logs_mb": jarvis_logs_mb,
-        "user_downloads_mb": user_downloads_mb,
-        "total_safe_mb": total_safe_mb,
-        "total_mb": total_mb,
+        # Bytes (expected by phone/mc-hud.jsx)
+        "temp_bytes": temp_bytes,
+        "cache_bytes": cache_bytes,
+        "win_update_bytes": win_update_bytes,
+        "jarvis_logs_bytes": jarvis_logs_bytes,
+        "user_downloads_bytes": user_downloads_bytes,
+        "total_safe_bytes": total_safe_bytes,
+        "total_bytes": total_bytes,
+        # Megabytes (backward compatibility)
+        "temp_mb": round(temp_bytes / (1024 * 1024), 2),
+        "cache_mb": round(cache_bytes / (1024 * 1024), 2),
+        "win_update_mb": round(win_update_bytes / (1024 * 1024), 2),
+        "jarvis_logs_mb": round(jarvis_logs_bytes / (1024 * 1024), 2),
+        "user_downloads_mb": round(user_downloads_bytes / (1024 * 1024), 2),
+        "total_safe_mb": round(total_safe_bytes / (1024 * 1024), 2),
+        "total_mb": round(total_bytes / (1024 * 1024), 2),
     }
 
 
@@ -251,6 +264,8 @@ def safe_clean(dry_run: bool = True) -> dict:
     return {
         "files_deleted": total_files,
         "bytes_freed": total_bytes,
+        "freed_bytes": total_bytes,      # Expected by phone/mc-hud.jsx
+        "deleted_files": total_files,    # Expected by phone/mc-hud.jsx
         "mb_freed": round(total_bytes / (1024 * 1024), 2),
         "dry_run": dry_run,
         "targets": targets,

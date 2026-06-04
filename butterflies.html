@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lepidoptera · Butterfly Tracker & Identification Hub</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    background: radial-gradient(ellipse at 30% 20%, #150f2e 0%, #080612 60%, #030206 100%);
+    color: #f4f4f5; font-family: 'Inter', sans-serif; overflow: hidden;
+  }
+  
+  /* Glowing background elements */
+  .orb {
+    position: absolute; border-radius: 50%; filter: blur(120px); pointer-events: none; opacity: 0.15; z-index: 0;
+  }
+  .orb-1 { width: 500px; height: 500px; top: -100px; left: -100px; background: #8b5cf6; }
+  .orb-2 { width: 450px; height: 450px; bottom: -100px; right: -50px; background: #f59e0b; }
+  .orb-3 { width: 350px; height: 350px; top: 30%; left: 40%; background: #10b981; }
+
+  /* Grid lines overlay */
+  .grid-overlay {
+    position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(139, 92, 246, 0.03) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(139, 92, 246, 0.03) 1px, transparent 1px);
+    background-size: 50px 50px;
+    mask-image: radial-gradient(circle at center, black 30%, transparent 80%);
+    -webkit-mask-image: radial-gradient(circle at center, black 30%, transparent 80%);
+    pointer-events: none; z-index: 0;
+  }
+
+  /* App container grid */
+  .app-container {
+    position: relative; z-index: 1;
+    width: 1440px; height: 920px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    grid-template-rows: 70px 1fr;
+    grid-template-areas:
+      "sidebar header"
+      "sidebar main";
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(10, 8, 20, 0.6);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
+  }
+
+  /* Header */
+  .app-header {
+    grid-area: header;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 0 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .app-title-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .app-logo {
+    width: 32px; height: 32px;
+    background: conic-gradient(from 0deg, #f59e0b, #8b5cf6, #f59e0b);
+    border-radius: 50%;
+    animation: spin 8s linear infinite;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700; color: #fff; font-size: 14;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  
+  .app-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600; font-size: 18px; letter-spacing: 0.5px;
+  }
+  .app-subtitle {
+    font-size: 10px; color: rgba(255,255,255,0.4);
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 1.5px;
+    text-transform: uppercase; margin-top: 2px;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    grid-area: sidebar;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(8, 6, 16, 0.4);
+    padding: 30px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .sidebar-header img {
+     width: 40px; height: 40px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15);
+  }
+  .profile-name { font-size: 13px; font-weight: 600; color: #fff; }
+  .profile-role { font-size: 10px; color: rgba(255,255,255,0.4); font-family: 'JetBrains Mono', monospace; }
+
+  .menu-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.6);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .menu-item:hover {
+    background: rgba(255,255,255,0.04);
+    color: #fff;
+  }
+  .menu-item.active {
+    background: rgba(139, 92, 246, 0.15);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    color: #c084fc;
+    box-shadow: 0 0 15px rgba(139, 92, 246, 0.1);
+  }
+  
+  /* Main Content Area */
+  .main-content {
+    grid-area: main;
+    padding: 32px 40px;
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 30px;
+    overflow-y: auto;
+  }
+
+  /* Glass Card Primitive */
+  .glass-card {
+    background: rgba(20, 16, 36, 0.45);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.05);
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .glass-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 12px;
+    margin-bottom: 18px;
+  }
+  .card-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 15px; font-weight: 600; color: #fff;
+  }
+  .card-subtitle {
+    font-size: 9px; color: rgba(255,255,255,0.4);
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: 1px;
+  }
+
+  /* Butterfly Widget Panel (3D Flapping Butterfly) */
+  .butterfly-widget-card {
+    grid-column: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  
+  /* Butterfly 3D Stage */
+  .butterfly-stage-3d {
+    background: radial-gradient(circle at center, #1b163a 0%, #090616 100%);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 12px;
+    height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    perspective: 1000px;
+  }
+  
+  /* 3D Butterfly pure CSS model */
+  .butterfly-3d {
+    width: 120px; height: 120px;
+    position: relative;
+    transform-style: preserve-3d;
+    transform: rotateX(45deg) rotateY(-30deg) rotateZ(-10deg);
+    animation: hover-float 4s ease-in-out infinite;
+  }
+  @keyframes hover-float {
+    0%, 100% { transform: rotateX(45deg) rotateY(-30deg) rotateZ(-10deg) translateY(0); }
+    50% { transform: rotateX(45deg) rotateY(-30deg) rotateZ(-10deg) translateY(-10px); }
+  }
+
+  .butterfly-body {
+    position: absolute; left: 58px; top: 10px;
+    width: 4px; height: 80px;
+    background: #4a1d96;
+    border-radius: 2px;
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.8);
+    transform-style: preserve-3d;
+  }
+  
+  /* Monarch Golden Orange Wings */
+  .wing {
+    position: absolute; top: 0;
+    width: 60px; height: 90px;
+    background-size: 100% 100%;
+    transform-origin: center right;
+    transform-style: preserve-3d;
+  }
+  .wing-left {
+    right: 50%;
+    background: linear-gradient(-135deg, #f59e0b 0%, #d97706 40%, #000 80%);
+    border-radius: 40px 10px 40px 10px;
+    border: 2.5px solid #000;
+    box-shadow: inset 0 0 12px rgba(245, 158, 11, 0.4), 0 0 15px rgba(245, 158, 11, 0.2);
+    animation: flap-left 0.12s ease-in-out infinite alternate;
+  }
+  .wing-right {
+    left: 50%;
+    transform-origin: center left;
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 40%, #000 80%);
+    border-radius: 10px 40px 10px 40px;
+    border: 2.5px solid #000;
+    box-shadow: inset 0 0 12px rgba(245, 158, 11, 0.4), 0 0 15px rgba(245, 158, 11, 0.2);
+    animation: flap-right 0.12s ease-in-out infinite alternate;
+  }
+  
+  @keyframes flap-left {
+    0% { transform: rotateY(-50deg); }
+    100% { transform: rotateY(35deg); }
+  }
+  @keyframes flap-right {
+    0% { transform: rotateY(50deg); }
+    100% { transform: rotateY(-35deg); }
+  }
+
+  /* Butterfly Info panel */
+  .butterfly-info-panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .butterfly-badge {
+    align-self: flex-start;
+    padding: 3px 8px; border-radius: 100px;
+    font-size: 8.5px; font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 1px;
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid #f59e0b;
+    color: #f59e0b;
+    margin-bottom: 12px;
+  }
+  .butterfly-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 22px; font-weight: 700; color: #fff;
+    letter-spacing: -0.2px; margin-bottom: 4px;
+  }
+  .butterfly-scientific {
+    font-size: 12px; font-style: italic; color: #a78bfa;
+    margin-bottom: 14px;
+  }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .stat-box {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 8px; padding: 10px;
+  }
+  .stat-label {
+    font-size: 8px; color: rgba(255,255,255,0.4);
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: 0.8px;
+  }
+  .stat-value {
+    font-size: 13px; font-weight: 600; color: #fff; margin-top: 2px;
+  }
+
+  /* Chart & Telemetry Area */
+  .telemetry-card {
+    grid-column: 1;
+    height: 320px;
+  }
+  .chart-container {
+    height: 220px;
+    position: relative;
+    border-bottom: 1px dashed rgba(255,255,255,0.1);
+    border-left: 1px dashed rgba(255,255,255,0.1);
+    margin-top: 10px;
+  }
+  
+  /* Mock Vector migration curve line */
+  .vector-chart-line {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+  }
+
+  /* Right column: AI Scanner Sanctuary Widget */
+  .ai-scanner-card {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .scanner-viewfinder {
+    background: radial-gradient(circle at center, #1b163a 0%, #06050e 100%);
+    border: 1.5px dashed rgba(16, 185, 129, 0.4);
+    border-radius: 12px;
+    height: 240px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: pointer;
+  }
+  .scanner-laser {
+    position: absolute; left: 0; width: 100%; height: 2px;
+    background: #10b981; box-shadow: 0 0 10px #10b981, 0 0 20px #10b981;
+    animation: scan-vertical 2.2s linear infinite;
+  }
+  @keyframes scan-vertical {
+    0% { top: 10px; }
+    50% { top: 230px; }
+    100% { top: 10px; }
+  }
+  
+  .scanner-label {
+    font-size: 11px; font-weight: 600; color: #34d399;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 1px; margin-top: 14px;
+    animation: blink-soft 1.5s infinite;
+  }
+  @keyframes blink-soft { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+  .action-btn {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #8b5cf6, #d946ef);
+    border: none; border-radius: 10px;
+    color: #fff; font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700; font-size: 13px; letter-spacing: 0.8px;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(139, 92, 246, 0.35);
+    transition: all 0.25s;
+    text-transform: uppercase;
+  }
+  .action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(139, 92, 246, 0.5);
+  }
+
+  .log-panel {
+    background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 8px; padding: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px; line-height: 1.6;
+    height: 240px; overflow-y: auto;
+  }
+  .log-row { display: flex; gap: 8px; color: rgba(255,255,255,0.5); }
+  .log-tag { color: #10b981; font-weight: 600; }
+  .log-tag-alert { color: #fbbf24; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+<div class="grid-overlay"></div>
+
+<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;">
+  
+  <!-- Lepidoptera App Screen mockup -->
+  <div class="app-container">
+    
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="app-logo">L</div>
+      <div class="sidebar-header">
+        <div style="width: 38px; height: 38px; border-radius: 50%; background: #3b2861; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #c084fc; font-family: 'Space Grotesk', sans-serif;">HN</div>
+        <div>
+          <div class="profile-name">Hasin Rahman</div>
+          <div class="profile-role">Lepidopterist</div>
+        </div>
+      </div>
+      
+      <ul class="menu-list">
+        <li class="menu-item active">🦋 Dashboard</li>
+        <li class="menu-item">📷 AI ID Scanner</li>
+        <li class="menu-item">📍 Sanctuary Map</li>
+        <li class="menu-item">📊 Migration Telemetry</li>
+        <li class="menu-item">⚙️ Settings</li>
+      </ul>
+    </div>
+    
+    <!-- Header -->
+    <div class="app-header">
+      <div class="app-title-container">
+        <div>
+          <div class="app-title">Lepidoptera Dashboard</div>
+          <div class="app-subtitle">SANCTUARY CONNECT ACTIVE · TIER-1 SECURE</div>
+        </div>
+      </div>
+      
+      <!-- Telemetry summary pills -->
+      <div style="display: flex; gap: 12px;">
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 5px 12px; border-radius: 100px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #34d399; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: #34d399; box-shadow: 0 0 6px #34d399;"></div>
+          Beacons Online: 42
+        </div>
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 5px 12px; border-radius: 100px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #fbbf24; font-weight: 600;">
+          Species ID'd: 1,248
+        </div>
+      </div>
+    </div>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+      
+      <!-- Butterfly 3D & Stat Card -->
+      <div class="glass-card butterfly-widget-card">
+        <!-- left stage -->
+        <div class="butterfly-stage-3d">
+          <div class="butterfly-3d">
+            <div class="wing wing-left"></div>
+            <div class="butterfly-body"></div>
+            <div class="wing wing-right"></div>
+          </div>
+        </div>
+        <!-- right info -->
+        <div class="butterfly-info-panel">
+          <span class="butterfly-badge">FEATURED SPECIMEN</span>
+          <h2 class="butterfly-title">Monarch Butterfly</h2>
+          <div class="butterfly-scientific">Danaus plexippus</div>
+          
+          <div class="stats-grid">
+            <div class="stat-box">
+              <div class="stat-label">Family</div>
+              <div class="stat-value">Nymphalidae</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Conservation Status</div>
+              <div class="stat-value" style="color: #ef4444;">Endangered</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Active Beacons</div>
+              <div class="stat-value">12 Tracker Tagged</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Avg Wingspan</div>
+              <div class="stat-value">8.9 - 10.2 cm</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- AI Scanner Sanctuary widget -->
+      <div class="glass-card ai-scanner-card">
+        <div class="glass-card-header">
+          <div class="card-title">Sanctuary AI Scanner</div>
+          <div class="card-subtitle">AI-CORE v5.4 active</div>
+        </div>
+        
+        <div class="scanner-viewfinder">
+          <div class="scanner-laser"></div>
+          <div style="font-size: 28px;">📷</div>
+          <div class="scanner-label">SCANNING VIEWPORT...</div>
+        </div>
+        
+        <button class="action-btn">Scan Specimen</button>
+        
+        <div style="font-size: 11px; color: rgba(255,255,255,0.4); text-align: center; font-style: italic; line-height: 1.45;">
+          Place a butterfly image or video feed in front of the active camera to initiate real-time species diagnostics and sanctuary migration tracing.
+        </div>
+      </div>
+      
+      <!-- Telemetry Graph card -->
+      <div class="glass-card telemetry-card">
+        <div class="glass-card-header">
+          <div class="card-title">Active Sanctuary Migration Telemetry</div>
+          <div class="card-subtitle">Live Tracking Beacons · Northern Route</div>
+        </div>
+        
+        <div class="chart-container">
+          <svg class="vector-chart-line" viewBox="0 0 760 220">
+            <!-- Grid helper lines -->
+            <line x1="0" y1="55" x2="100%" y2="55" stroke="rgba(255,255,255,0.03)" stroke-width="1" />
+            <line x1="0" y1="110" x2="100%" y2="110" stroke="rgba(255,255,255,0.03)" stroke-width="1" />
+            <line x1="0" y1="165" x2="100%" y2="165" stroke="rgba(255,255,255,0.03)" stroke-width="1" />
+            
+            <!-- Shaded area gradient -->
+            <defs>
+              <linearGradient id="chart-area-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.18" />
+                <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.0" />
+              </linearGradient>
+            </defs>
+            <path d="M 0 180 C 120 180, 180 60, 320 80 C 420 95, 520 150, 640 40 C 700 10, 740 20, 760 20 L 760 220 L 0 220 Z" fill="url(#chart-area-grad)" />
+            
+            <!-- Main Vector Curve -->
+            <path d="M 0 180 C 120 180, 180 60, 320 80 C 420 95, 520 150, 640 40 C 700 10, 740 20, 760 20" fill="none" stroke="#a78bfa" stroke-width="3" />
+            <path d="M 0 180 C 120 180, 180 60, 320 80 C 420 95, 520 150, 640 40 C 700 10, 740 20, 760 20" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="6 4" />
+            
+            <!-- Beacon Nodes -->
+            <circle cx="320" cy="80" r="5" fill="#f59e0b" stroke="#fff" stroke-width="1.5" />
+            <circle cx="640" cy="40" r="5" fill="#10b981" stroke="#fff" stroke-width="1.5" />
+            <circle cx="180" cy="120" r="4" fill="#8b5cf6" stroke="#fff" stroke-width="1" />
+          </svg>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+          <div style="display: flex; gap: 20px;">
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 10px; color: rgba(255,255,255,0.6);">
+              <div style="width: 8px; height: 8px; border-radius: 50%; background: #a78bfa;"></div>
+              Migration Path (Endangered)
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 10px; color: rgba(255,255,255,0.6);">
+              <div style="width: 8px; height: 8px; border-radius: 50%; background: #f59e0b;"></div>
+              Active Tagged Beacon (Endangered)
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px; font-size: 10px; color: rgba(255,255,255,0.6);">
+              <div style="width: 8px; height: 8px; border-radius: 50%; background: #10b981;"></div>
+              Verified Nesting Grounds (Stable)
+            </div>
+          </div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: rgba(255,255,255,0.4);">
+            LIVE ROUTE · UPDATED 2s AGO
+          </div>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

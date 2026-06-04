@@ -94,15 +94,17 @@ async def get_jervis_voice_response(user_text: str) -> str:
     if os.environ.get("JARVIS_CI") == "true":
         return f"Greetings. I am Jarvis. I have processed your input: '{user_text}'. All voice telemetry links are fully operational."
 
+    system_content = "You are Jarvis, a helpful, ultra-concise assistant. You are integrated into Jarvis OS and have direct access to local files and system commands via agentic pipelines. For instance, you can perform disk cleanup (scanning C:\\Windows\\Temp, user downloads, and caches) using the Storage HUD panel. Answer in one or two sentences max, friendly voice."
+
     try:
         import ollama
-        client = ollama.AsyncClient()
+        client = ollama.AsyncClient(timeout=10.0)
         response = await client.chat(
             model="gemma4:31b-cloud",
             messages=[
                 {
                     "role": "system",
-                    "content": "You are Jarvis, a helpful, ultra-concise assistant. Answer in one or two sentences max, friendly voice."
+                    "content": system_content
                 },
                 {"role": "user", "content": user_text}
             ],
@@ -110,8 +112,29 @@ async def get_jervis_voice_response(user_text: str) -> str:
         )
         return response["message"]["content"]
     except Exception as e:
-        logger.warning(f"Ollama chat query failed: {e}. Executing fast synth offline fallback.")
-        return f"Telemetry received. Connection established and running smoothly. Awaiting next command."
+        logger.warning(f"Ollama chat query failed: {e}. Trying OpenAI fallback...")
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        if openai_key:
+            try:
+                from openai import AsyncOpenAI
+                fallback_model = os.environ.get("JARVIS_OPENAI_MODEL", "gpt-4o")
+                client = AsyncOpenAI(api_key=openai_key, timeout=15.0)
+                response = await client.chat.completions.create(
+                    model=fallback_model,
+                    messages=[
+                        {"role": "system", "content": system_content},
+                        {"role": "user", "content": user_text}
+                    ],
+                    temperature=0.5,
+                    max_tokens=200
+                )
+                return response.choices[0].message.content or ""
+            except Exception as oe:
+                logger.warning(f"OpenAI voice fallback failed: {oe}. Executing fast synth offline fallback.")
+                return f"Telemetry received. Connection established and running smoothly. Awaiting next command."
+        else:
+            logger.warning("No OPENAI_API_KEY available for voice fallback. Executing fast synth offline fallback.")
+            return f"Telemetry received. Connection established and running smoothly. Awaiting next command."
 
 
 # ---------------------------------------------------------------------------
@@ -544,6 +567,16 @@ async def hermes_endpoint(websocket: WebSocket):
     finally:
         hermes_event_manager.unregister(conn_id)
         logger.info(f"[{conn_id}] Connection cleaned up. Active: {hermes_event_manager.get_active_count()}")
+
+
+@app.post("/api/notify")
+async def post_notification(body: dict, _: None = Depends(_require_token)):
+    """Allows posting a system speech/text notification to all connected clients."""
+    text = body.get("text", "").strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="Missing 'text' in request body")
+    hermes_event_manager.enqueue_speech_sync(text, role_hint="system")
+    return {"status": "success", "notified_text": text}
 
 
 # ---------------------------------------------------------------------------

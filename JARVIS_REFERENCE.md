@@ -1,8 +1,8 @@
 # Jarvis — Quick Reference
 
 ## GitHub
-- **Repo:** https://github.com/HasRahm/jarvis
-- **Account:** HasRahm (rahmanhasin5@gmail.com)
+- **Repo:** https://github.com/YOUR_GITHUB_USERNAME/jarvis
+- **Account:** YOUR_GITHUB_USERNAME (YOUR_EMAIL@gmail.com)
 
 ---
 
@@ -18,7 +18,7 @@
 
 ## Cloudflare Tunnel
 - **URL changes every restart** — auto-published to Gist below
-- **Discovery Gist:** https://gist.github.com/HasRahm/e99532bb52fd6b67e77f759d9921d5d8
+- **Discovery Gist:** https://gist.github.com/YOUR_GITHUB_USERNAME/YOUR_GIST_ID
 - HUD reads this Gist on every load — phone never needs to remember the URL
 
 ---
@@ -47,14 +47,14 @@ Already deployed — auto-deploys on every `git push` to master.
 
 ## Starting Jarvis (manual)
 ```powershell
-powershell -ExecutionPolicy Bypass -File "C:\Users\hasin\jarvis\scripts\start_jarvis.ps1"
+powershell -ExecutionPolicy Bypass -File "C:\Users\YOUR_USERNAME\jarvis\scripts\start_jarvis.ps1"
 ```
 Starts Hermes + Cloudflare Tunnel + publishes URL to Gist.
 
 ## Auto-start (already installed)
 `jarvis.bat` is in your Windows startup folder — Jarvis starts automatically every time you log in.
 ```
-C:\Users\hasin\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\jarvis.bat
+C:\Users\YOUR_USERNAME\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\jarvis.bat
 ```
 
 ---

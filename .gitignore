@@ -53,3 +53,11 @@ ehthumbs.db
 # ── Node / Bun (GBrain lives outside this repo, but guard anyway) ───────────
 node_modules/
 bun.lock
+
+# ── Desktop App ─────────────────────────────────────────────────────────────
+desktop/phone/
+desktop/dist/
+
+# ── Scratch Files ───────────────────────────────────────────────────────────
+scratch/
+scratch_*.py

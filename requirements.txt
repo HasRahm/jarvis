@@ -1,0 +1,33 @@
+# Core server
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+python-dotenv>=1.0.0
+websockets>=12.0
+httpx>=0.25.0
+anyio>=4.0.0
+
+# AI providers
+anthropic>=0.25.0
+openai>=1.0.0
+google-generativeai>=0.5.0
+ollama>=0.1.0
+
+# Browser automation
+# After installing, run: playwright install chromium
+playwright>=1.40.0
+
+# Utilities
+psutil>=5.9.0
+colorama>=0.4.6
+aiohttp>=3.9.0
+
+
+# Auth (Phase 13: Supabase JWT validation)
+PyJWT>=2.8.0
+
+# Cloud sandboxes (Phase 13: E2B — only needed when JARVIS_SANDBOX_MODE=e2b)
+e2b-code-interpreter>=0.0.10
+
+# Testing
+pytest>=9.0.0
+mcp>=1.0.0,<2.0.0
