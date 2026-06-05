@@ -1,197 +1,350 @@
-# Jarvis — Personal AI Operating System
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11+" />
+  <img src="https://img.shields.io/badge/license-BSL_1.1-blue?style=flat-square" alt="License" />
+  <img src="https://img.shields.io/github/actions/workflow/status/HasRahm/jarvis/ci.yml?branch=master&style=flat-square&label=CI" alt="CI Status" />
+  <img src="https://img.shields.io/badge/tests-127%20passed-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/agents-4%20specialized-blueviolet?style=flat-square" alt="Agents" />
+  <img src="https://img.shields.io/badge/skills-419+-orange?style=flat-square" alt="Skills" />
+</p>
 
-A Jarvis-style, always-on AI OS that decomposes complex tasks into a directed acyclic graph (DAG) of specialized agents, streams voice responses to your phone, and remembers everything across sessions via a local knowledge graph.
+<h1 align="center">
+  Jarvis — AI Operating System
+</h1>
 
-> **Self-hosted.** Your keys, your data, your machine. No cloud account required beyond the AI provider APIs you already use.
+<p align="center">
+  <strong>Turn plain English into production-ready apps.</strong><br/>
+  A self-hosted AI OS that decomposes your tasks into a DAG of specialized agents,<br/>
+  streams voice updates to your phone, and remembers everything across sessions.
+</p>
 
----
-
-## What it does
-
-- **Speaks to your phone** — streams synthesized voice over WebSocket to a glassmorphic phone PWA
-- **Runs multi-agent workflows** — Frontend (Gemini), Backend (Claude), QA (GPT), IaC (Claude) agents collaborate on tasks you describe in plain English
-- **Remembers across sessions** — GBrain knowledge graph stores every agent outcome, API contract, and learning
-- **Self-corrects visually** — tap an element on the phone preview; the DAG heals itself automatically
-- **Learns which models work** — adaptive router tracks success rates per role and overrides defaults after enough data
-
----
-
-## Architecture
-
-```
-Phone PWA (phone/index.html)
-    │  WebSocket :9000
-    ▼
-Hermes Bridge (core/hermes/server.py)   ← FastAPI + asyncio broadcaster
-    │
-    ├── Intent Classifier (gemma4:31b via Ollama)
-    │
-    └── DAG Orchestrator (core/orchestrator/dag.py)
-            │
-            ├── Frontend Agent  → gemini-3.1-pro-preview
-            ├── Backend Agent   → claude-sonnet-4-6
-            ├── QA Agent        → gpt-5.4  (fallback: claude, gemini)
-            └── IaC Agent       → claude-sonnet-4-6
-                    │
-                    └── GBrain (local knowledge graph via Bun)
-```
-
-Agent coordination happens through `AGENTS.md` — a shared markdown file each agent reads and writes. No agent calls another agent's API directly.
+<p align="center">
+  <a href="#-quick-start"><strong>Quick Start</strong></a> ·
+  <a href="#-how-it-works"><strong>How It Works</strong></a> ·
+  <a href="#%EF%B8%8F-architecture"><strong>Architecture</strong></a> ·
+  <a href="#-features"><strong>Features</strong></a> ·
+  <a href="#-skills-library"><strong>419+ Skills</strong></a> ·
+  <a href="#-contributing"><strong>Contributing</strong></a>
+</p>
 
 ---
 
-## Prerequisites
+## Why Jarvis?
 
-| Requirement | Version | Notes |
-|---|---|---|
-| Python | 3.11+ | |
-| [Ollama](https://ollama.ai) | latest | For `gemma4:31b-cloud` (the core brain) |
-| [Bun](https://bun.sh) | latest | To run GBrain |
-| Docker Desktop | latest | Optional — for sandboxed agent execution |
-| API keys | — | Anthropic, Google Gemini, OpenAI |
+Most AI coding tools give you **a chatbot**. Jarvis gives you **a team**.
+
+When you describe a task in plain English, Jarvis doesn't just ask a single LLM. It decomposes your request into subtasks and dispatches them to specialized agents — Frontend, Backend, QA, and Infrastructure — that run in dependency order, verify each other's output, and stream progress to your phone as synthesized voice.
+
+> **Self-hosted first.** Your keys, your data, your machine. No cloud account required beyond the AI provider APIs you already use.
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
-### 1. Clone and bootstrap
+### 1. Clone & bootstrap
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/jarvis.git
+git clone https://github.com/HasRahm/jarvis.git
 cd jarvis
-bash scripts/bootstrap.sh
+bash scripts/bootstrap.sh     # installs Bun, GBrain, Python venv, Playwright
 ```
-
-This installs Bun, clones GBrain to `~/tools/gbrain`, creates a Python venv, installs all dependencies, and installs the Playwright Chromium browser.
 
 ### 2. Configure
 
 ```bash
 cp .env.example .env
+# Fill in your API keys:
+#   ANTHROPIC_API_KEY=sk-ant-...
+#   GEMINI_API_KEY=...
+#   OPENAI_API_KEY=sk-...
+#   HERMES_SECRET=choose-a-strong-random-secret
 ```
 
-Edit `.env` and fill in:
-
-```env
-ANTHROPIC_API_KEY=sk-ant-...
-GEMINI_API_KEY=...
-OPENAI_API_KEY=sk-...
-HERMES_SECRET=choose-a-strong-random-secret
-JARVIS_PROJECT_ROOT=/absolute/path/to/this/repo
-```
-
-You also need to initialize GBrain:
-
-```bash
-cd ~/tools/gbrain
-gbrain init        # follow the prompts (choose pglite for local-only)
-cd -
-```
-
-### 3. Pull the Ollama model
+### 3. Pull the local model
 
 ```bash
 ollama pull gemma4:31b-cloud
-# or use any model supported by Ollama — update OLLAMA_HOST in .env
 ```
 
 ### 4. Start Jarvis
 
-**Windows:**
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/start_local.ps1
-```
-
-**Linux / macOS:**
 ```bash
+# Linux / macOS
 uvicorn core.hermes.server:app --host 0.0.0.0 --port 9000
+
+# Windows
+powershell -ExecutionPolicy Bypass -File scripts/start_local.ps1
 ```
 
 ### 5. Connect your phone
 
-The start script launches a Cloudflare quick tunnel. The URL appears in the terminal. Open `https://<tunnel-url>/phone` on your phone, enter your `HERMES_SECRET` in Settings, and tap Connect.
+Open `https://<tunnel-url>/phone` on your phone. Enter your `HERMES_SECRET` in Settings. Tap **Connect**.
+
+The start script launches a Cloudflare quick tunnel — the URL appears in the terminal.
 
 ---
 
-## Run a task
+## 💡 How It Works
 
-From the phone PWA or any WebSocket client:
-
-```json
-{ "type": "auth", "token": "your-hermes-secret" }
+```
+ You say: "Build a REST API with auth and a dashboard"
 ```
 
-Then send text:
+**Step 1 → Decompose.** Gemma-4 (running locally via Ollama) parses your request and builds a dependency graph of atomic subtasks.
 
-```json
-{ "text": "Build a REST API for a todo list with frontend" }
+**Step 2 → Route.** Each subtask is assigned to the best agent for the job. The [model router](agents/model_router.py) picks the optimal LLM per role, with automatic fallback chains.
+
+**Step 3 → Execute.** Agents run in topological order. The Backend agent (Claude) writes migrations and API endpoints. The Frontend agent (Gemini) builds the UI. The QA agent (GPT) verifies contracts and writes tests. They coordinate through [`AGENTS.md`](AGENTS.md) — a shared markdown file. No agent calls another agent's API directly.
+
+**Step 4 → Stream.** Voice updates stream to your phone PWA over WebSocket in real-time. Tap any element in the live preview to trigger **visual self-correction** — the DAG heals itself automatically.
+
+**Step 5 → Remember.** Results are stored in GBrain (local knowledge graph). Next session starts with full context of everything you've built before.
+
+<details>
+<summary><strong>📺 Example terminal output</strong></summary>
+
+```
+$ jarvis "Build a SaaS REST API with JWT auth and user management"
+
+════════════════════════════════════════════════════
+  Jarvis Multi-Agent Orchestrator
+  Task: Build a SaaS REST API with JWT auth...
+  ID:   task_20260521_143022
+════════════════════════════════════════════════════
+
+[1/3] Decomposing task with Gemma-4...
+[2/3] Building execution DAG (4 subtasks)...
+[3/3] Executing agents...
+
+--- Step 1/4: [backend] ---
+    Design users table + JWT auth endpoints
+    [PASS] migrations/001_users.sql, app/auth.py, app/users.py
+
+--- Step 2/4: [frontend] ---
+    Build login + dashboard UI wired to auth API
+    [PASS] index.html, app.js, styles.css
+
+--- Step 3/4: [qa] ---
+    Verify contracts and write integration tests
+    [PASS] tests/test_auth.py (12 tests)
+
+--- Step 4/4: [iac] ---
+    Generate Terraform for deployment
+    [PASS] terraform/main.tf, terraform/variables.tf
+
+════════════════════════════════════════════════════
+  Result: COMPLETED · Files: 9 · Cost: $0.0042
+════════════════════════════════════════════════════
 ```
 
-Jarvis decomposes this into agent subtasks, executes them in dependency order, streams voice updates to your phone, and stores the results in GBrain for future sessions.
+</details>
 
 ---
 
-## Run the tests
+## ⚙️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Phone PWA / Console (phone/index.html)                     │
+│  WebSocket :9000                                            │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Hermes Bridge (core/hermes/server.py)                      │
+│  FastAPI + asyncio broadcaster + voice synthesis             │
+│                                                             │
+│  ┌──────────────────┐  ┌─────────────────────────────────┐  │
+│  │ Intent Classifier │  │ DAG Orchestrator                │  │
+│  │ (gemma4:31b)     │  │ (core/orchestrator/dag.py)      │  │
+│  └──────────────────┘  │                                 │  │
+│                        │  ┌───────────┐ ┌──────────────┐ │  │
+│                        │  │ Frontend  │ │ Backend      │ │  │
+│                        │  │ (Gemini)  │ │ (Claude)     │ │  │
+│                        │  └───────────┘ └──────────────┘ │  │
+│                        │  ┌───────────┐ ┌──────────────┐ │  │
+│                        │  │ QA        │ │ IaC          │ │  │
+│                        │  │ (GPT)     │ │ (Claude)     │ │  │
+│                        │  └───────────┘ └──────────────┘ │  │
+│                        └─────────────────────────────────┘  │
+└─────────────────────────────┬───────────────────────────────┘
+                              │
+                 ┌────────────┼────────────┐
+                 ▼            ▼            ▼
+          ┌──────────┐ ┌──────────┐ ┌──────────┐
+          │ GBrain   │ │ Tools    │ │ Skills   │
+          │ (memory) │ │ (shell,  │ │ (419+    │
+          │          │ │ browser, │ │ loadable │
+          │          │ │ desktop) │ │ prompts) │
+          └──────────┘ └──────────┘ └──────────┘
+```
+
+### Agent Coordination via AGENTS.md
+
+Agents don't call each other's APIs. Instead, they read and write a shared [`AGENTS.md`](AGENTS.md) file — a markdown-based protocol that tracks:
+
+| Section | Purpose |
+|---------|---------|
+| **Current Task** | Task ID, description, status |
+| **Agent Assignments** | Which agent runs which model, current status |
+| **Task Log** | Timestamped entries from each agent |
+
+This design is inspectable, debuggable, and version-controllable. You can read `AGENTS.md` at any time to see exactly what happened.
+
+---
+
+## ✨ Features
+
+### 🧠 Multi-Agent DAG Execution
+Tasks are decomposed into subtasks and executed in dependency order by specialized agents — not a single monolithic prompt.
+
+### 🎙️ Voice-First Phone Interface
+Agent status updates stream as synthesized speech to a glassmorphic phone PWA. Speak commands, hear results, no terminal required.
+
+### 🔄 Visual Self-Correction
+Tap any element on the live browser preview from your phone. The DAG injects a corrective subtask, rolls back the stale agent's work, and re-executes with your feedback.
+
+### 🗄️ Persistent Cross-Session Memory
+GBrain knowledge graph stores every agent outcome, API contract, and learning. Next session starts with full context.
+
+### 📊 Cost Transparency & Adaptive Routing
+Real-time telemetry tracks token usage, latency, and spend per model. The [adaptive router](agents/adaptive_router.py) learns which models deliver best results per role and overrides defaults after enough data.
+
+### 🛡️ Sandboxed Execution
+Run agent code in Docker containers, E2B cloud sandboxes, or local — configurable via `JARVIS_SANDBOX_MODE`.
+
+### 🏠 Fully Self-Hostable
+Your keys, your data, your models. No cloud required. A single bootstrap script gets you running in minutes.
+
+---
+
+## 📚 Skills Library
+
+Jarvis ships with **419+ dynamically-loadable skill modules** covering engineering, product, marketing, compliance, and more. Skills are injected into agent system prompts at runtime based on task relevance.
+
+<details>
+<summary><strong>View skill categories</strong></summary>
+
+| Category | Examples |
+|----------|---------|
+| **Engineering** | `karpathy-coder`, `senior-backend`, `senior-frontend`, `code-reviewer`, `tdd`, `ci-cd-pipeline-builder` |
+| **Product** | `product-manager`, `prd`, `user-story`, `agile-product-owner`, `sprint-plan` |
+| **Marketing** | `growth-marketer`, `seo-audit`, `content-strategist`, `landing-page-generator` |
+| **Infrastructure** | `aws-solution-architect`, `kubernetes-operator`, `terraform-patterns`, `devops-engineer` |
+| **Security** | `red-team`, `security-pen-testing`, `soc2-audit-prep`, `gdpr-audit-prep` |
+| **Finance** | `financial-analyst`, `pricing-strategist`, `cfo-advisor`, `revenue-operations` |
+| **Leadership** | `ceo-advisor`, `cto-advisor`, `founder-mode`, `board-deck-builder` |
+
+Each skill is a self-contained directory with prompts, templates, and context. See [`skills/`](skills/) for the full list.
+
+</details>
+
+---
+
+## 🏗️ Project Structure
+
+```
+jarvis/
+├── core/
+│   ├── hermes/              # WebSocket server, voice streaming, intent classifier
+│   │   ├── server.py        # FastAPI + asyncio broadcaster (731 lines)
+│   │   ├── intent_classifier.py
+│   │   └── bridge.py        # Telegram integration
+│   ├── orchestrator/        # DAG engine, task parser, distributed sync
+│   │   ├── dag.py           # Core DAG builder & executor
+│   │   ├── task_parser.py   # Gemma-4 powered task decomposition
+│   │   └── context_sync.py  # Cross-agent context sharing
+│   └── system/              # Skills engine, auth
+├── agents/
+│   ├── base_agent.py        # Abstract agent with retry, telemetry, AGENTS.md protocol
+│   ├── frontend_agent.py    # Gemini-powered UI generation
+│   ├── backend_agent.py     # Claude-powered API/DB generation
+│   ├── qa_agent.py          # GPT-powered verification + test writing
+│   ├── iac_agent.py         # Claude-powered Terraform/infra
+│   ├── model_router.py      # Role → model mapping with env overrides
+│   └── adaptive_router.py   # Learns best model per role from outcomes
+├── tools/                   # Shell, browser (Playwright), desktop automation, filesystem
+├── phone/                   # Mobile PWA, console, telemetry dashboard, landing page
+├── skills/                  # 419+ dynamically-loaded skill modules
+├── tests/                   # 127 offline unit tests (JARVIS_CI=true stubs all external calls)
+├── scripts/                 # bootstrap.sh, start_local.ps1, deploy_linux.sh
+├── .env.example             # All configurable env vars documented
+├── docker-compose.yml       # Sandboxed agent execution
+└── AGENTS.md                # Shared agent coordination protocol
+```
+
+---
+
+## 🔧 Configuration
+
+### Prerequisites
+
+| Requirement | Version | Purpose |
+|---|---|---|
+| Python | 3.11+ | Runtime |
+| [Ollama](https://ollama.ai) | latest | Local AI model (Gemma-4 31B) |
+| [Bun](https://bun.sh) | latest | GBrain knowledge graph runtime |
+| Docker Desktop | latest | *Optional* — sandboxed agent execution |
+
+### API Keys
+
+You need at least one AI provider API key. Jarvis uses multi-provider routing:
+
+| Provider | Model | Role | Required? |
+|----------|-------|------|-----------|
+| **Anthropic** | Claude Sonnet 4.6 | Backend, IaC | Recommended |
+| **Google** | Gemini 3.1 Pro | Frontend | Recommended |
+| **OpenAI** | GPT-5.4 | QA | Recommended |
+| **Ollama** | Gemma-4 31B | Orchestrator (local) | Required |
+
+> **Tip:** You can override model assignments per role via environment variables: `AGENT_MODEL_BACKEND=gpt-5.4` swaps the backend agent to GPT.
+
+### Key Environment Variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `HERMES_SECRET` | Shared secret for phone WebSocket auth | *required* |
+| `JARVIS_AGENT_TIMEOUT_SEC` | Max seconds per agent execution | `300` |
+| `JARVIS_SANDBOX_MODE` | Code execution sandbox: `local`, `docker`, `e2b` | `local` |
+| `JARVIS_CI` | Set to `true` to stub all external calls (for testing) | `false` |
+
+See [`.env.example`](.env.example) for the complete list with descriptions.
+
+---
+
+## 🧪 Testing
+
+All 127 tests run fully offline — no API keys, no network, no Docker required:
 
 ```bash
 JARVIS_CI=true python -m pytest tests/ -v
 ```
 
-All 37 tests pass offline — no API keys needed. `JARVIS_CI=true` stubs all LLM, GBrain, and browser calls.
+`JARVIS_CI=true` stubs all LLM calls, GBrain queries, and browser automation with deterministic mock responses. CI runs automatically on every push via [GitHub Actions](.github/workflows/ci.yml).
 
 ---
 
-## Project structure
+## 🖥️ Web Interfaces
 
-```
-jarvis/
-├── core/
-│   ├── hermes/          # WebSocket server, voice streaming, intent classifier
-│   ├── orchestrator/    # DAG engine, task parser, context sync, distributed sync
-│   ├── sync/            # Heartbeat watcher, GBrain migrate daemon
-│   └── logging_config.py
-├── agents/              # Base agent, specialized agents, model router, adaptive router
-├── brain/               # GBrain query/write wrappers
-├── tools/               # Shell, browser (Playwright), filesystem helpers
-├── phone/               # Mobile PWA (index.html) + telemetry dashboard
-├── scripts/             # bootstrap.sh, start_local.ps1, deploy_linux.sh, systemd units
-├── tests/               # 37 offline unit tests
-├── .env.example         # All configurable env vars documented
-├── docker-compose.yml   # Sandboxed agent execution
-├── Dockerfile           # Python + Bun + Playwright + Terraform image
-└── requirements.txt
-```
+Jarvis ships with multiple web interfaces, all served from the same port:
+
+| Path | Interface |
+|------|-----------|
+| `/phone` | Mobile PWA — glassmorphic voice interface |
+| `/landing` | Marketing landing page |
+| `/telemetry` | Real-time cost & performance dashboard |
+| `/architecture` | Interactive system architecture diagram |
 
 ---
 
-## Environment variables
+## 🚢 Deployment
 
-See [`.env.example`](.env.example) for the full list with descriptions. Key ones:
-
-| Variable | Description |
-|---|---|
-| `HERMES_SECRET` | Shared secret for phone WebSocket auth |
-| `ANTHROPIC_API_KEY` | Claude API key |
-| `GEMINI_API_KEY` | Google Gemini API key |
-| `OPENAI_API_KEY` | OpenAI API key |
-| `OLLAMA_HOST` | Ollama endpoint (default: `http://localhost:11434`) |
-| `JARVIS_PROJECT_ROOT` | Absolute path to this repo (for Docker volume mount) |
-| `JARVIS_CI` | Set to `true` to stub all external calls (for testing) |
-| `JARVIS_DEBUG` | Set to `true` for DEBUG-level logs |
-| `JARVIS_AGENT_TIMEOUT_SEC` | Max seconds a single agent.run() can take (default: 300) |
-| `JARVIS_MAX_WS_MSG_BYTES` | Max WebSocket message size (default: 1 MB) |
-
----
-
-## Linux VPS deployment
+### Linux VPS (one command)
 
 ```bash
 sudo bash scripts/deploy_linux.sh
 ```
 
-This creates a `jarvis` system user, rsyncs the project to `/opt/jarvis`, installs the Python venv, and sets up two systemd services (`jarvis.service` + `jarvis-watcher.service`) with `Restart=on-failure`.
-
-Then set up a named Cloudflare tunnel for a stable domain:
+Creates a `jarvis` system user, installs to `/opt/jarvis`, and configures two systemd services with `Restart=on-failure`. Then set up a named Cloudflare tunnel for a stable domain:
 
 ```bash
 cloudflared tunnel login
@@ -200,36 +353,47 @@ cloudflared tunnel route dns jarvis your-subdomain.your-domain.com
 cloudflared tunnel run jarvis
 ```
 
----
+### Docker
 
-## Phone PWA auth
-
-The phone connects over WebSocket. The token is sent as the **first message** (never in the URL):
-
-```js
-ws.onopen = () => ws.send(JSON.stringify({ type: 'auth', token: HERMES_SECRET }));
+```bash
+docker-compose up -d
 ```
 
-The server responds with `{"type": "auth_ok"}`. Token storage in `localStorage` is separate from the URL so it never appears in browser history or proxy logs.
+---
+
+## 💰 Cost Awareness
+
+Each agent invocation calls real AI APIs. The telemetry dashboard at `/telemetry` shows:
+
+- **Cumulative spend** across all models
+- **Token usage** (input/output) per call
+- **Per-model call counts** and latency
+- **Cost per task** breakdown
+
+Set `JARVIS_AGENT_TIMEOUT_SEC` to limit runaway costs from hung agents. The adaptive router learns which models give the best results at the lowest cost for each role.
 
 ---
 
-## Cost awareness
+## 🤝 Contributing
 
-Each agent invocation calls real AI APIs that cost money. The telemetry dashboard at `http://localhost:9000/telemetry` shows cumulative spend, token usage, and per-model call counts. Set `JARVIS_AGENT_TIMEOUT_SEC` to limit runaway costs from hung agents.
+We welcome contributions! Here's how to get started:
 
----
+1. **Fork** and clone the repo
+2. **Bootstrap**: `bash scripts/bootstrap.sh`
+3. **Configure**: `cp .env.example .env` and fill in API keys
+4. **Test**: `JARVIS_CI=true python -m pytest tests/ -v` (all 127 tests should pass)
+5. **Submit a PR** — CI runs the full suite automatically
 
-## Contributing
-
-1. Fork and clone
-2. `bash scripts/bootstrap.sh`
-3. `cp .env.example .env` and fill in keys
-4. Run tests: `JARVIS_CI=true python -m pytest tests/ -v`
-5. Open a PR — CI runs the full test suite automatically
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ---
 
-## License
+## 📄 License
 
-MIT
+[Business Source License 1.1](LICENSE.txt) — free for non-competitive use. Converts to MPL 2.0 after 4 years.
+
+---
+
+<p align="center">
+  <sub>Built with ❤️ by humans and agents working together.</sub>
+</p>
