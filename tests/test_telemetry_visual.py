@@ -47,7 +47,7 @@ def test_telemetry_logging_on_api_call():
 
     # Run raw call mock
     with mock.patch.dict(os.environ, {"JARVIS_CI": "true"}):
-        agent._raw_call("google", "gemini-2.5-flash-lite", "System Prompt", "User Prompt")
+        agent._raw_call("google", "gemini-3.1-flash", "System Prompt", "User Prompt")
 
     # Assert telemetry file is created and has valid entries
     assert os.path.exists(telemetry_path)
@@ -56,14 +56,14 @@ def test_telemetry_logging_on_api_call():
         assert len(records) > 0
         latest = records[-1]
         assert latest["role"] == "qa"
-        assert latest["model"] == "gemini-2.5-flash-lite"
+        assert latest["model"] == "gemini-3.1-flash"
         assert latest["status"] == "success"
         assert "cost_usd" in latest
         assert latest["cost_type"] == "estimated, verify against provider dashboard"
 
 
 def test_visual_verifier_escalation():
-    """Verify QAAgent escalates to 3.1-pro-preview when Gemini-2.5-flash-lite returns low confidence."""
+    """Verify QAAgent escalates to 3.1-pro-preview when Gemini-3.1-flash returns low confidence."""
     qa = QAAgent()
     
     # Create a real dummy file to pass the file existence check

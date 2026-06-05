@@ -346,8 +346,113 @@ TOOL_DEFINITIONS = [
 mcp_bridge = JarvisMCPBridge()
 TOOL_DEFINITIONS.extend(mcp_bridge.get_mcp_tool_definitions())
 
+# Load dynamic plugin tool definitions
+try:
+    from core.system.plugin_loader import plugin_loader
+    if plugin_loader.tool_definitions:
+        TOOL_DEFINITIONS.extend(plugin_loader.tool_definitions)
+except Exception as pe:
+    logger.warning(f"Failed loading plugin tool definitions: {pe}")
+
+_breakers = {}
+
+_cortex = None
+
+def get_cortex():
+    global _cortex
+    if _cortex is None:
+        from core.system.spatial_cortex import SpatialContextCortex
+        _cortex = SpatialContextCortex()
+        _cortex.start()
+    return _cortex
+
+def get_breaker(tool_name: str):
+    if tool_name not in _breakers:
+        from core.system.circuit_breaker import CircuitBreaker
+        _breakers[tool_name] = CircuitBreaker(tool_name)
+    return _breakers[tool_name]
+
 def dispatch(fn_name: str, args: dict):
+    """Wrapped tool dispatch with circuit breaker protection and spatial context checks"""
+    import os
+    import time
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    # Check spatial context home before executing any mutating tool
+    if os.environ.get("JARVIS_CI") != "true" and fn_name not in ["brain_query", "brain_write", "read_file", "list_dir", "run_command"]:
+        try:
+            from core.orchestrator.dag import get_orchestrator
+            orch = get_orchestrator()
+            if orch and getattr(orch, "task_id", None):
+                cortex = get_cortex()
+                
+                # If home context is not registered, register it
+                if orch.task_id not in cortex.task_registry:
+                    cortex.register_task(orch.task_id)
+                
+                # Check if we shifted context
+                if not cortex.is_home_context(orch.task_id):
+                    logger.warning(f"[Cortex] Context switch detected! Suspending tool '{fn_name}' until home context returns.")
+                    
+                    # Update status in AGENTS.md to SUSPENDED
+                    if getattr(orch, "active_agent", None):
+                        try:
+                            from core.orchestrator.dag import _get_agent_instance
+                            agent_instance = _get_agent_instance(orch.active_agent, user_id=orch.user_id)
+                            agent_instance.update_status("SUSPENDED", "Context switched — waiting for home context")
+                        except Exception as status_err:
+                            logger.error(f"[Cortex] Failed to write SUSPENDED status: {status_err}")
+                    
+                    # Block execution and poll context
+                    start_time = time.time()
+                    timeout = 300  # 5 minutes
+                    while not cortex.is_home_context(orch.task_id):
+                        if time.time() - start_time > timeout:
+                            raise TimeoutError(f"Context switch timeout: Original home context never returned for task '{orch.task_id}'")
+                        time.sleep(0.5)
+                        
+                    logger.info(f"[Cortex] Home context restored for task '{orch.task_id}'. Resuming execution.")
+                    
+                    # Restore status back to WORKING
+                    if getattr(orch, "active_agent", None):
+                        try:
+                            from core.orchestrator.dag import _get_agent_instance
+                            agent_instance = _get_agent_instance(orch.active_agent, user_id=orch.user_id)
+                            agent_instance.update_status("WORKING", "Resuming task")
+                        except Exception as status_err:
+                            logger.error(f"[Cortex] Failed to write WORKING status: {status_err}")
+        except Exception as e:
+            if isinstance(e, TimeoutError):
+                return f"[ERROR] Context Switch Timeout: {e}"
+            logger.warning(f"[Cortex] Context check warning: {e}")
+
+    breaker = get_breaker(fn_name)
+    if not breaker.is_available():
+        return f"[ERROR] Circuit breaker is OPEN for tool '{fn_name}'. Tool is temporarily disabled due to repeated failures."
+        
+    try:
+        result = _dispatch_raw(fn_name, args)
+        if isinstance(result, str) and (result.startswith("[ERROR]") or result.startswith("ERROR:")):
+            breaker.record_failure()
+        else:
+            breaker.record_success()
+        return result
+    except Exception as e:
+        breaker.record_failure()
+        raise e
+
+def _dispatch_raw(fn_name: str, args: dict):
     """Route tool calls to their respective python functions"""
+    # Route to plugin dispatchers if available
+    try:
+        from core.system.plugin_loader import plugin_loader
+        if fn_name in plugin_loader.tool_dispatchers:
+            return plugin_loader.tool_dispatchers[fn_name](fn_name, args)
+    except Exception as pe:
+        logger.warning(f"Failed routing to plugin dispatcher for {fn_name}: {pe}")
+
     if fn_name == "read_file":
         return read_file(args.get("path"))
     elif fn_name == "write_file":

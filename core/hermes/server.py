@@ -26,6 +26,30 @@ load_dotenv(os.path.join(project_root, ".env"))
 
 app = FastAPI(title="Jarvis Hermes Bridge")
 
+# Initialize and run the GoalScheduler background daemon
+goal_scheduler = None
+
+@app.on_event("startup")
+async def startup_event():
+    global goal_scheduler
+    try:
+        from core.system.goal_scheduler import GoalScheduler
+        goal_scheduler = GoalScheduler(check_interval_sec=60.0)
+        goal_scheduler.start()
+        logger.info("[Server] GoalScheduler started successfully.")
+    except Exception as e:
+        logger.error(f"[Server] Failed to start GoalScheduler: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global goal_scheduler
+    if goal_scheduler:
+        try:
+            goal_scheduler.stop()
+            logger.info("[Server] GoalScheduler stopped successfully.")
+        except Exception as e:
+            logger.error(f"[Server] Error stopping GoalScheduler: {e}")
+
 HERMES_SECRET = os.getenv("HERMES_SECRET", "default_secret")
 
 # CORS — restrict origins in production via JARVIS_CORS_ORIGINS env var
@@ -38,6 +62,11 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+# Mount Slack channel spoke
+from core.hermes.channels.slack import router as slack_router
+app.include_router(slack_router, prefix="/api/channels/slack", tags=["slack"])
+
 
 
 async def _require_token(authorization: str = Header(default="")) -> None:
@@ -97,44 +126,21 @@ async def get_jervis_voice_response(user_text: str) -> str:
     system_content = "You are Jarvis, a helpful, ultra-concise assistant. You are integrated into Jarvis OS and have direct access to local files and system commands via agentic pipelines. For instance, you can perform disk cleanup (scanning C:\\Windows\\Temp, user downloads, and caches) using the Storage HUD panel. Answer in one or two sentences max, friendly voice."
 
     try:
-        import ollama
-        client = ollama.AsyncClient(timeout=10.0)
-        response = await client.chat(
-            model="gemma4:31b-cloud",
-            messages=[
-                {
-                    "role": "system",
-                    "content": system_content
-                },
-                {"role": "user", "content": user_text}
-            ],
-            options={"temperature": 0.5}
+        from core.system.llm_adapter import call_llm
+        import asyncio
+        messages = [
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": user_text}
+        ]
+        loop = asyncio.get_running_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: call_llm(messages, model="gemma4:31b-cloud")
         )
-        return response["message"]["content"]
+        return response.get("content", "") if isinstance(response, dict) else str(response)
     except Exception as e:
-        logger.warning(f"Ollama chat query failed: {e}. Trying OpenAI fallback...")
-        openai_key = os.environ.get("OPENAI_API_KEY")
-        if openai_key:
-            try:
-                from openai import AsyncOpenAI
-                fallback_model = os.environ.get("JARVIS_OPENAI_MODEL", "gpt-4o-mini")
-                client = AsyncOpenAI(api_key=openai_key, timeout=15.0)
-                response = await client.chat.completions.create(
-                    model=fallback_model,
-                    messages=[
-                        {"role": "system", "content": system_content},
-                        {"role": "user", "content": user_text}
-                    ],
-                    temperature=0.5,
-                    max_tokens=200
-                )
-                return response.choices[0].message.content or ""
-            except Exception as oe:
-                logger.warning(f"OpenAI voice fallback failed: {oe}. Executing fast synth offline fallback.")
-                return f"Telemetry received. Connection established and running smoothly. Awaiting next command."
-        else:
-            logger.warning("No OPENAI_API_KEY available for voice fallback. Executing fast synth offline fallback.")
-            return f"Telemetry received. Connection established and running smoothly. Awaiting next command."
+        logger.warning(f"Voice response model execution failed: {e}. Executing fast synth offline fallback.")
+        return f"Telemetry received. Connection established and running smoothly. Awaiting next command."
 
 
 # ---------------------------------------------------------------------------

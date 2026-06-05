@@ -28,13 +28,13 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AGENTS_MD_PATH = os.path.join(PROJECT_ROOT, "AGENTS.md")
 
-PRICING_LAST_UPDATED = "2026-05-18"
+PRICING_LAST_UPDATED = "2026-06-05"
 PRICING = {
     "claude-sonnet-4-6": {"input": 3.00, "output": 15.00},
+    "claude-opus-4-8": {"input": 15.00, "output": 75.00},
     "gemini-3.1-pro-preview": {"input": 2.00, "output": 12.00},
     "gpt-5.4": {"input": 2.50, "output": 15.00},
-    "gemini-2.5-flash-lite": {"input": 0.075, "output": 0.30},
-    "gemini-3.1-flash-lite": {"input": 0.075, "output": 0.30},
+    "gemini-3.5-flash": {"input": 0.075, "output": 0.30},
     "gemma4:31b": {"input": 0.00, "output": 0.00},
     "gemma4:31b-cloud": {"input": 0.00, "output": 0.00},
 }

@@ -204,62 +204,231 @@ def _call_openai_compatible_api(client, model, messages, tools):
     return result_message
 
 
+def _call_anthropic_api(model, messages, tools):
+    """Call Anthropic API natively and map standard formats back and forth."""
+    import anthropic
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    client = anthropic.Anthropic(api_key=api_key)
+    
+    system_instruction = ""
+    anthropic_messages = []
+    
+    # Track tool_use IDs to align them with subsequent tool results
+    # Each tool result (role == "tool") corresponds sequentially to a tool call (in role == "assistant")
+    tool_responses_count = 0
+    
+    current_role = None
+    current_content = []
+    
+    for msg in messages:
+        role = msg.get("role")
+        content = msg.get("content")
+        
+        if role == "system":
+            if content:
+                system_instruction += str(content) + "\n"
+            continue
+            
+        # Determine the Anthropic role: tool messages belong to "user" role
+        anthropic_role = "user" if role in ("user", "tool") else "assistant"
+        
+        # If role changed, flush the current message
+        if anthropic_role != current_role:
+            if current_role is not None and current_content:
+                anthropic_messages.append({"role": current_role, "content": current_content})
+            current_role = anthropic_role
+            current_content = []
+            
+        if role == "user":
+            if content:
+                current_content.append({"type": "text", "text": str(content)})
+        elif role == "assistant":
+            if content:
+                current_content.append({"type": "text", "text": str(content)})
+            tool_calls = msg.get("tool_calls")
+            if tool_calls:
+                for tc in tool_calls:
+                    fn = tc.get("function", {})
+                    # Generate a unique tool use ID and tag the tool call object
+                    tc_id = f"tc_{uuid.uuid4().hex[:8]}"
+                    tc["_anthropic_id"] = tc_id
+                    current_content.append({
+                        "type": "tool_use",
+                        "id": tc_id,
+                        "name": fn.get("name"),
+                        "input": fn.get("arguments")
+                    })
+            if not current_content:
+                current_content.append({"type": "text", "text": "Executing..."})
+        elif role == "tool":
+            # Match this tool response with the corresponding tool call's generated ID
+            tc_id = None
+            current_tc_count = 0
+            for prev_msg in messages:
+                if prev_msg.get("role") == "assistant" and prev_msg.get("tool_calls"):
+                    for tc in prev_msg["tool_calls"]:
+                        if current_tc_count == tool_responses_count:
+                            tc_id = tc.get("_anthropic_id")
+                            break
+                        current_tc_count += 1
+                    if tc_id:
+                        break
+            
+            if not tc_id:
+                tc_id = f"tc_orphan_{uuid.uuid4().hex[:8]}"
+                
+            current_content.append({
+                "type": "tool_result",
+                "tool_use_id": tc_id,
+                "content": str(content)
+            })
+            tool_responses_count += 1
+            
+    # Flush final message
+    if current_role is not None and current_content:
+        anthropic_messages.append({"role": current_role, "content": current_content})
+            
+    anthropic_tools = []
+    if tools:
+        for t in tools:
+            fn = t.get("function", {})
+            anthropic_tools.append({
+                "name": fn.get("name"),
+                "description": fn.get("description"),
+                "input_schema": fn.get("parameters")
+            })
+            
+    # Map friendly names to current Anthropic API model IDs
+    ANTHROPIC_MODEL_MAP = {
+        "claude-sonnet-4-6": "claude-sonnet-4-6",
+        "claude-opus-4-8": "claude-opus-4-8",
+        "claude-haiku-4-5": "claude-haiku-4-5-20251001",
+        # Legacy aliases
+        "claude-sonnet": "claude-sonnet-4-6",
+        "claude-opus": "claude-opus-4-8",
+        "claude-haiku": "claude-haiku-4-5-20251001",
+    }
+    anthropic_model = ANTHROPIC_MODEL_MAP.get(model.lower(), model)
+    
+    params = {
+        "model": anthropic_model,
+        "max_tokens": 4096,
+        "messages": anthropic_messages,
+    }
+    if system_instruction:
+        params["system"] = system_instruction.strip()
+    if anthropic_tools:
+        params["tools"] = anthropic_tools
+        
+    response = client.messages.create(**params)
+    
+    response_text = ""
+    tool_calls = []
+    for block in response.content:
+        if block.type == "text":
+            response_text += block.text
+        elif block.type == "tool_use":
+            tool_calls.append({
+                "function": {
+                    "name": block.name,
+                    "arguments": block.input
+                }
+            })
+            
+    result = {
+        "role": "assistant",
+        "content": response_text
+    }
+    if tool_calls:
+        result["tool_calls"] = tool_calls
+    return result
+
+
 def call_llm(messages, model="gemma4:31b-cloud", tools=None):
     """
     Unified LLM call adapter with resilient cloud fallbacks.
-    1. Tries local Ollama with a 30s timeout.
-    2. Falls back to OpenAI API if OPENAI_API_KEY is defined.
-    3. Falls back to OpenRouter if OPENROUTER_API_KEY is defined.
+    Rotates through FALLBACK_CHAIN in order when a model fails.
     """
-    # 1. Try Local Ollama first
-    if is_ollama_available():
+    FALLBACK_CHAIN = [
+        "gemini-3.1-pro-preview",
+        "gemini-2.5-pro",
+        "claude-sonnet-4-6",
+        "gpt-5.4"
+    ]
+
+    models_to_try = [model]
+    for m in FALLBACK_CHAIN:
+        if m not in models_to_try:
+            models_to_try.append(m)
+
+    last_error = None
+    for m in models_to_try:
         try:
-            print(Fore.CYAN + f"[LLM Adapter] Routing request to local Ollama server (model: {model})..." + Style.RESET_ALL)
-            sys.stdout.flush()
-            # Set a 30-second timeout to prevent infinite hangs on model loading/VRAM bottlenecks
-            client = ollama.Client(timeout=30.0)
-            response = client.chat(
-                model=model,
-                messages=messages,
-                tools=tools,
-                options={"temperature": 0.3}
-            )
-            return response["message"]
-        except Exception as e:
-            print(Fore.RED + f"[LLM Adapter] Local Ollama call failed or timed out: {e}." + Style.RESET_ALL)
-            print(Fore.CYAN + "Initiating cloud API failover sequence..." + Style.RESET_ALL)
-            sys.stdout.flush()
-    
-    # 2. Fallback Option A: OpenAI API
-    openai_key = os.environ.get("OPENAI_API_KEY")
-    if openai_key and HAS_OPENAI:
-        print(Fore.CYAN + "[LLM Adapter] Falling back to OpenAI API..." + Style.RESET_ALL)
-        sys.stdout.flush()
-        
-        fallback_model = os.environ.get("JARVIS_OPENAI_MODEL", "gpt-4o-mini")
-        client = OpenAI(api_key=openai_key)
-        
-        try:
-            return _call_openai_compatible_api(client, fallback_model, messages, tools)
-        except Exception as e:
-            print(Fore.RED + f"[LLM Adapter] OpenAI API fallback failed: {e}. Trying secondary fallback..." + Style.RESET_ALL)
-            sys.stdout.flush()
+            m_lower = m.lower()
             
-    # 3. Fallback Option B: OpenRouter API
-    if OPENROUTER_API_KEY and HAS_OPENAI:
-        print(Fore.CYAN + "[LLM Adapter] Falling back to OpenRouter API..." + Style.RESET_ALL)
-        sys.stdout.flush()
-        
-        client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=OPENROUTER_API_KEY,
-            timeout=90.0,
-        )
-        return _call_openai_compatible_api(client, OPENROUTER_MODEL, messages, tools)
-        
-    # 4. Error state: No models available
+            # 1. Local Ollama Routing
+            if m_lower == "gemma4:31b-cloud" or "gemma" in m_lower:
+                if is_ollama_available():
+                    print(Fore.CYAN + f"[LLM Adapter] Routing request to local Ollama server (model: {m})..." + Style.RESET_ALL)
+                    sys.stdout.flush()
+                    client = ollama.Client(timeout=30.0)
+                    response = client.chat(
+                        model=m,
+                        messages=messages,
+                        tools=tools,
+                        options={"temperature": 0.3}
+                    )
+                    return response["message"]
+                else:
+                    raise ValueError("Local Ollama is unavailable.")
+            
+            # 2. Gemini Cloud Routing
+            elif m_lower.startswith("gemini-") or "gemini" in m_lower:
+                gemini_key = os.environ.get("GEMINI_API_KEY")
+                if not gemini_key:
+                    raise ValueError("GEMINI_API_KEY is not defined.")
+                print(Fore.CYAN + f"[LLM Adapter] Routing request to Gemini API (model: {m})..." + Style.RESET_ALL)
+                sys.stdout.flush()
+                
+                # Map to proper API model name
+                gemini_model = "gemini-3.1-pro-preview" if m == "gemini-3.1-pro" else m
+                client = OpenAI(
+                    api_key=gemini_key,
+                    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+                )
+                return _call_openai_compatible_api(client, gemini_model, messages, tools)
+                
+            # 3. Anthropic Cloud Routing
+            elif m_lower.startswith("claude-") or "claude" in m_lower:
+                anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+                if not anthropic_key:
+                    raise ValueError("ANTHROPIC_API_KEY is not defined.")
+                print(Fore.CYAN + f"[LLM Adapter] Routing request to Anthropic API (model: {m})..." + Style.RESET_ALL)
+                sys.stdout.flush()
+                return _call_anthropic_api(m, messages, tools)
+                
+            # 4. OpenAI Cloud Routing
+            elif m_lower.startswith("gpt-") or "openai" in m_lower or "gpt" in m_lower:
+                openai_key = os.environ.get("OPENAI_API_KEY")
+                if not openai_key:
+                    raise ValueError("OPENAI_API_KEY is not defined.")
+                print(Fore.CYAN + f"[LLM Adapter] Routing request to OpenAI API (model: {m})..." + Style.RESET_ALL)
+                sys.stdout.flush()
+                
+                # Pass model name through — OpenAI resolves current model IDs
+                openai_model = m
+                client = OpenAI(api_key=openai_key)
+                return _call_openai_compatible_api(client, openai_model, messages, tools)
+                
+            else:
+                raise ValueError(f"Unknown model provider structure: {m}")
+                
+        except Exception as e:
+            print(Fore.RED + f"[LLM Adapter] Model {m} failed: {e}. Trying next fallback..." + Style.RESET_ALL)
+            sys.stdout.flush()
+            last_error = e
+
     raise ValueError(
-        "Ollama is unavailable/failed, and no valid cloud API keys (OPENAI_API_KEY or OPENROUTER_API_KEY) "
-        "are configured in the environment variables to handle fallback routing."
+        f"All models in fallback chain failed. Last error: {last_error}"
     )
 

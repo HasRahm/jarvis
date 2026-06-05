@@ -36,3 +36,8 @@ e2b-code-interpreter>=0.0.10
 # Testing
 pytest>=9.0.0
 mcp>=1.0.0,<2.0.0
+
+# CLI & GUI Overhaul (Phase 23)
+rich>=13.0.0
+textual>=0.47.0
+prompt_toolkit>=3.0.0

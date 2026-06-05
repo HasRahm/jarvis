@@ -37,40 +37,16 @@ def classify_correction_intent(text: str, visual_history: list) -> dict | None:
     )
 
     try:
-        import ollama
-        client = ollama.Client(host=os.environ.get("OLLAMA_HOST", "http://localhost:11434"), timeout=10.0)
-        response = client.chat(
-            model="gemma4:31b-cloud",
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-            options={"temperature": 0.0},
-        )
-        raw = response["message"]["content"]
+        from core.system.llm_adapter import call_llm
+        messages = [
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ]
+        response = call_llm(messages, model="gemma4:31b-cloud")
+        raw = response.get("content", "") if isinstance(response, dict) else str(response)
     except Exception as e:
-        logger.warning(f"Intent classifier local Ollama call failed: {e}. Trying OpenAI fallback...")
-        openai_key = os.environ.get("OPENAI_API_KEY")
-        if openai_key:
-            try:
-                from openai import OpenAI
-                fallback_model = os.environ.get("JARVIS_OPENAI_MODEL", "gpt-4o-mini")
-                client = OpenAI(api_key=openai_key)
-                response = client.chat.completions.create(
-                    model=fallback_model,
-                    messages=[
-                        {"role": "system", "content": _SYSTEM_PROMPT},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    temperature=0.0
-                )
-                raw = response.choices[0].message.content
-            except Exception as oe:
-                logger.warning(f"Intent classifier OpenAI fallback failed: {oe}. Treating as non-correction.")
-                return None
-        else:
-            logger.warning(f"Intent classifier failed and no OPENAI_API_KEY available. Treating as non-correction.")
-            return None
+        logger.warning(f"Intent classifier call failed: {e}. Treating as non-correction.")
+        return None
 
     try:
         match = re.search(r"\{.*\}", raw, re.DOTALL)

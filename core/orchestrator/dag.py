@@ -156,6 +156,7 @@ class ActiveOrchestrator:
         self.task_id = ""
         self.snapshots = {}  # subtask_id -> set of file paths that existed before the agent ran
         self.sandbox = None  # Phase 13: E2B sandbox object (None in local/docker modes)
+        self.user_id = None
 
     def inject_corrective_subtask(self, selector: str, instruction: str):
         """
@@ -354,30 +355,56 @@ def run_dag(user_task: str, dry_run: bool = False, task_id: str = None, user_id:
     Returns:
         dict with overall status, results per subtask, and files created
     """
-    task_id = task_id or f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    run_id = task_id[-8:]  # short correlation ID for log lines
+    from core.orchestrator.session import SessionManager
+    session_manager = SessionManager()
+
+    # Check if there is an incomplete session to recover
+    recovered_data = None
+    if not task_id:
+        try:
+            recovered_data = session_manager.recover()
+        except Exception as re_err:
+            logger.warning(f"Failed to check session recovery: {re_err}")
+            
+    is_recovered = False
+    if recovered_data:
+        state = recovered_data["state"]
+        task_id = recovered_data["session_id"]
+        user_task = state["user_task"]
+        ordered = state["execution_list"]
+        is_recovered = True
+        run_id = task_id[-8:]
+        print(f"\n[RECOVERY] Found incomplete session '{task_id}'. Resuming execution plan...")
+    else:
+        task_id = task_id or f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        run_id = task_id[-8:]  # short correlation ID for log lines
 
     # Phase 13: each run_dag() call gets its own isolated orchestrator instance.
     # Concurrent users no longer share state.
     orchestrator = ActiveOrchestrator()
+    orchestrator.user_id = user_id
     register_orchestrator(task_id, orchestrator)
 
     logger.info(f"[{run_id}] Starting DAG: {user_task[:80]}")
     _push_hermes_event({"type": "task_status", "status": "PLANNING", "task_id": task_id, "task": user_task[:120]})
 
     print(f"\n{'='*60}")
-    print(f"  Jarvis Multi-Agent Orchestrator")
+    print(f"  Jarvis Multi-Agent Orchestrator" + (" (RECOVERED)" if is_recovered else ""))
     print(f"  Task: {user_task}")
     print(f"  ID:   {task_id}")
     print(f"{'='*60}\n")
 
-    # Step 1: Decompose into subtasks
-    print(f"[1/3] Decomposing task with orchestrator...")
-    subtasks = parse_task(user_task)
+    if not is_recovered:
+        # Step 1: Decompose into subtasks
+        print(f"[1/3] Decomposing task with orchestrator...")
+        subtasks = parse_task(user_task)
 
-    # Step 2: Topological sort
-    print("[2/3] Building execution DAG...")
-    ordered = _topological_sort(subtasks)
+        # Step 2: Topological sort
+        print("[2/3] Building execution DAG...")
+        ordered = _topological_sort(subtasks)
+    else:
+        print("[1/3] Decomposing task... (Skipped - Session Recovered)")
+        print("[2/3] Building execution DAG... (Skipped - Session Recovered)")
 
     print(f"\nExecution plan ({len(ordered)} steps):")
     for i, st in enumerate(ordered):
@@ -402,7 +429,9 @@ def run_dag(user_task: str, dry_run: bool = False, task_id: str = None, user_id:
     print("[3/3] Executing agents...\n")
     _push_hermes_event({"type": "task_status", "status": "EXECUTING", "task_id": task_id,
                         "plan": [{"id": s["id"], "role": s["agent"], "label": s["task"][:60]} for s in ordered]})
-    _reset_agents_md(task_id, user_task)
+    
+    if not is_recovered:
+        _reset_agents_md(task_id, user_task)
 
     # Phase 13: provision E2B cloud sandbox (no-op when JARVIS_SANDBOX_MODE != "e2b")
     from tools.sandbox import create_sandbox
@@ -413,9 +442,27 @@ def run_dag(user_task: str, dry_run: bool = False, task_id: str = None, user_id:
     orchestrator.is_running = True
     orchestrator.execution_list = list(ordered)
 
-    orchestrator.current_index = 0
+    if is_recovered:
+        orchestrator.current_index = state["current_index"]
+        orchestrator.results = state.get("results", [])
+        orchestrator.all_files = state.get("all_files", [])
+        print(f"[RECOVERY] Resuming from Step {orchestrator.current_index+1}/{len(orchestrator.execution_list)}")
+    else:
+        orchestrator.current_index = 0
+
     while orchestrator.current_index < len(orchestrator.execution_list):
         st = orchestrator.execution_list[orchestrator.current_index]
+        
+        # Write checkpoint before executing this subtask
+        session_manager.checkpoint(task_id, {
+            "current_index": orchestrator.current_index,
+            "status": "incomplete",
+            "execution_list": ordered,
+            "user_task": user_task,
+            "results": orchestrator.results,
+            "all_files": orchestrator.all_files
+        })
+
         orchestrator.active_subtask = st
         orchestrator.active_agent = st["agent"]
         agent_role = st["agent"]
@@ -647,6 +694,29 @@ def run_dag(user_task: str, dry_run: bool = False, task_id: str = None, user_id:
             f.write(content)
     except Exception:
         final_status = "FAILED"
+
+    # Mark the checkpoint status based on final outcome
+    try:
+        if final_status == "COMPLETED":
+            session_manager.mark_completed(task_id, {
+                "current_index": orchestrator.current_index,
+                "status": "completed",
+                "execution_list": ordered,
+                "user_task": user_task,
+                "results": orchestrator.results,
+                "all_files": orchestrator.all_files
+            })
+        else:
+            session_manager.checkpoint(task_id, {
+                "current_index": orchestrator.current_index,
+                "status": "failed",
+                "execution_list": ordered,
+                "user_task": user_task,
+                "results": orchestrator.results,
+                "all_files": orchestrator.all_files
+            })
+    except Exception as se_err:
+        logger.warning(f"Failed to record final session status: {se_err}")
 
     # 10a: Write full run summary to GBrain on success
     if final_status == "COMPLETED" and os.environ.get("JARVIS_CI") != "true":

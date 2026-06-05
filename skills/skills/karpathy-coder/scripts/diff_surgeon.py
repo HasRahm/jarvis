@@ -51,8 +51,8 @@ def get_diff(args):
     diff_range = args.diff or "--staged"
     cmd = ["git", "diff", diff_range] if diff_range != "--staged" else ["git", "diff", "--staged"]
     try:
-        result = subprocess.run(cmd, capture_output=True, timeout=30)
-        return result.stdout.decode("utf-8", errors="replace")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        return result.stdout
     except (subprocess.TimeoutExpired, FileNotFoundError) as e:
         print(f"[error] git diff failed: {e}", file=sys.stderr)
         sys.exit(1)

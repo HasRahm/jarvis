@@ -94,3 +94,14 @@ jarvis/
 - Write clear, self-contained task descriptions when delegating
 - Jarvis will output a final report when done — use that in your response
 - If Ollama is down, Jarvis falls back to OpenRouter (has rate limits on free tier)
+
+## Future Phase Roadmap
+
+### Phase 22 — Spatial Context Cortex (Ambient Spatial Awareness)
+* **Ambience / Nervous System:** Runs a continuous parallel sensory loop (100ms cycle) beneath the conscious execution flow to detect background world shifts.
+* **Integrated Sensory Streams:**
+  * **Braille Layer:** Structural texture via accessibility tree hashes and DOM fingerprints (window hwnd, page URL, tree layout).
+  * **Sound Layer:** Audio environment profile tracking which apps are producing audio (e.g. `chrome.exe`, `code.exe`) and active keystroke targets.
+  * **Vibration Layer:** System metric spikes and delta bursts (CPU, RAM jump, I/O burst, network activity).
+  * **Air Movement Layer:** Cursor trajectory flow, tracking if mouse moves out of the task region or if keyboard focuses a new window.
+* **Spatial Cortex & Context Interrupts:** Fuses all four streams into a unified Context Fingerprint. If the fingerprint shifts (measured via hash distance delta > 0.3), it immediately triggers a `CONTEXT_SWITCH` interrupt, suspending the agent's tools until the original "home" context returns, preventing accidental CLI execution on incorrect apps.

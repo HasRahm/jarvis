@@ -2,7 +2,7 @@
 QA Agent — specializes in code review, testing, and verification.
 
 Uses gpt-5.4 via the OpenAI SDK.
-Includes a verification pass with gemini-2.5-flash-lite to catch
+Includes a verification pass with gemini-3.5-flash to catch
 hallucinated test assertions (reasoning models hallucinate at >10%).
 """
 
@@ -10,6 +10,7 @@ import json
 import logging
 from agents.base_agent import BaseAgent
 from agents.model_router import get_api_key
+from agents.frontend_agent import safe_parse_response
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ class QAAgent(BaseAgent):
         super().__init__(role="qa", user_id=user_id)
 
     def _verify_with_flash_lite(self, review_json: str, source_context: str) -> dict:
-        """Run a hallucination verification pass with gemini-2.5-flash-lite."""
+        """Run a hallucination verification pass with gemini-3.5-flash."""
         try:
             prompt = f"""QA Review to verify:
 {review_json}
@@ -74,7 +75,7 @@ Source code context:
 Check for hallucinated issues or test assertions."""
 
             response = self._raw_call(
-                "google", "gemini-2.5-flash-lite",
+                "google", "gemini-3.5-flash",
                 VERIFIER_PROMPT, prompt
             )
 
@@ -91,11 +92,10 @@ Check for hallucinated issues or test assertions."""
             return {"verified": True, "removed_issues": [], "notes": "Verification skipped"}
 
     def verify_ui_layout_visually(self, screenshot_path: str, html_context: str) -> dict:
-        """Verify the UI layout visually using Gemini-2.5-flash-lite, with escalation to Gemini-3.1-pro-preview if confidence < 0.8."""
+        """Verify the UI layout visually using Gemini-3.5-flash, with escalation to Gemini-3.1-pro-preview if confidence < 0.8."""
         import base64
         import json
         import os
-        import google.generativeai as genai
         from agents.model_router import get_api_key
 
         if os.environ.get("JARVIS_CI") == "true":
@@ -131,12 +131,16 @@ Return ONLY the JSON string. No explanations, no markdown fences."""
 Source HTML context for structure:
 {html_context}"""
 
-            default_model = "gemini-2.5-flash-lite"
+            default_model = "gemini-3.5-flash"
             logger.info(f"Running default visual verifier on model: {default_model}")
             
-            genai.configure(api_key=get_api_key("google"))
-            client = genai.GenerativeModel(default_model, system_instruction=system_prompt)
-            response = client.generate_content([prompt_text, image_part])
+            from google import genai
+            client = genai.Client(api_key=get_api_key("google"))
+            response = client.models.generate_content(
+                model=default_model,
+                contents=[prompt_text, image_part],
+                config={"system_instruction": system_prompt}
+            )
             
             clean = response.text.strip()
             if clean.startswith("```"):
@@ -192,14 +196,9 @@ Return ONLY a JSON object as specified in your system prompt."""
             self.update_status("WORKING", "Generating review")
             response = self._call_model(SYSTEM_PROMPT, full_prompt)
 
-            import re
-            clean = response.strip()
-            # Robust extraction of content inside markdown code fences
-            match = re.match(r"^```(?:json)?\s*(.*?)\s*```$", clean, re.DOTALL)
-            if match:
-                clean = match.group(1).strip()
-            
-            result = json.loads(clean)
+            # Parse and repair response
+            result = safe_parse_response(response)
+            clean = json.dumps(result)
 
             # Verification pass to catch hallucinated assertions
             self.update_status("WORKING", "Verifying review")

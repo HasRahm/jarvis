@@ -9,6 +9,7 @@ import os
 import json
 import logging
 from agents.base_agent import BaseAgent
+from agents.frontend_agent import safe_parse_response
 
 logger = logging.getLogger(__name__)
 
@@ -65,15 +66,8 @@ Return ONLY a JSON object as specified in your system prompt."""
             self.update_status("WORKING", "Generating code")
             response = self._call_model(SYSTEM_PROMPT, full_prompt)
 
-            # Parse the response — strip any accidental markdown fencing
-            clean = response.strip()
-            if clean.startswith("```"):
-                clean = clean.split("\n", 1)[1]  # remove first line
-                if clean.endswith("```"):
-                    clean = clean[:-3]
-                clean = clean.strip()
-
-            result = json.loads(clean)
+            # Parse and repair response
+            result = safe_parse_response(response)
 
             # Write generated files to workspace
             files_written = []

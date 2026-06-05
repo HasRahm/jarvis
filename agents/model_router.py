@@ -13,13 +13,13 @@ from dotenv import load_dotenv
 _project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(_project_root, ".env"))
 
-# Default model assignments (May 2026)
+# Default model assignments (June 2026)
 _DEFAULTS = {
     "orchestrator": "gemma4:31b-cloud",
     "frontend":     "gemini-3.1-pro-preview",
     "backend":      "claude-sonnet-4-6",
     "qa":           "gpt-5.4",
-    "verifier":     "gemini-2.5-flash-lite",
+    "verifier":     "gemini-3.5-flash",
     "iac":          "claude-sonnet-4-6",
 }
 
@@ -37,10 +37,9 @@ _FALLBACKS = {
 _PROVIDERS = {
     "gemini-3.1-pro-preview":  "google",
     "gemini-2.5-pro":          "google",
-    "gemini-2.5-flash-lite":   "google",
-    "gemini-3.1-flash-lite":   "google",
+    "gemini-3.5-flash":        "google",
     "claude-sonnet-4-6":       "anthropic",
-    "claude-opus-4-7":         "anthropic",
+    "claude-opus-4-8":         "anthropic",
     "gpt-5.4":                 "openai",
     "gpt-5.5":                 "openai",
     "gemma4:31b-cloud":        "ollama",

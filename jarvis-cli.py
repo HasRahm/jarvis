@@ -227,11 +227,19 @@ def run_screen_dashboard(model: str = DEFAULT_MODEL):
 
 
 def main():
+    # If run with no arguments, or explicitly with --tui, launch the TUI Console
+    if len(sys.argv) == 1 or "--tui" in sys.argv:
+        from core.cli.app import JarvisTuiApp
+        app = JarvisTuiApp()
+        app.run()
+        sys.exit(0)
+
     parser = argparse.ArgumentParser(
         description="Jarvis CLI — Delegate tasks to local AI agent",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  python jarvis-cli.py                  # Launches interactive TUI Console
   python jarvis-cli.py --doctor
   python jarvis-cli.py --screen
   python jarvis-cli.py --mode research --task "Find 20 AI startups hiring"
@@ -240,6 +248,7 @@ Examples:
   python jarvis-cli.py --mode auto --task "Check disk space and clean temp files"
         """
     )
+    parser.add_argument("--tui", action="store_true", help="Launch interactive TUI Console")
     parser.add_argument("--doctor", action="store_true", help="Run health check")
     parser.add_argument("--screen", action="store_true", help="Dump visual screen block dashboard")
     parser.add_argument("--mode", "-m", choices=AVAILABLE_MODES, default="auto",
@@ -250,6 +259,12 @@ Examples:
 
     args = parser.parse_args()
 
+    if args.tui:
+        from core.cli.app import JarvisTuiApp
+        app = JarvisTuiApp()
+        app.run()
+        sys.exit(0)
+
     if args.doctor:
         success = doctor()
         sys.exit(0 if success else 1)
@@ -259,7 +274,7 @@ Examples:
         sys.exit(0)
 
     if not args.task:
-        parser.error("--task is required (unless using --doctor or --screen)")
+        parser.error("--task is required (unless using --tui, --doctor, or --screen)")
 
     run_jarvis(args.mode, args.task, args.model)
 

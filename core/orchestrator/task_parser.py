@@ -73,6 +73,7 @@ def parse_task(user_task: str) -> list[dict]:
 
     from agents.model_router import get_model, get_provider
     from agents.base_agent import BaseAgent
+    from core.system.skills import SkillsEngine
     
     # Create a dummy agent just to reuse the _raw_call logic
     class OrchestratorAgent(BaseAgent):
@@ -90,7 +91,28 @@ def parse_task(user_task: str) -> list[dict]:
 
     logger.info(f"Decomposing task with {agent.model} via {agent.provider}...")
 
-    raw = agent._call_model(DECOMPOSITION_PROMPT, user_task)
+    # Inject agent workflow skills into the orchestrator's prompt
+    engine = SkillsEngine()
+    skill_names = ["agent-designer", "agent-workflow-designer"]
+    prompt_addition = "\n\n--- DYNAMIC SKILLS & DOMAIN EXPERTISE ENABLED ---\n"
+    prompt_addition += "You have been matched with the following specialized skills/guidelines for this orchestration task. "
+    prompt_addition += "Follow these instructions meticulously to ensure success:\n\n"
+    
+    skills_injected = False
+    for skill in engine.skills:
+        if skill["name"] in skill_names:
+            prompt_addition += f"### SKILL: {skill['name']}\n"
+            prompt_addition += f"*Description: {skill['description']}*\n\n"
+            prompt_addition += f"{skill['content']}\n\n"
+            skills_injected = True
+            
+    if skills_injected:
+        prompt_addition += "------------------------------------------------\n\n"
+        final_prompt = DECOMPOSITION_PROMPT + prompt_addition
+    else:
+        final_prompt = DECOMPOSITION_PROMPT
+
+    raw = agent._call_model(final_prompt, user_task)
 
 
     import re

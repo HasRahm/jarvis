@@ -2,6 +2,7 @@ import os
 import re
 import logging
 from typing import List, Dict, Optional
+from core.system.plugin_loader import plugin_loader
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,16 @@ class SkillsEngine:
                     if skill_data:
                         self.skills.append(skill_data)
         
-        logger.info(f"SkillsEngine: Loaded {len(self.skills)} developer skills from {self.skills_dir}")
+        # Load custom registered skills from plugins
+        try:
+            for skill_path in plugin_loader.skills:
+                skill_data = self._parse_skill_file(skill_path)
+                if skill_data:
+                    self.skills.append(skill_data)
+        except Exception as pe:
+            logger.warning(f"Failed loading plugin skills: {pe}")
+        
+        logger.info(f"SkillsEngine: Loaded {len(self.skills)} developer skills.")
 
     def _parse_skill_file(self, file_path: str) -> Optional[Dict]:
         """Parse frontmatter and markdown content from a SKILL.md file."""

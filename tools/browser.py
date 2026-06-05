@@ -55,8 +55,19 @@ def _run_on_browser_thread(func, *args, **kwargs):
     result_container = {}
     _browser_queue.put((func, args, kwargs, event, result_container))
     
-    # Wait for the task to complete
-    event.wait()
+    # Wait for the task to complete with a safety timeout of 30 seconds (OpenClaw resilience pattern)
+    success = event.wait(timeout=30.0)
+    if not success:
+        logger.warning(f"[Browser Thread] Task {func.__name__} timed out after 30 seconds. Force-cleaning browser instance...")
+        try:
+            _shutdown_browser_impl()
+        except Exception as se:
+            logger.error(f"[Browser Thread] Error during forced shutdown: {se}")
+            
+        with _browser_thread_lock:
+            _browser_thread = None
+        raise TimeoutError(f"The browser operation '{func.__name__}' timed out after 30.0 seconds.")
+        
     if result_container.get("success"):
         return result_container["result"]
     else:
@@ -272,3 +283,19 @@ def browser_resolve_element_at_coords(x_ratio: float, y_ratio: float) -> dict:
     DOM element selector, tag, class name list, and text inside the page.
     """
     return _run_on_browser_thread(_browser_resolve_element_at_coords_impl, x_ratio, y_ratio)
+
+def _browser_get_url_impl() -> str:
+    global _page
+    if _page is not None:
+        try:
+            return _page.url
+        except Exception:
+            pass
+    return ""
+
+def browser_get_url() -> str:
+    try:
+        return _run_on_browser_thread(_browser_get_url_impl)
+    except Exception:
+        return ""
+
