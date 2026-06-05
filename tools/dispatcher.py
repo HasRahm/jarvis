@@ -6,7 +6,7 @@ from brain.query import brain_query
 from brain.write import brain_write
 from core.orchestrator.dag import run_dag
 from tools.visual_servo import visual_servo_click
-from tools.desktop_automation import desktop_smooth_click, desktop_type_text, desktop_press_keys, desktop_scroll, desktop_get_active_window, desktop_focus_window, desktop_batch_actions
+from tools.desktop_automation import desktop_smooth_click, desktop_type_text, desktop_press_keys, desktop_scroll, desktop_get_active_window, desktop_focus_window, desktop_batch_actions, desktop_screenshot
 from tools.windows import get_3d_window_graph
 from core.system.mcp_bridge import JarvisMCPBridge
 from tools.desktop_ui_tree import desktop_get_ui_tree, desktop_interact_with_element
@@ -492,6 +492,8 @@ def _dispatch_raw(fn_name: str, args: dict):
         return desktop_focus_window(args.get("title_query"))
     elif fn_name == "desktop_batch_actions":
         return desktop_batch_actions(args.get("actions"))
+    elif fn_name == "desktop_screenshot":
+        return desktop_screenshot()
     elif fn_name == "get_3d_window_graph":
         return json.dumps(get_3d_window_graph(), indent=2)
     elif fn_name == "desktop_get_ui_tree":

@@ -109,7 +109,10 @@ def desktop_focus_window(title_query: str) -> str:
             win.restore()
             time.sleep(0.5)
             
-        win.activate()
+        try:
+            win.activate()
+        except Exception as act_err:
+            logger.debug(f"win.activate() failed (normal for Windows foreground lock): {act_err}")
         time.sleep(0.5)
         
         # Win32 Foreground Lock Bypass: Click the title bar to guarantee active focus
@@ -200,4 +203,20 @@ def desktop_batch_actions(actions: list) -> str:
         return f"Successfully executed all {len(actions)} batched actions:\n{summary}"
     except Exception as e:
         logger.error(f"Failed during batch actions execution: {e}")
+        return f"ERROR: {e}"
+
+def desktop_screenshot() -> str:
+    """Takes a full physical screenshot of the current desktop and returns the file path."""
+    if not pyautogui: return "ERROR: pyautogui not installed"
+    try:
+        # Save screenshot inside workspace directory for visual check
+        screenshot_dir = os.path.join("/workspace", "workspaces", "desktop")
+        os.makedirs(screenshot_dir, exist_ok=True)
+        path = os.path.join(screenshot_dir, "desktop_screenshot.png")
+        
+        print(f"  [DESKTOP] Capturing physical screen to {path}...")
+        pyautogui.screenshot(path)
+        return f"[SUCCESS] Desktop screenshot captured and saved at: {path}"
+    except Exception as e:
+        logger.error(f"Failed to capture desktop screenshot: {e}")
         return f"ERROR: {e}"
