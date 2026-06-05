@@ -158,8 +158,11 @@ Source HTML context for structure:
             if confidence < 0.8:
                 escalation_model = "gemini-3.1-pro-preview"
                 logger.info(f"Low confidence ({confidence} < 0.8). Escalating visual audit to: {escalation_model}")
-                client_escalate = genai.GenerativeModel(escalation_model, system_instruction=system_prompt)
-                resp_escalate = client_escalate.generate_content([prompt_text, image_part])
+                resp_escalate = client.models.generate_content(
+                    model=escalation_model,
+                    contents=[prompt_text, image_part],
+                    config={"system_instruction": system_prompt}
+                )
                 
                 clean_esc = resp_escalate.text.strip()
                 if clean_esc.startswith("```"):
