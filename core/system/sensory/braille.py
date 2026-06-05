@@ -5,6 +5,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 HAS_WIN32 = False
+win32gui = None
+win32process = None
 try:
     if os.name == "nt":
         import win32gui

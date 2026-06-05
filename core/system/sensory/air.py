@@ -6,6 +6,9 @@ logger = logging.getLogger(__name__)
 
 HAS_WIN32API = False
 HAS_WIN32GUI = False
+win32api = None
+win32gui = None
+win32process = None
 try:
     if os.name == "nt":
         import win32api
