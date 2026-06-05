@@ -117,7 +117,7 @@ async def get_jervis_voice_response(user_text: str) -> str:
         if openai_key:
             try:
                 from openai import AsyncOpenAI
-                fallback_model = os.environ.get("JARVIS_OPENAI_MODEL", "gpt-4o")
+                fallback_model = os.environ.get("JARVIS_OPENAI_MODEL", "gpt-4o-mini")
                 client = AsyncOpenAI(api_key=openai_key, timeout=15.0)
                 response = await client.chat.completions.create(
                     model=fallback_model,

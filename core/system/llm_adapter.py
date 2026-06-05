@@ -236,7 +236,7 @@ def call_llm(messages, model="gemma4:31b-cloud", tools=None):
         print(Fore.CYAN + "[LLM Adapter] Falling back to OpenAI API..." + Style.RESET_ALL)
         sys.stdout.flush()
         
-        fallback_model = os.environ.get("JARVIS_OPENAI_MODEL", "gpt-4o")
+        fallback_model = os.environ.get("JARVIS_OPENAI_MODEL", "gpt-4o-mini")
         client = OpenAI(api_key=openai_key)
         
         try:

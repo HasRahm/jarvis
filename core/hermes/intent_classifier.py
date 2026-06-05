@@ -54,7 +54,7 @@ def classify_correction_intent(text: str, visual_history: list) -> dict | None:
         if openai_key:
             try:
                 from openai import OpenAI
-                fallback_model = os.environ.get("JARVIS_OPENAI_MODEL", "gpt-4o")
+                fallback_model = os.environ.get("JARVIS_OPENAI_MODEL", "gpt-4o-mini")
                 client = OpenAI(api_key=openai_key)
                 response = client.chat.completions.create(
                     model=fallback_model,
