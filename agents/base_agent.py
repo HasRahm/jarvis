@@ -269,14 +269,13 @@ class BaseAgent(ABC):
                 return response_text
 
             if provider == "google":
-                import google.generativeai as genai
-                api_key = get_api_key("google")
-                genai.configure(api_key=api_key)
-                client = genai.GenerativeModel(
-                    model,
-                    system_instruction=system_prompt
+                from google import genai
+                client = genai.Client(api_key=get_api_key("google"))
+                response = client.models.generate_content(
+                    model=model,
+                    contents=user_prompt,
+                    config={"system_instruction": system_prompt}
                 )
-                response = client.generate_content(user_prompt)
                 response_text = response.text
                 
                 try:
