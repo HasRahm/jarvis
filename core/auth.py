@@ -10,6 +10,7 @@ as a Supabase access token rather than the raw HERMES_SECRET string.
 """
 
 import os
+import secrets
 import logging
 
 logger = logging.getLogger(__name__)
@@ -69,8 +70,14 @@ def authenticate(token: str) -> tuple[bool, str | None]:
         return True, str(user_id)
 
     # ── Self-hosted mode: shared secret ─────────────────────────────────────
-    hermes_secret = os.getenv("HERMES_SECRET", "default_secret")
-    if token == hermes_secret:
+    # Fail closed: an unconfigured server must NOT accept any token. Previously
+    # this defaulted to the constant "default_secret", which let anyone who knew
+    # that string authenticate against an unconfigured, internet-exposed agent.
+    hermes_secret = os.getenv("HERMES_SECRET", "")
+    if not hermes_secret:
+        logger.error("[auth] HERMES_SECRET is not set; rejecting all tokens (fail closed).")
+        return False, None
+    if token and secrets.compare_digest(token, hermes_secret):
         return True, None   # single-user; no user_id scoping
     return False, None
 

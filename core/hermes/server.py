@@ -26,6 +26,21 @@ load_dotenv(os.path.join(project_root, ".env"))
 
 app = FastAPI(title="Jarvis Hermes Bridge")
 
+def print_qr_code(tunnel_url: str):
+    """Print QR code for instant phone pairing."""
+    try:
+        import qrcode
+        qr = qrcode.QRCode(border=1)
+        qr.add_data(tunnel_url)
+        qr.make(fit=True)
+        
+        print("\n⚡ JARVIS — scan to connect from phone\n")
+        qr.print_ascii(invert=True)
+        print(f"\n  URL: {tunnel_url}\n")
+    except ImportError:
+        logger.warning("[Server] qrcode package not installed, skipping terminal QR.")
+        print(f"\n⚡ JARVIS Connection URL: {tunnel_url}\n")
+
 # Initialize and run the GoalScheduler background daemon
 goal_scheduler = None
 
@@ -40,6 +55,25 @@ async def startup_event():
     except Exception as e:
         logger.error(f"[Server] Failed to start GoalScheduler: {e}")
 
+    # Generate QR Code on startup
+    tunnel_url = os.getenv("CLOUDFLARE_TUNNEL_URL")
+    if not tunnel_url:
+        import httpx
+        try:
+            # Fallback to gist discovery
+            resp = httpx.get("https://gist.githubusercontent.com/HasRahm/e99532bb52fd6b67e77f759d9921d5d8/raw/jarvis-url.json", timeout=3)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("status") == "online":
+                    tunnel_url = data.get("url")
+        except Exception as e:
+            logger.debug(f"[Server] Gist discovery failed: {e}")
+            
+    if tunnel_url:
+        # Convert http(s) to ws(s) if we are connecting from a phone websocket client
+        ws_url = tunnel_url.replace("http", "ws") + "/ws"
+        print_qr_code(ws_url)
+
 @app.on_event("shutdown")
 async def shutdown_event():
     global goal_scheduler
@@ -50,7 +84,8 @@ async def shutdown_event():
         except Exception as e:
             logger.error(f"[Server] Error stopping GoalScheduler: {e}")
 
-HERMES_SECRET = os.getenv("HERMES_SECRET", "default_secret")
+# Auth is enforced via core.auth.authenticate() (call-time, fail-closed) in both
+# _require_token (HTTP) and the /ws handler — no module-level secret constant.
 
 # CORS — restrict origins in production via JARVIS_CORS_ORIGINS env var
 _raw_origins = os.getenv("JARVIS_CORS_ORIGINS", "*")
@@ -70,11 +105,17 @@ app.include_router(slack_router, prefix="/api/channels/slack", tags=["slack"])
 
 
 async def _require_token(authorization: str = Header(default="")) -> None:
-    """FastAPI dependency: enforces Bearer token auth on protected HTTP endpoints."""
+    """FastAPI dependency: enforces Bearer token auth on protected HTTP endpoints.
+
+    Routes through core.auth.authenticate so HTTP and the WebSocket handler share
+    one fail-closed, call-time validator (reads HERMES_SECRET fresh each request).
+    """
     token = authorization.removeprefix("Bearer ").strip()
     if not token:
         raise HTTPException(status_code=401, detail="Authorization header required")
-    if token != HERMES_SECRET:
+    from core.auth import authenticate
+    ok, _ = authenticate(token)
+    if not ok:
         raise HTTPException(status_code=403, detail="Forbidden")
 
 

@@ -416,9 +416,11 @@
       if (!res.ok) return null;
       const data = await res.json();
       if (data.status === 'online' && data.url) {
-        // Convert https://tunnel → wss://tunnel/ws for WebSocket use
+        // Convert https://tunnel → wss://tunnel/ws for WebSocket use.
+        // The gist carries ONLY the URL — the auth token is delivered out-of-band
+        // (QR fragment on first pair, or stored/manual entry). Never a hardcoded constant.
         const wsUrl = data.url.replace(/^http/, 'ws') + '/ws';
-        return { url: wsUrl, token: data.token || 'jarvis_hermes_2026' };
+        return { url: wsUrl };
       }
     } catch (_) {}
     return null;
@@ -429,29 +431,67 @@
     initSpeech();
     initVisualizer();
 
-    // 1. Try Gist auto-discovery — works on any new device with no setup
-    const config = await discoverConfig();
-    if (config && config.url && config.token) {
-      localStorage.setItem('jarvis_ws_url', config.url);
-      localStorage.setItem('jarvis_token',  config.token);
-      wsUrlInput.value   = config.url;
-      wsTokenInput.value = config.token;
-      connectWs(config.url, config.token);
-      return;
+    // Request notification permissions for task completion alerts
+    if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+      Notification.requestPermission();
     }
 
-    // 2. Fall back to stored credentials
+    // 1. QR pairing — the terminal QR encodes #u=<wsUrl>&t=<token> in the URL
+    //    fragment. Fragments are never sent to a server, so the token arrives
+    //    out-of-band. This is the one-scan pairing path for a fresh device.
+    const pair = parsePairFragment();
+    if (pair && pair.token) {
+      const pairUrl = pair.url || localStorage.getItem('jarvis_ws_url') || '';
+      if (pairUrl) {
+        localStorage.setItem('jarvis_ws_url', pairUrl);
+        localStorage.setItem('jarvis_token',  pair.token);
+        wsUrlInput.value   = pairUrl;
+        wsTokenInput.value = pair.token;
+        // Strip the secret from the address bar so it isn't left in history.
+        history.replaceState(null, '', location.pathname + location.search);
+        connectWs(pairUrl, pair.token);
+        return;
+      }
+    }
+
+    // 2. Gist discovery supplies the rotating URL only. Connect only if we
+    //    already hold a token (from a prior QR pair / manual entry).
+    const config = await discoverConfig();
+    const storedToken = localStorage.getItem('jarvis_token');
+    if (config && config.url) {
+      localStorage.setItem('jarvis_ws_url', config.url);
+      wsUrlInput.value = config.url;
+      if (storedToken) {
+        wsTokenInput.value = storedToken;
+        connectWs(config.url, storedToken);
+        return;
+      }
+    }
+
+    // 3. Fall back to stored credentials
     const savedUrl   = localStorage.getItem('jarvis_ws_url');
     const savedToken = localStorage.getItem('jarvis_token');
-    if (savedUrl) {
+    if (savedUrl && savedToken) {
       wsUrlInput.value  = savedUrl;
-      if (savedToken) wsTokenInput.value = savedToken;
-      connectWs(savedUrl, savedToken || '');
+      wsTokenInput.value = savedToken;
+      connectWs(savedUrl, savedToken);
     } else {
+      if (savedUrl) wsUrlInput.value = savedUrl;
       toggleSettings();
-      appendMsg('jarvis', 'Configuration required — enter your Hermes endpoint and token.');
+      appendMsg('jarvis', 'Pairing required — scan the QR shown in your Jarvis terminal, or enter the endpoint and token manually.');
     }
   };
+
+  /* Parse #u=<wsUrl>&t=<token> from the URL fragment (out-of-band pairing). */
+  function parsePairFragment() {
+    const hash = location.hash.startsWith('#') ? location.hash.slice(1) : location.hash;
+    if (!hash) return null;
+    const params = new URLSearchParams(hash);  // values are already percent-decoded
+    const url = params.get('u');
+    const token = params.get('t');
+    if (!url && !token) return null;
+    return { url: url || null, token: token || null };
+  }
 
   /* ── UI toggles ────────────────────────────────────── */
   function toggleSettings() {
@@ -540,79 +580,112 @@
   }
 
   /* ── WebSocket ─────────────────────────────────────── */
-  function connectWs(url, token) {
-    if (ws) ws.close();
-    if (url.startsWith('http')) url = url.replace('http', 'ws');
-    if (!url.startsWith('ws'))  url = 'ws://' + url;
-    url = url.replace(/[?&]token=[^&]*/g, '').replace(/[?&]$/, '');
-    const _token = token || localStorage.getItem('jarvis_token') || '';
-    setStatus('connecting', 'Connecting');
-
-    try {
-      ws = new WebSocket(url);
-      ws.binaryType = 'arraybuffer';
-
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'auth', token: _token }));
-      };
-
-      ws.onmessage = async (e) => {
-        if (e.data instanceof ArrayBuffer) { await playAudioChunk(e.data); return; }
-        try {
-          const data = JSON.parse(e.data);
-
-          if (data.type === 'screenshot') {
-            document.getElementById('viewport-image').src = data.url;
-            document.getElementById('preview-panel').style.display = 'block';
-            return;
-          }
-          if (data.type === 'telemetry') {
-            document.getElementById('telemetry-tokens').textContent = data.tokens;
-            document.getElementById('telemetry-cost').textContent = Number(data.cost).toFixed(4);
-            return;
-          }
-          if (data.type === 'auth_ok') {
-            setStatus('online', 'Online');
-            appendMsg('jarvis', 'Secure link established over Hermes WebSocket.');
-            return;
-          }
-          if (data.type === 'auth_error') {
-            setStatus('offline', 'Auth failed');
-            appendMsg('jarvis', 'Authentication failed — check your token in settings.');
-            return;
-          }
-          if (data.type === 'auto_heal_detected') {
-            showHealToast(data.intent, data.element); return;
-          }
-          if (data.interrupt || data.type === 'interrupt' || data.type === 'audio_interrupt') {
-            interruptAudio();
-          }
-          if (data.type === 'text_start') {
-            currentWordMsgEl = createMsgEl('jarvis'); chat.appendChild(currentWordMsgEl);
-            chat.scrollTop = chat.scrollHeight;
-          } else if (data.type === 'text') {
-            if (currentWordMsgEl) { currentWordMsgEl.textContent += data.content; chat.scrollTop = chat.scrollHeight; }
-          } else if (data.type === 'done') {
-            currentWordMsgEl = null;
-          } else if (data.content || data.text) {
-            appendMsg('jarvis', data.content || data.text);
-          }
-        } catch(e) { appendMsg('jarvis', e.data); }
-      };
-
-      ws.onclose = () => {
-        setStatus('offline', 'Offline');
-        setTimeout(() => {
-          const s = localStorage.getItem('jarvis_ws_url');
-          const t = localStorage.getItem('jarvis_token');
-          if (s) connectWs(s, t || '');
-        }, 5000);
-      };
-      ws.onerror = (e) => { console.error('WS error:', e); };
-    } catch(e) {
-      appendMsg('jarvis', 'Connection error: ' + e.message);
-      setStatus('offline', 'Error');
+  class HermesConnection {
+    constructor(url, token) {
+      this.url = url;
+      this.token = token;
+      this.ws = null;
+      this.reconnectDelay = 1000;
+      this.connect();
     }
+
+    connect() {
+      if (this.ws) this.ws.close();
+      let wsUrl = this.url;
+      if (wsUrl.startsWith('http')) wsUrl = wsUrl.replace('http', 'ws');
+      if (!wsUrl.startsWith('ws'))  wsUrl = 'ws://' + wsUrl;
+      wsUrl = wsUrl.replace(/[?&]token=[^&]*/g, '').replace(/[?&]$/, '');
+      const _token = this.token || localStorage.getItem('jarvis_token') || '';
+      setStatus('connecting', 'Connecting');
+
+      try {
+        this.ws = new WebSocket(wsUrl);
+        this.ws.binaryType = 'arraybuffer';
+        window.ws = this.ws; // Expose globally for older code
+
+        this.ws.onopen = () => {
+          this.reconnectDelay = 1000;
+          this.ws.send(JSON.stringify({ type: 'auth', token: _token }));
+        };
+
+        this.ws.onmessage = async (e) => {
+          if (e.data instanceof ArrayBuffer) { await playAudioChunk(e.data); return; }
+          try {
+            const data = JSON.parse(e.data);
+
+            if (data.type === 'task_status' && data.status === 'COMPLETED') {
+              if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification("⚡ Jarvis", {
+                  body: "Task completed successfully.",
+                  icon: "/jarvis-icon.png"
+                });
+              }
+            }
+
+            if (data.type === 'screenshot') {
+              document.getElementById('viewport-image').src = data.url;
+              document.getElementById('preview-panel').style.display = 'block';
+              return;
+            }
+            if (data.type === 'telemetry') {
+              document.getElementById('telemetry-tokens').textContent = data.tokens;
+              document.getElementById('telemetry-cost').textContent = Number(data.cost).toFixed(4);
+              return;
+            }
+            if (data.type === 'auth_ok') {
+              setStatus('online', 'Online');
+              appendMsg('jarvis', 'Secure link established over Hermes WebSocket.');
+              return;
+            }
+            if (data.type === 'auth_error') {
+              setStatus('offline', 'Auth failed');
+              appendMsg('jarvis', 'Authentication failed — check your token in settings.');
+              return;
+            }
+            if (data.type === 'auto_heal_detected') {
+              showHealToast(data.intent, data.element); return;
+            }
+            if (data.interrupt || data.type === 'interrupt' || data.type === 'audio_interrupt') {
+              interruptAudio();
+            }
+            if (data.type === 'text_start') {
+              currentWordMsgEl = createMsgEl('jarvis'); chat.appendChild(currentWordMsgEl);
+              chat.scrollTop = chat.scrollHeight;
+            } else if (data.type === 'text') {
+              if (currentWordMsgEl) { currentWordMsgEl.textContent += data.content; chat.scrollTop = chat.scrollHeight; }
+            } else if (data.type === 'done') {
+              currentWordMsgEl = null;
+            } else if (data.content || data.text) {
+              appendMsg('jarvis', data.content || data.text);
+            }
+          } catch(err) { appendMsg('jarvis', e.data); }
+        };
+
+        this.ws.onclose = () => {
+          setStatus('offline', 'Reconnecting');
+          setTimeout(() => {
+            const s = localStorage.getItem('jarvis_ws_url');
+            const t = localStorage.getItem('jarvis_token');
+            if (s) {
+              this.url = s;
+              this.token = t;
+              this.connect();
+            }
+          }, this.reconnectDelay);
+          this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);
+        };
+        this.ws.onerror = (e) => { console.error('WS error:', e); };
+      } catch(e) {
+        appendMsg('jarvis', 'Connection error: ' + e.message);
+        setStatus('offline', 'Error');
+      }
+    }
+  }
+
+  let hermesConn = null;
+  function connectWs(url, token) {
+    if (hermesConn) hermesConn.ws.close();
+    hermesConn = new HermesConnection(url, token);
   }
 
   /* ── Chat helpers ──────────────────────────────────── */
