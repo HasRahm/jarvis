@@ -1,0 +1,1890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#000000">
+<title>JARVIS OS — COCKPIT</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════════════
+   F1 DESIGN SYSTEM — PitStop / Jarvis OS
+   Inspired by: "PitStop" by Batsal Nath Shrestha
+   Adapted for: Jarvis AI OS Desktop Interface
+   Colors: OLED black + F1 Red + Gold + Neon Green
+════════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* PitStop color system */
+  --bg:           #000000;
+  --surface:      #0A0A0A;
+  --surface-2:    #141414;
+  --surface-3:    #1C1C1C;
+  --border:       rgba(255,255,255,0.07);
+  --border-red:   rgba(225,6,0,0.35);
+  --border-gold:  rgba(255,215,0,0.25);
+
+  /* Brand accents */
+  --red:          #E10600;   /* F1 Red — primary CTA, DRS, danger */
+  --red-dim:      rgba(225,6,0,0.15);
+  --red-glow:     rgba(225,6,0,0.35);
+  --gold:         #FFD700;   /* Gold — warnings, sector times, awards */
+  --gold-dim:     rgba(255,215,0,0.12);
+  --green:        #00C853;   /* Neon green — online, success, green flag */
+  --green-dim:    rgba(0,200,83,0.12);
+  --cyan:         #00F5FF;   /* Cyan — info, links, telemetry highlights */
+  --cyan-dim:     rgba(0,245,255,0.08);
+  --purple:       #7B00FF;   /* AI / memory indicators */
+
+  /* Text */
+  --text:         #FFFFFF;
+  --text-2:       #B0B0B0;
+  --muted:        #555555;
+  --whisper:      #333333;
+
+  /* Fonts */
+  --f-head:       'Rajdhani', sans-serif;
+  --f-mono:       'JetBrains Mono', monospace;
+  --f-body:       'Inter', sans-serif;
+
+  /* Layout */
+  --nav-w:        56px;
+  --panel-w:      220px;
+  --header-h:     52px;
+}
+
+html, body {
+  height: 100%; overflow: hidden;
+  background: var(--bg); color: var(--text);
+  font-family: var(--f-body);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Carbon fibre texture on body ── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image:
+    repeating-linear-gradient(45deg,  rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 8px),
+    repeating-linear-gradient(-45deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 1px, transparent 1px, transparent 8px);
+}
+
+/* ════════════════════════════════════════════
+   APP SHELL
+════════════════════════════════════════════ */
+#app {
+  position: relative; z-index: 1;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: var(--header-h) 1fr;
+  grid-template-columns: var(--nav-w) 1fr var(--panel-w);
+  grid-template-areas:
+    "header header header"
+    "nav    main   panel";
+}
+
+/* ════════════════════════════════════════════
+   HEADER — F1 START/FINISH LINE
+════════════════════════════════════════════ */
+#header {
+  grid-area: header;
+  display: flex; align-items: center;
+  padding: 0 16px; gap: 16px;
+  background: #000;
+  border-bottom: 2px solid var(--red);
+  position: relative; z-index: 20;
+}
+
+/* Red stripe left edge */
+#header::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 4px; background: var(--red);
+}
+
+.header-logo {
+  font-family: var(--f-head);
+  font-size: 18px; font-weight: 700;
+  letter-spacing: 4px;
+  color: var(--text);
+  text-transform: uppercase;
+  flex-shrink: 0;
+  padding-left: 10px;
+}
+.header-logo span { color: var(--red); }
+
+.header-sep { width: 1px; height: 28px; background: var(--border); flex-shrink: 0; }
+
+/* Lap timer */
+#lap-timer {
+  font-family: var(--f-mono);
+  font-size: 15px; font-weight: 700;
+  color: var(--gold);
+  letter-spacing: 2px;
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+/* DRS indicator */
+#drs-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 4px;
+  border: 1px solid var(--border-red);
+  background: var(--red-dim);
+  cursor: pointer; transition: all .2s;
+  font-family: var(--f-head); font-size: 12px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--text-2); user-select: none;
+  flex-shrink: 0;
+}
+#drs-btn .drs-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--red); box-shadow: 0 0 6px var(--red);
+}
+#drs-btn.drs-active {
+  background: var(--red); color: #fff; border-color: var(--red);
+  box-shadow: 0 0 20px var(--red-glow), 0 0 40px rgba(225,6,0,0.15);
+}
+#drs-btn.drs-active .drs-dot { background: #fff; box-shadow: none; }
+
+/* Session status chip */
+#session-status {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 12px; border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-family: var(--f-mono); font-size: 10px; font-weight: 500;
+  letter-spacing: 1px; text-transform: uppercase;
+  flex-shrink: 0;
+  transition: all .3s;
+}
+#session-status .s-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--muted); transition: all .3s;
+}
+#session-status.online  { border-color: rgba(0,200,83,.3); }
+#session-status.online .s-dot  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+#session-status.online .s-label { color: var(--green); }
+#session-status.offline .s-dot { background: var(--muted); }
+#session-status.connecting .s-dot {
+  background: var(--gold); box-shadow: 0 0 6px var(--gold);
+  animation: blink 1s infinite;
+}
+.s-label { color: var(--text-2); transition: color .3s; }
+
+/* System stats row */
+.header-stats {
+  display: flex; align-items: center; gap: 16px;
+  flex: 1; justify-content: flex-end;
+}
+.stat-item {
+  display: flex; align-items: center; gap: 5px;
+  font-family: var(--f-mono); font-size: 10px; font-weight: 500;
+  color: var(--text-2); letter-spacing: .5px;
+}
+.stat-label { color: var(--muted); font-size: 9px; text-transform: uppercase; }
+.stat-val { color: var(--text); font-weight: 700; }
+.stat-bar {
+  width: 40px; height: 4px; background: var(--surface-3);
+  border-radius: 2px; overflow: hidden;
+}
+.stat-bar-fill { height: 100%; border-radius: 2px; transition: width .8s; }
+.stat-bar-fill.cpu  { background: var(--red); }
+.stat-bar-fill.mem  { background: var(--gold); }
+.stat-bar-fill.net  { background: var(--green); }
+
+/* Settings gear */
+#settings-btn {
+  width: 32px; height: 32px; border-radius: 6px; flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 14px; transition: all .2s;
+  color: var(--text-2);
+}
+#settings-btn:hover { border-color: var(--border-red); color: var(--red); }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+/* ════════════════════════════════════════════
+   LEFT NAV — F1 TEAM ICONS
+════════════════════════════════════════════ */
+#nav {
+  grid-area: nav;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 12px 0; gap: 4px;
+  background: #000;
+  border-right: 1px solid var(--border);
+  position: relative; z-index: 10;
+}
+
+/* Red stripe accent */
+#nav::after {
+  content: '';
+  position: absolute; right: 0; top: 0; bottom: 0;
+  width: 1px; background: linear-gradient(to bottom, transparent, var(--red) 30%, var(--red) 70%, transparent);
+}
+
+.nav-item {
+  position: relative;
+  width: 40px; height: 40px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all .2s;
+  color: var(--muted); font-size: 16px;
+  border: 1px solid transparent;
+}
+.nav-item:hover { color: var(--text-2); background: var(--surface); border-color: var(--border); }
+.nav-item.active {
+  color: var(--red); background: var(--red-dim);
+  border-color: var(--border-red);
+  box-shadow: 0 0 12px var(--red-glow);
+}
+
+/* Tooltip */
+.nav-item::after {
+  content: attr(data-label);
+  position: absolute; left: calc(100% + 8px); top: 50%;
+  transform: translateY(-50%);
+  background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--f-head); font-size: 11px;
+  letter-spacing: 1px; text-transform: uppercase;
+  padding: 4px 8px; border-radius: 4px; white-space: nowrap;
+  pointer-events: none; opacity: 0; transition: opacity .15s;
+  z-index: 100;
+}
+.nav-item:hover::after { opacity: 1; }
+
+.nav-spacer { flex: 1; }
+
+/* ════════════════════════════════════════════
+   MAIN CONTENT AREA
+════════════════════════════════════════════ */
+#main {
+  grid-area: main;
+  display: flex; flex-direction: column;
+  overflow: hidden; position: relative;
+}
+
+/* View panels */
+.view { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+.view.active { display: flex; }
+
+/* ── View header bar ── */
+.view-header {
+  display: flex; align-items: center;
+  padding: 0 20px; height: 44px; flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(12px);
+  gap: 12px;
+}
+.view-title {
+  font-family: var(--f-head); font-size: 13px; font-weight: 700;
+  letter-spacing: 3px; text-transform: uppercase; color: var(--text-2);
+}
+.view-title span { color: var(--red); }
+.view-badge {
+  padding: 2px 8px; border-radius: 3px;
+  background: var(--red-dim); border: 1px solid var(--border-red);
+  font-family: var(--f-mono); font-size: 10px; color: var(--red);
+  font-weight: 700;
+}
+.view-actions { margin-left: auto; display: flex; gap: 8px; }
+.vbtn {
+  padding: 4px 12px; border-radius: 4px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text-2); font-family: var(--f-head); font-size: 11px;
+  font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+  cursor: pointer; transition: all .2s;
+}
+.vbtn:hover { border-color: var(--border-red); color: var(--text); }
+.vbtn.primary { background: var(--red); border-color: var(--red); color: #fff; }
+.vbtn.primary:hover { box-shadow: 0 0 16px var(--red-glow); }
+
+/* ════════════════════════════════════════════
+   CHAT VIEW — TEAM RADIO
+════════════════════════════════════════════ */
+#view-chat { background: var(--bg); }
+
+#chat-log {
+  flex: 1; overflow-y: auto;
+  padding: 16px 20px; display: flex;
+  flex-direction: column; gap: 12px;
+  scroll-behavior: smooth;
+}
+#chat-log::-webkit-scrollbar { width: 4px; }
+#chat-log::-webkit-scrollbar-track { background: transparent; }
+#chat-log::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 2px; }
+
+/* Message wrapper */
+.msg-wrap { display: flex; flex-direction: column; gap: 3px; animation: fadeUp .2s ease; }
+
+.msg-meta {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--f-mono); font-size: 9px;
+  letter-spacing: 1px; text-transform: uppercase;
+}
+.msg-sender { font-weight: 700; }
+.msg-sender.jarvis { color: var(--red); }
+.msg-sender.user   { color: var(--gold); }
+.msg-time { color: var(--muted); }
+.msg-wrap.user-wrap { align-items: flex-end; }
+
+.msg-bubble {
+  max-width: 72%; padding: 10px 14px;
+  border-radius: 6px; font-size: 13.5px; line-height: 1.6;
+  word-break: break-word;
+}
+.msg-bubble.jarvis {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--red);
+  border-radius: 2px 6px 6px 2px;
+  color: var(--text);
+}
+.msg-bubble.user {
+  background: var(--gold-dim);
+  border: 1px solid var(--border-gold);
+  border-right: 2px solid var(--gold);
+  border-radius: 6px 2px 2px 6px;
+  color: var(--text);
+}
+
+/* Tool call display */
+.tool-call {
+  padding: 8px 12px; margin: 4px 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--cyan);
+  border-radius: 2px 4px 4px 2px;
+  font-family: var(--f-mono); font-size: 11px;
+  color: var(--cyan); max-width: 80%;
+  animation: fadeUp .2s ease;
+}
+.tool-call .tc-name { font-weight: 700; letter-spacing: 1px; }
+.tool-call .tc-args { color: var(--text-2); margin-top: 2px; opacity: .7; }
+.tool-result {
+  border-left-color: var(--green); color: var(--green-dim);
+  background: rgba(0,200,83,0.04);
+}
+.tool-result .tc-preview { color: var(--text-2); }
+
+/* Typing indicator */
+.typing-wrap { display: flex; align-items: center; gap: 8px; padding: 8px 20px; }
+.typing-dots span {
+  display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--red); margin: 0 2px;
+  animation: tdot 1.2s ease-in-out infinite;
+}
+.typing-dots span:nth-child(2) { animation-delay:.2s; }
+.typing-dots span:nth-child(3) { animation-delay:.4s; }
+@keyframes tdot { 0%,80%,100%{transform:scale(.7);opacity:.4} 40%{transform:scale(1.1);opacity:1} }
+
+/* Chat input bar */
+#chat-input-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  background: rgba(0,0,0,0.8);
+  backdrop-filter: blur(20px);
+  flex-shrink: 0;
+}
+
+#chat-input {
+  flex: 1; padding: 10px 14px; border-radius: 4px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); font-size: 13.5px; font-family: var(--f-body);
+  outline: none; transition: border-color .2s;
+}
+#chat-input:focus { border-color: var(--border-red); }
+#chat-input::placeholder { color: var(--muted); font-style: italic; }
+
+.input-btn {
+  width: 40px; height: 40px; border-radius: 6px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 14px; transition: all .2s; border: none;
+}
+#ptt-btn {
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text-2);
+}
+#ptt-btn:hover { border-color: var(--border-red); color: var(--red); }
+#ptt-btn.listening {
+  background: var(--red); color: #fff; border-color: var(--red);
+  animation: pulse .9s ease-in-out infinite;
+}
+#send-btn {
+  background: var(--red); color: #fff;
+  box-shadow: 0 0 12px var(--red-glow);
+}
+#send-btn:hover { box-shadow: 0 0 20px var(--red-glow); }
+
+@keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+@keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+/* ════════════════════════════════════════════
+   TASKS VIEW — DRIVER STANDINGS
+════════════════════════════════════════════ */
+#view-tasks { background: var(--bg); }
+
+.standings-header {
+  display: grid;
+  grid-template-columns: 36px 16px 1fr 120px 80px 64px;
+  padding: 6px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-family: var(--f-mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted);
+  flex-shrink: 0;
+}
+
+#tasks-list {
+  flex: 1; overflow-y: auto; padding: 0;
+}
+#tasks-list::-webkit-scrollbar { width: 4px; }
+#tasks-list::-webkit-scrollbar-thumb { background: var(--surface-3); }
+
+.task-row {
+  display: grid;
+  grid-template-columns: 36px 16px 1fr 120px 80px 64px;
+  align-items: center;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  transition: background .15s; cursor: pointer;
+}
+.task-row:hover { background: var(--surface); }
+
+.task-pos {
+  font-family: var(--f-mono); font-size: 13px; font-weight: 700;
+  color: var(--muted);
+}
+.task-pos.p1 { color: var(--gold); }
+.task-pos.p2 { color: var(--text-2); }
+.task-pos.p3 { color: #CD7F32; }
+
+.task-indicator {
+  width: 3px; height: 32px; border-radius: 2px; margin: 0 auto;
+}
+.ind-running { background: var(--green); box-shadow: 0 0 6px var(--green); animation: blink 1s infinite; }
+.ind-done    { background: var(--green); opacity: .4; }
+.ind-pending { background: var(--gold); }
+.ind-failed  { background: var(--red); }
+
+.task-info {}
+.task-name {
+  font-family: var(--f-head); font-size: 13px; font-weight: 600;
+  color: var(--text); letter-spacing: .5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.task-sub {
+  font-family: var(--f-mono); font-size: 10px; color: var(--muted);
+  margin-top: 2px;
+}
+
+.task-model {
+  font-family: var(--f-mono); font-size: 10px; color: var(--text-2);
+  display: flex; align-items: center; gap: 4px;
+}
+.tire {
+  display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid currentColor; font-size: 7px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.task-time {
+  font-family: var(--f-mono); font-size: 12px; font-weight: 700;
+  color: var(--text-2); text-align: right;
+}
+.task-time.fast { color: var(--gold); }
+
+.task-status {
+  display: flex; justify-content: flex-end;
+}
+.status-chip {
+  padding: 2px 8px; border-radius: 3px;
+  font-family: var(--f-mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+}
+.chip-running { background: var(--green-dim); color: var(--green); border: 1px solid rgba(0,200,83,.3); }
+.chip-done    { background: rgba(255,255,255,.05); color: var(--muted); border: 1px solid var(--border); }
+.chip-pending { background: var(--gold-dim); color: var(--gold); border: 1px solid var(--border-gold); }
+.chip-failed  { background: var(--red-dim); color: var(--red); border: 1px solid var(--border-red); }
+
+/* ════════════════════════════════════════════
+   BRAIN VIEW — STRATEGY BOARD
+════════════════════════════════════════════ */
+#view-brain { background: var(--bg); }
+
+.brain-grid {
+  flex: 1; overflow-y: auto;
+  padding: 16px 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px; align-content: start;
+}
+.brain-grid::-webkit-scrollbar { width: 4px; }
+.brain-grid::-webkit-scrollbar-thumb { background: var(--surface-3); }
+
+.memory-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; padding: 14px;
+  transition: border-color .2s; cursor: default;
+  position: relative; overflow: hidden;
+}
+.memory-card::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px; background: var(--purple);
+}
+.memory-card:hover { border-color: rgba(123,0,255,.3); }
+
+.mc-type {
+  font-family: var(--f-mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase; color: var(--purple);
+  margin-bottom: 6px;
+}
+.mc-content {
+  font-size: 12.5px; line-height: 1.6; color: var(--text-2);
+}
+.mc-time {
+  font-family: var(--f-mono); font-size: 9px; color: var(--muted);
+  margin-top: 8px;
+}
+
+.brain-empty {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+  color: var(--muted); font-family: var(--f-mono); font-size: 12px;
+  letter-spacing: 2px; text-transform: uppercase;
+}
+
+/* ════════════════════════════════════════════
+   AGENTS VIEW — TEAM LINEUP
+════════════════════════════════════════════ */
+#view-agents { background: var(--bg); }
+
+.agents-grid {
+  flex: 1; overflow-y: auto;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px; align-content: start;
+}
+.agents-grid::-webkit-scrollbar { width: 4px; }
+.agents-grid::-webkit-scrollbar-thumb { background: var(--surface-3); }
+
+.agent-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px;
+  position: relative; overflow: hidden;
+  transition: border-color .2s;
+}
+.agent-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 2px;
+}
+.agent-card.active::before { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.agent-card.idle::before   { background: var(--muted); }
+.agent-card.error::before  { background: var(--red); }
+.agent-card:hover { border-color: rgba(255,255,255,.12); }
+
+.agent-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+
+.agent-icon {
+  width: 36px; height: 36px; border-radius: 6px;
+  background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; flex-shrink: 0;
+}
+
+.agent-id { flex: 1; }
+.agent-name {
+  font-family: var(--f-head); font-size: 14px; font-weight: 700;
+  color: var(--text); letter-spacing: 1px; text-transform: uppercase;
+}
+.agent-model {
+  font-family: var(--f-mono); font-size: 10px; color: var(--muted);
+  margin-top: 2px;
+}
+
+.agent-status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--muted); flex-shrink: 0;
+  margin-top: 4px;
+}
+.agent-card.active .agent-status-dot { background: var(--green); box-shadow: 0 0 6px var(--green); animation: blink 1.5s infinite; }
+.agent-card.error  .agent-status-dot { background: var(--red); }
+
+.agent-stats {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.agent-stat {
+  display: flex; align-items: center; justify-content: space-between;
+  font-family: var(--f-mono); font-size: 10px;
+}
+.ast-label { color: var(--muted); letter-spacing: .5px; text-transform: uppercase; }
+.ast-val { color: var(--text-2); font-weight: 700; }
+.ast-val.green { color: var(--green); }
+.ast-val.red   { color: var(--red); }
+.ast-val.gold  { color: var(--gold); }
+
+/* ════════════════════════════════════════════
+   SETTINGS VIEW
+════════════════════════════════════════════ */
+#view-settings { background: var(--bg); overflow-y: auto; }
+
+.settings-body { padding: 24px 24px; max-width: 600px; display: flex; flex-direction: column; gap: 24px; }
+
+.settings-section { display: flex; flex-direction: column; gap: 12px; }
+.section-title {
+  font-family: var(--f-mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 3px; text-transform: uppercase;
+  color: var(--red); border-bottom: 1px solid var(--border-red);
+  padding-bottom: 8px;
+}
+
+.form-row { display: flex; flex-direction: column; gap: 5px; }
+.form-label {
+  font-family: var(--f-head); font-size: 11px; font-weight: 600;
+  letter-spacing: 1px; text-transform: uppercase; color: var(--text-2);
+}
+.form-input {
+  width: 100%; padding: 9px 13px; border-radius: 4px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); font-size: 13px; font-family: var(--f-mono);
+  outline: none; transition: border-color .2s;
+}
+.form-input:focus { border-color: var(--border-red); }
+.form-input::placeholder { color: var(--muted); }
+
+.connect-btn {
+  padding: 10px 24px; border-radius: 4px;
+  background: var(--red); border: none; color: #fff;
+  font-family: var(--f-head); font-size: 13px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  cursor: pointer; transition: all .2s; align-self: flex-start;
+}
+.connect-btn:hover { box-shadow: 0 0 20px var(--red-glow); }
+
+/* ════════════════════════════════════════════
+   RIGHT TELEMETRY PANEL
+════════════════════════════════════════════ */
+#panel {
+  grid-area: panel;
+  background: #000;
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-section {
+  border-bottom: 1px solid var(--border);
+  padding: 12px;
+  flex-shrink: 0;
+}
+
+.panel-section-title {
+  font-family: var(--f-mono); font-size: 8px; font-weight: 700;
+  letter-spacing: 2.5px; text-transform: uppercase; color: var(--muted);
+  margin-bottom: 10px;
+}
+
+/* Sector gauges */
+.gauge-row { display: flex; flex-direction: column; gap: 8px; }
+
+.gauge-item { display: flex; flex-direction: column; gap: 4px; }
+.gauge-header { display: flex; align-items: center; justify-content: space-between; }
+.gauge-label { font-family: var(--f-mono); font-size: 9px; color: var(--muted); letter-spacing: 1px; }
+.gauge-val { font-family: var(--f-mono); font-size: 10px; font-weight: 700; color: var(--text); }
+.gauge-bar {
+  height: 3px; background: var(--surface-3); border-radius: 2px; overflow: hidden;
+}
+.gauge-fill { height: 100%; border-radius: 2px; transition: width .6s cubic-bezier(.1,.8,.3,1); }
+
+/* RPM dial */
+.rpm-section { padding: 16px 12px; text-align: center; }
+.rpm-val {
+  font-family: var(--f-head); font-size: 32px; font-weight: 700;
+  line-height: 1; color: var(--text);
+  text-shadow: 0 0 20px var(--red-glow);
+}
+.rpm-unit { font-family: var(--f-mono); font-size: 9px; color: var(--muted); letter-spacing: 2px; margin-top: 2px; }
+.rpm-bar {
+  display: flex; gap: 2px; margin-top: 10px; height: 6px;
+}
+.rpm-seg {
+  flex: 1; height: 100%; border-radius: 1px;
+  background: var(--surface-3); transition: background .2s;
+}
+
+/* Tool execution telemetry */
+#tool-log { flex: 1; overflow-y: auto; padding: 8px; }
+#tool-log::-webkit-scrollbar { width: 2px; }
+#tool-log::-webkit-scrollbar-thumb { background: var(--surface-3); }
+
+.tool-log-item {
+  padding: 5px 6px; border-radius: 3px;
+  border: 1px solid var(--border);
+  margin-bottom: 4px;
+  font-family: var(--f-mono); font-size: 9px;
+  transition: opacity .3s;
+}
+.tl-name { color: var(--cyan); font-weight: 700; letter-spacing: .5px; }
+.tl-time {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 3px;
+}
+.tl-dur { color: var(--muted); }
+.tl-status { font-weight: 700; }
+.tl-ok { color: var(--green); }
+.tl-err { color: var(--red); }
+.tl-run { color: var(--gold); animation: blink 1s infinite; }
+
+/* ════════════════════════════════════════════
+   VIEWPORT PANEL (screenshot overlay)
+════════════════════════════════════════════ */
+#viewport-overlay {
+  display: none;
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,.85);
+  backdrop-filter: blur(4px);
+  align-items: center; justify-content: center;
+  flex-direction: column; gap: 0;
+}
+#viewport-overlay.visible { display: flex; }
+
+.viewport-frame {
+  position: relative;
+  max-width: 90vw; max-height: 80vh;
+  border: 1px solid var(--border-red);
+  border-radius: 4px; overflow: hidden;
+  box-shadow: 0 0 40px var(--red-glow), 0 0 80px rgba(225,6,0,.1);
+}
+#viewport-img { display: block; max-width: 90vw; max-height: 75vh; object-fit: contain; cursor: crosshair; }
+#viewport-close {
+  position: absolute; top: 8px; right: 8px;
+  width: 28px; height: 28px; border-radius: 4px;
+  background: rgba(0,0,0,.8); border: 1px solid var(--border);
+  color: var(--text-2); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 12px;
+}
+
+/* selection ring */
+#crosshair {
+  display: none; position: absolute;
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--red); box-shadow: 0 0 8px var(--red);
+  transform: translate(-50%,-50%); pointer-events: none;
+}
+
+.viewport-bar {
+  width: 100%; max-width: 90vw; padding: 8px 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-top: none;
+  display: flex; gap: 8px; align-items: center;
+}
+#vp-correction {
+  flex: 1; padding: 7px 11px; border-radius: 3px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--text); font-size: 12px; font-family: var(--f-body);
+  outline: none;
+}
+#vp-correction:focus { border-color: var(--border-red); }
+.vp-send {
+  padding: 7px 14px; border-radius: 3px;
+  background: var(--red); border: none; color: #fff;
+  font-family: var(--f-head); font-size: 11px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase; cursor: pointer;
+}
+
+/* ════════════════════════════════════════════
+   TOAST NOTIFICATIONS
+════════════════════════════════════════════ */
+#toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(16px);
+  background: var(--surface);
+  border: 1px solid var(--border-red);
+  border-left: 3px solid var(--red);
+  backdrop-filter: blur(20px);
+  color: var(--text); font-family: var(--f-mono); font-size: 11px;
+  letter-spacing: .5px; padding: 9px 18px; border-radius: 4px;
+  opacity: 0; transition: all .25s; pointer-events: none; z-index: 999;
+  white-space: nowrap;
+}
+#toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ── Scrollbar global ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ══════════════════════════════════════
+       HEADER
+  ══════════════════════════════════════ -->
+  <header id="header">
+    <div class="header-logo">JAR<span>V</span>IS</div>
+    <div class="header-sep"></div>
+    <div id="lap-timer">00:00.000</div>
+    <div class="header-sep"></div>
+    <div id="drs-btn" onclick="toggleDRS()" title="Toggle Auto Mode">
+      <span class="drs-dot"></span> DRS
+    </div>
+    <div id="session-status" class="offline">
+      <span class="s-dot"></span>
+      <span class="s-label" id="s-label">OFFLINE</span>
+    </div>
+
+    <div class="header-stats">
+      <div class="stat-item">
+        <span class="stat-label">CPU</span>
+        <div class="stat-bar"><div class="stat-bar-fill cpu" id="cpu-bar" style="width:0%"></div></div>
+        <span class="stat-val" id="cpu-val">—</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">MEM</span>
+        <div class="stat-bar"><div class="stat-bar-fill mem" id="mem-bar" style="width:0%"></div></div>
+        <span class="stat-val" id="mem-val">—</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">TOK</span>
+        <span class="stat-val" id="tok-val">0</span>
+      </div>
+      <div class="header-sep"></div>
+      <div id="settings-btn" onclick="switchView('settings')" title="Settings">⚙</div>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════
+       LEFT NAV
+  ══════════════════════════════════════ -->
+  <nav id="nav">
+    <div class="nav-item active" data-view="chat" data-label="TEAM RADIO" onclick="switchView('chat')">⚡</div>
+    <div class="nav-item" data-view="tasks" data-label="STANDINGS" onclick="switchView('tasks')">🏁</div>
+    <div class="nav-item" data-view="brain" data-label="STRATEGY" onclick="switchView('brain')">🧠</div>
+    <div class="nav-item" data-view="agents" data-label="TEAM LINEUP" onclick="switchView('agents')">🤖</div>
+    <div class="nav-spacer"></div>
+    <div class="nav-item" data-view="settings" data-label="PIT WALL" onclick="switchView('settings')">⚙</div>
+  </nav>
+
+  <!-- ══════════════════════════════════════
+       MAIN CONTENT
+  ══════════════════════════════════════ -->
+  <main id="main">
+
+    <!-- CHAT VIEW -->
+    <div id="view-chat" class="view active">
+      <div class="view-header">
+        <div class="view-title"><span>◼</span> TEAM RADIO</div>
+        <div id="view-chat-badge" class="view-badge" style="display:none">LIVE</div>
+        <div class="view-actions">
+          <div class="vbtn" onclick="clearChat()">CLEAR</div>
+          <div class="vbtn" onclick="toggleViewport()">VIEWPORT</div>
+        </div>
+      </div>
+
+      <div id="chat-log">
+        <div class="msg-wrap">
+          <div class="msg-meta">
+            <span class="msg-sender jarvis">JARVIS OS</span>
+            <span class="msg-time">BOOT</span>
+          </div>
+          <div class="msg-bubble jarvis">
+            SYSTEM INITIALISED — Hermes protocol standby. Configure endpoint to connect.
+          </div>
+        </div>
+      </div>
+
+      <div id="typing-indicator" style="display:none" class="typing-wrap">
+        <span class="msg-meta" style="font-size:9px;color:var(--muted);letter-spacing:1px">JARVIS</span>
+        <div class="typing-dots">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+
+      <div id="chat-input-bar">
+        <div class="input-btn" id="ptt-btn" onclick="toggleSpeech()" title="Push to Talk">🎤</div>
+        <input id="chat-input" type="text" placeholder="Enter command — Press ENTER to transmit…"
+               onkeypress="handleKey(event)">
+        <button class="input-btn" id="send-btn" onclick="sendMsg()">➤</button>
+      </div>
+    </div>
+
+    <!-- TASKS VIEW -->
+    <div id="view-tasks" class="view">
+      <div class="view-header">
+        <div class="view-title"><span>◼</span> DRIVER STANDINGS</div>
+        <span class="view-badge" id="tasks-badge">0 TASKS</span>
+        <div class="view-actions">
+          <div class="vbtn primary" onclick="switchView('chat')">NEW TASK</div>
+          <div class="vbtn" onclick="refreshTasks()">REFRESH</div>
+        </div>
+      </div>
+      <div class="standings-header">
+        <span>POS</span><span></span><span>TASK</span>
+        <span>MODEL</span><span>TIME</span><span>STATUS</span>
+      </div>
+      <div id="tasks-list">
+        <div style="padding:40px 20px; text-align:center; font-family:var(--f-mono); font-size:11px; color:var(--muted); letter-spacing:2px; text-transform:uppercase">
+          NO TASKS IN QUEUE — SUBMIT A COMMAND TO BEGIN
+        </div>
+      </div>
+    </div>
+
+    <!-- BRAIN VIEW -->
+    <div id="view-brain" class="view">
+      <div class="view-header">
+        <div class="view-title"><span>◼</span> STRATEGY BOARD</div>
+        <span class="view-badge" id="brain-badge">0 MEMORIES</span>
+        <div class="view-actions">
+          <div class="vbtn" onclick="fetchMemory()">SYNC</div>
+        </div>
+      </div>
+      <div class="brain-grid" id="brain-grid">
+        <div class="brain-empty">
+          <div>🧠</div>
+          <div>MEMORY CORE EMPTY</div>
+          <div style="font-size:9px; color:var(--whisper)">CONNECT TO HERMES TO SYNC</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AGENTS VIEW -->
+    <div id="view-agents" class="view">
+      <div class="view-header">
+        <div class="view-title"><span>◼</span> TEAM LINEUP</div>
+        <div class="view-actions">
+          <div class="vbtn" onclick="refreshAgents()">REFRESH</div>
+        </div>
+      </div>
+      <div class="agents-grid" id="agents-grid">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+    <!-- SETTINGS VIEW -->
+    <div id="view-settings" class="view">
+      <div class="view-header">
+        <div class="view-title"><span>◼</span> PIT WALL CONFIG</div>
+      </div>
+      <div class="settings-body">
+        <div class="settings-section">
+          <div class="section-title">Hermes Connection</div>
+          <div class="form-row">
+            <label class="form-label">Endpoint URL</label>
+            <input id="set-url" class="form-input" type="text"
+                   placeholder="wss://your-tunnel.trycloudflare.com/ws">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Auth Token</label>
+            <input id="set-token" class="form-input" type="password"
+                   placeholder="jarvis_hermes_2026">
+          </div>
+          <button class="connect-btn" onclick="saveConnect()">CONNECT →</button>
+        </div>
+
+        <div class="settings-section">
+          <div class="section-title">Model Configuration</div>
+          <div class="form-row">
+            <label class="form-label">Primary Model</label>
+            <input id="set-model" class="form-input" type="text"
+                   value="gemma4:31b-cloud" readonly>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Vision Model</label>
+            <input id="set-vision" class="form-input" type="text"
+                   value="moonshotai/kimi-k2.6 (NVIDIA)" readonly>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="section-title">Session Info</div>
+          <div class="form-row">
+            <label class="form-label">Session ID</label>
+            <input id="set-session" class="form-input" type="text"
+                   id="set-session-id" readonly placeholder="—">
+          </div>
+          <div class="form-row">
+            <label class="form-label">Total Tokens This Session</label>
+            <input class="form-input" type="text" id="set-tokens" value="0" readonly>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ══════════════════════════════════════
+       RIGHT TELEMETRY PANEL
+  ══════════════════════════════════════ -->
+  <aside id="panel">
+
+    <!-- RPM / Inference speed -->
+    <div class="rpm-section panel-section" style="border-bottom: 1px solid var(--border)">
+      <div class="panel-section-title">INFERENCE SPEED</div>
+      <div class="rpm-val" id="rpm-val">0</div>
+      <div class="rpm-unit">T/SEC</div>
+      <div class="rpm-bar" id="rpm-bar">
+        <!-- segments filled by JS -->
+      </div>
+    </div>
+
+    <!-- System gauges -->
+    <div class="panel-section">
+      <div class="panel-section-title">SYSTEM TELEMETRY</div>
+      <div class="gauge-row">
+        <div class="gauge-item">
+          <div class="gauge-header">
+            <span class="gauge-label">CPU</span>
+            <span class="gauge-val" id="g-cpu">—%</span>
+          </div>
+          <div class="gauge-bar">
+            <div class="gauge-fill" id="gf-cpu" style="width:0%;background:var(--red)"></div>
+          </div>
+        </div>
+        <div class="gauge-item">
+          <div class="gauge-header">
+            <span class="gauge-label">MEMORY</span>
+            <span class="gauge-val" id="g-mem">—%</span>
+          </div>
+          <div class="gauge-bar">
+            <div class="gauge-fill" id="gf-mem" style="width:0%;background:var(--gold)"></div>
+          </div>
+        </div>
+        <div class="gauge-item">
+          <div class="gauge-header">
+            <span class="gauge-label">GPU VRAM</span>
+            <span class="gauge-val" id="g-gpu">—%</span>
+          </div>
+          <div class="gauge-bar">
+            <div class="gauge-fill" id="gf-gpu" style="width:0%;background:var(--green)"></div>
+          </div>
+        </div>
+        <div class="gauge-item">
+          <div class="gauge-header">
+            <span class="gauge-label">CONTEXT</span>
+            <span class="gauge-val" id="g-ctx">0K</span>
+          </div>
+          <div class="gauge-bar">
+            <div class="gauge-fill" id="gf-ctx" style="width:0%;background:var(--cyan)"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sector timing (tool calls) -->
+    <div class="panel-section" style="padding-bottom:6px">
+      <div class="panel-section-title">SECTOR TIMING</div>
+    </div>
+    <div id="tool-log"></div>
+
+  </aside>
+
+</div><!-- /#app -->
+
+<!-- ══════════════════════════════════════
+     VIEWPORT OVERLAY
+══════════════════════════════════════ -->
+<div id="viewport-overlay" onclick="handleOverlayClick(event)">
+  <div class="viewport-frame">
+    <img id="viewport-img" src="" alt="">
+    <div id="crosshair"></div>
+    <div id="viewport-close" onclick="hideViewport(event)">✕</div>
+  </div>
+  <div class="viewport-bar">
+    <input id="vp-correction" type="text" placeholder="Describe correction at clicked point…" onkeypress="handleVpKey(event)">
+    <button class="vp-send" onclick="sendCorrection()">TRANSMIT</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     TOAST
+══════════════════════════════════════ -->
+<div id="toast"></div>
+
+<!-- ══════════════════════════════════════
+     SCRIPT
+══════════════════════════════════════ -->
+<script>
+/* ════════════════════════════════════════════
+   STATE
+════════════════════════════════════════════ */
+let ws        = null;
+let hermesConn = null;
+let isTyping  = false;
+let drsActive = false;
+let sessionTokens = 0;
+let sessionStart  = Date.now();
+let currentMsgEl  = null;
+let pendingCoords = null;
+let recognition   = null, isListening = false;
+let audioCtx = null, analyser = null;
+let audioQueue = [], activeSources = [], nextPlayTime = 0;
+let toolTimers = {};   // tool_name → start ms
+let taskList = [];
+let agentDefs = [
+  { id: 'hermes',   name: 'HERMES',   icon: '⚡', model: 'gemma4:31b-cloud',      role: 'Orchestrator',   status: 'idle' },
+  { id: 'vision',   name: 'VISION',   icon: '👁', model: 'kimi-k2.6 (NVIDIA)',    role: 'Screen Reader',  status: 'idle' },
+  { id: 'braille',  name: 'BRAILLE',  icon: '🖱', model: 'UIAutomation / Win32',  role: 'Mouse Cursor',   status: 'idle' },
+  { id: 'browser',  name: 'BROWSER',  icon: '🌐', model: 'Playwright Chromium',   role: 'Headless Web',   status: 'idle' },
+  { id: 'cortex',   name: 'CORTEX',   icon: '🧠', model: 'ScreenImprintGraph',    role: 'Spatial Sense',  status: 'idle' },
+  { id: 'shell',    name: 'SHELL',    icon: '💻', model: 'PowerShell / bash',     role: 'Command Exec',   status: 'idle' },
+];
+
+const DISCOVERY_GIST = 'https://gist.githubusercontent.com/HasRahm/e99532bb52fd6b67e77f759d9921d5d8/raw/jarvis-url.json';
+
+/* ════════════════════════════════════════════
+   BOOT
+════════════════════════════════════════════ */
+window.onload = async () => {
+  initSpeech();
+  initLapTimer();
+  buildRpmBar();
+  renderAgents();
+  pulseTelemetry();
+
+  const saved = document.getElementById('set-url');
+  const savedUrl   = localStorage.getItem('jarvis_ws_url');
+  const savedToken = localStorage.getItem('jarvis_token');
+  if (savedUrl) {
+    saved.value = savedUrl;
+    document.getElementById('set-token').value = savedToken || '';
+  }
+
+  // Gist auto-discovery
+  try {
+    const res = await fetch(DISCOVERY_GIST + '?t=' + Date.now(), { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.status === 'online' && data.url) {
+        const wsUrl = data.url.replace(/^http/, 'ws') + '/ws';
+        const tok   = data.token || 'jarvis_hermes_2026';
+        localStorage.setItem('jarvis_ws_url', wsUrl);
+        localStorage.setItem('jarvis_token',  tok);
+        document.getElementById('set-url').value   = wsUrl;
+        document.getElementById('set-token').value = tok;
+        connect(wsUrl, tok);
+        return;
+      }
+    }
+  } catch(_) {}
+
+  if (savedUrl) {
+    connect(savedUrl, savedToken || '');
+  } else {
+    switchView('settings');
+    appendMsg('jarvis', 'PIT WALL CONFIG REQUIRED — Enter your Hermes endpoint and token to connect.');
+  }
+};
+
+/* ════════════════════════════════════════════
+   LAP TIMER
+════════════════════════════════════════════ */
+function initLapTimer() {
+  const el = document.getElementById('lap-timer');
+  function tick() {
+    const elapsed = Date.now() - sessionStart;
+    const mins = Math.floor(elapsed / 60000);
+    const secs = Math.floor((elapsed % 60000) / 1000);
+    const ms   = Math.floor((elapsed % 1000) / 10);
+    el.textContent =
+      String(mins).padStart(2,'0') + ':' +
+      String(secs).padStart(2,'0') + '.' +
+      String(ms).padStart(3,'0');
+    requestAnimationFrame(tick);
+  }
+  tick();
+}
+
+/* ════════════════════════════════════════════
+   RPM BAR
+════════════════════════════════════════════ */
+function buildRpmBar() {
+  const bar = document.getElementById('rpm-bar');
+  bar.innerHTML = '';
+  const colors = ['var(--green)','var(--green)','var(--green)','var(--green)',
+                  'var(--gold)','var(--gold)','var(--gold)',
+                  'var(--red)','var(--red)','var(--red)'];
+  colors.forEach(c => {
+    const s = document.createElement('div');
+    s.className = 'rpm-seg';
+    s.style.setProperty('--c', c);
+    bar.appendChild(s);
+  });
+}
+
+function updateRpm(tokPerSec) {
+  document.getElementById('rpm-val').textContent = Math.round(tokPerSec);
+  const segs = document.querySelectorAll('.rpm-seg');
+  const lit  = Math.min(10, Math.round((tokPerSec / 50) * 10));
+  const colors = ['var(--green)','var(--green)','var(--green)','var(--green)',
+                  'var(--gold)','var(--gold)','var(--gold)',
+                  'var(--red)','var(--red)','var(--red)'];
+  segs.forEach((s, i) => {
+    s.style.background = i < lit ? colors[i] : 'var(--surface-3)';
+    if (i < lit && i >= 7) s.style.boxShadow = '0 0 4px var(--red)';
+    else if (i < lit && i >= 4) s.style.boxShadow = '0 0 4px var(--gold)';
+    else if (i < lit) s.style.boxShadow = '0 0 4px var(--green)';
+    else s.style.boxShadow = 'none';
+  });
+}
+
+/* ════════════════════════════════════════════
+   TELEMETRY PULSE (simulated when offline)
+════════════════════════════════════════════ */
+function pulseTelemetry() {
+  setInterval(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      // Idle drift
+      const cpu = 5 + Math.random() * 8;
+      const mem = 38 + Math.random() * 4;
+      const gpu = 15 + Math.random() * 10;
+      setTelemetry(cpu, mem, gpu, 0, 0);
+    }
+  }, 2000);
+}
+
+function setTelemetry(cpu, mem, gpu, ctx, tokPerSec) {
+  document.getElementById('g-cpu').textContent   = cpu.toFixed(0) + '%';
+  document.getElementById('gf-cpu').style.width  = cpu + '%';
+  document.getElementById('g-mem').textContent   = mem.toFixed(0) + '%';
+  document.getElementById('gf-mem').style.width  = mem + '%';
+  document.getElementById('g-gpu').textContent   = gpu.toFixed(0) + '%';
+  document.getElementById('gf-gpu').style.width  = gpu + '%';
+  document.getElementById('g-ctx').textContent   = ctx > 0 ? (ctx/1000).toFixed(0) + 'K' : '—';
+  document.getElementById('gf-ctx').style.width  = Math.min(100, ctx/1000) + '%';
+  document.getElementById('cpu-bar').style.width = cpu + '%';
+  document.getElementById('mem-bar').style.width = mem + '%';
+  document.getElementById('cpu-val').textContent = cpu.toFixed(0) + '%';
+  document.getElementById('mem-val').textContent = mem.toFixed(0) + '%';
+  if (tokPerSec > 0) updateRpm(tokPerSec);
+}
+
+/* ════════════════════════════════════════════
+   NAVIGATION
+════════════════════════════════════════════ */
+function switchView(view) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => {
+    n.classList.toggle('active', n.dataset.view === view);
+  });
+  const el = document.getElementById('view-' + view);
+  if (el) el.classList.add('active');
+}
+
+/* ════════════════════════════════════════════
+   DRS (AUTO MODE)
+════════════════════════════════════════════ */
+function toggleDRS() {
+  drsActive = !drsActive;
+  const btn = document.getElementById('drs-btn');
+  btn.classList.toggle('drs-active', drsActive);
+  showToast(drsActive ? 'DRS OPEN — AUTO MODE ACTIVE' : 'DRS CLOSED — MANUAL CONTROL');
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'set_mode', auto: drsActive }));
+  }
+}
+
+/* ════════════════════════════════════════════
+   WEBSOCKET
+════════════════════════════════════════════ */
+class HermesConn {
+  constructor(url, token) {
+    this.url = url; this.token = token;
+    this.retryDelay = 1000;
+    this.connect();
+  }
+
+  connect() {
+    if (this.ws) { try { this.ws.close(); } catch(_) {} }
+    let wsUrl = this.url;
+    if (wsUrl.startsWith('http')) wsUrl = wsUrl.replace('http', 'ws');
+    if (!wsUrl.startsWith('ws'))  wsUrl = 'ws://' + wsUrl;
+    wsUrl = wsUrl.replace(/[?&]token=[^&]*/g, '').replace(/[?&]$/, '');
+    const tok = this.token || localStorage.getItem('jarvis_token') || '';
+
+    setStatus('connecting', 'CONNECTING');
+    this.ws = new WebSocket(wsUrl);
+    this.ws.binaryType = 'arraybuffer';
+    ws = this.ws; // global
+
+    this.ws.onopen = () => {
+      this.retryDelay = 1000;
+      this.ws.send(JSON.stringify({ type: 'auth', token: tok }));
+    };
+
+    this.ws.onmessage = async (e) => {
+      if (e.data instanceof ArrayBuffer) { await playAudio(e.data); return; }
+      try {
+        const d = JSON.parse(e.data);
+        handleMsg(d);
+      } catch(_) {
+        appendMsg('jarvis', e.data);
+      }
+    };
+
+    this.ws.onclose = () => {
+      setStatus('offline', 'RECONNECTING');
+      ws = null;
+      setTimeout(() => {
+        const u = localStorage.getItem('jarvis_ws_url');
+        const t = localStorage.getItem('jarvis_token');
+        if (u) { this.url = u; this.token = t; this.connect(); }
+      }, this.retryDelay);
+      this.retryDelay = Math.min(this.retryDelay * 2, 30000);
+    };
+
+    this.ws.onerror = () => {};
+  }
+}
+
+function connect(url, token) {
+  if (hermesConn) try { hermesConn.ws.close(); } catch(_) {}
+  hermesConn = new HermesConn(url, token);
+}
+
+function saveConnect() {
+  const url   = document.getElementById('set-url').value.trim();
+  const token = document.getElementById('set-token').value.trim();
+  if (!url) return;
+  localStorage.setItem('jarvis_ws_url', url);
+  if (token) localStorage.setItem('jarvis_token', token);
+  connect(url, token);
+  switchView('chat');
+}
+
+/* ════════════════════════════════════════════
+   MESSAGE HANDLER
+════════════════════════════════════════════ */
+function handleMsg(d) {
+  if (d.type === 'auth_ok') {
+    setStatus('online', 'ONLINE');
+    appendMsg('jarvis', 'SECURE LINK ESTABLISHED — Hermes WebSocket active. All systems nominal.');
+    const sid = d.session_id || 'sess_' + Math.random().toString(36).slice(2,8);
+    document.getElementById('set-session').value = sid;
+    return;
+  }
+  if (d.type === 'auth_error') {
+    setStatus('offline', 'AUTH FAIL');
+    appendMsg('jarvis', 'AUTHENTICATION FAILURE — Check token in PIT WALL CONFIG.');
+    return;
+  }
+
+  // Screenshot
+  if (d.type === 'screenshot') {
+    showViewport(d.url); return;
+  }
+
+  // Telemetry
+  if (d.type === 'telemetry') {
+    sessionTokens += (d.tokens || 0);
+    document.getElementById('tok-val').textContent = sessionTokens;
+    document.getElementById('set-tokens').textContent = sessionTokens;
+    if (d.cpu !== undefined)   setTelemetry(d.cpu, d.mem||0, d.gpu||0, d.context_tokens||0, d.tok_per_sec||0);
+    return;
+  }
+
+  // Task updates
+  if (d.type === 'task_update' || d.type === 'task_status') {
+    updateTask(d); return;
+  }
+
+  // Tool calls (sector timing)
+  if (d.type === 'tool_call') {
+    const name = d.name || d.tool;
+    toolTimers[name] = Date.now();
+    addToolLog(name, 'run', null);
+    // Simulate active agent
+    const ag = agentForTool(name);
+    if (ag) setAgentStatus(ag, 'active');
+    addTaskFromTool(d);
+    return;
+  }
+  if (d.type === 'tool_result') {
+    const name = d.name || d.tool;
+    const dur  = toolTimers[name] ? Date.now() - toolTimers[name] : 0;
+    delete toolTimers[name];
+    addToolLog(name, d.error ? 'err' : 'ok', dur);
+    const ag = agentForTool(name);
+    if (ag) setTimeout(() => setAgentStatus(ag, 'idle'), 800);
+    return;
+  }
+
+  // Audio interrupt
+  if (d.interrupt || d.type === 'audio_interrupt') {
+    interruptAudio(); return;
+  }
+
+  // Auto-heal
+  if (d.type === 'auto_heal_detected') {
+    showToast('AUTO-HEAL: ' + (d.intent||'').slice(0,32)); return;
+  }
+
+  // Task notification
+  if (d.type === 'task_status' && d.status === 'COMPLETED') {
+    showToast('TASK COMPLETE — ' + (d.task||'').slice(0,30));
+    if ('Notification' in window && Notification.permission === 'granted')
+      new Notification('⚡ JARVIS', { body: 'Task completed.' });
+  }
+
+  // Text streaming
+  if (d.type === 'text_start') {
+    hideTyping();
+    currentMsgEl = appendMsgEl('jarvis');
+    document.getElementById('view-chat-badge').style.display = 'flex';
+    return;
+  }
+  if (d.type === 'text' || d.type === 'chunk') {
+    if (!currentMsgEl) currentMsgEl = appendMsgEl('jarvis');
+    currentMsgEl.textContent += (d.content || d.text || '');
+    scrollChat();
+    return;
+  }
+  if (d.type === 'done') {
+    currentMsgEl = null;
+    document.getElementById('view-chat-badge').style.display = 'none';
+    hideTyping();
+    return;
+  }
+  if (d.type === 'typing') {
+    showTyping(); return;
+  }
+
+  if (d.content || d.text) appendMsg('jarvis', d.content || d.text);
+}
+
+/* ════════════════════════════════════════════
+   CHAT HELPERS
+════════════════════════════════════════════ */
+function appendMsg(sender, text) {
+  const wrap  = document.createElement('div');
+  wrap.className = 'msg-wrap' + (sender === 'user' ? ' user-wrap' : '');
+  const meta  = document.createElement('div');
+  meta.className = 'msg-meta';
+  const sEl   = document.createElement('span');
+  sEl.className = 'msg-sender ' + sender;
+  sEl.textContent = sender === 'jarvis' ? 'JARVIS OS' : 'DRIVER';
+  const tEl   = document.createElement('span');
+  tEl.className = 'msg-time';
+  tEl.textContent = new Date().toLocaleTimeString('en', { hour12: false, hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  meta.appendChild(sEl); meta.appendChild(tEl);
+  const bub   = document.createElement('div');
+  bub.className = 'msg-bubble ' + sender;
+  bub.textContent = text;
+  wrap.appendChild(meta); wrap.appendChild(bub);
+  document.getElementById('chat-log').appendChild(wrap);
+  scrollChat();
+  return bub;
+}
+
+function appendMsgEl(sender) {
+  const wrap  = document.createElement('div');
+  wrap.className = 'msg-wrap';
+  const meta  = document.createElement('div');
+  meta.className = 'msg-meta';
+  const sEl   = document.createElement('span');
+  sEl.className = 'msg-sender ' + sender;
+  sEl.textContent = 'JARVIS OS';
+  const tEl   = document.createElement('span');
+  tEl.className = 'msg-time';
+  tEl.textContent = new Date().toLocaleTimeString('en', { hour12: false, hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  meta.appendChild(sEl); meta.appendChild(tEl);
+  const bub   = document.createElement('div');
+  bub.className = 'msg-bubble jarvis';
+  wrap.appendChild(meta); wrap.appendChild(bub);
+  document.getElementById('chat-log').appendChild(wrap);
+  scrollChat();
+  return bub;
+}
+
+function appendToolCall(name, args) {
+  const el = document.createElement('div');
+  el.className = 'tool-call';
+  el.innerHTML = `<div class="tc-name">⚙ ${name.toUpperCase()}</div>` +
+    (args ? `<div class="tc-args">${JSON.stringify(args).slice(0,120)}</div>` : '');
+  document.getElementById('chat-log').appendChild(el);
+  scrollChat();
+  return el;
+}
+
+function scrollChat() {
+  const log = document.getElementById('chat-log');
+  log.scrollTop = log.scrollHeight;
+}
+
+function clearChat() {
+  document.getElementById('chat-log').innerHTML = '';
+}
+
+function showTyping() {
+  document.getElementById('typing-indicator').style.display = 'flex';
+  scrollChat();
+}
+
+function hideTyping() {
+  document.getElementById('typing-indicator').style.display = 'none';
+}
+
+function handleKey(e) { if (e.key === 'Enter') sendMsg(); }
+
+function sendMsg() {
+  const inp  = document.getElementById('chat-input');
+  const text = inp.value.trim();
+  if (!text || !ws || ws.readyState !== WebSocket.OPEN) {
+    if (!ws || ws.readyState !== WebSocket.OPEN)
+      showToast('NOT CONNECTED — Configure endpoint in PIT WALL');
+    return;
+  }
+  appendMsg('user', text);
+  inp.value = '';
+  getAudio();
+  showTyping();
+  ws.send(JSON.stringify({ type: 'message', text }));
+}
+
+/* ════════════════════════════════════════════
+   TASKS / STANDINGS
+════════════════════════════════════════════ */
+let taskSeq = 0;
+
+function updateTask(d) {
+  const existing = taskList.find(t => t.id === d.task_id || t.name === d.task);
+  if (existing) {
+    existing.status = d.status || existing.status;
+    existing.duration = d.duration || existing.duration;
+  } else if (d.task || d.task_id) {
+    taskList.unshift({
+      id: d.task_id || ('t' + ++taskSeq),
+      name: d.task || d.task_id || 'Unknown Task',
+      model: d.model || 'gemma4:31b-cloud',
+      status: d.status || 'running',
+      duration: d.duration || null,
+      ts: Date.now()
+    });
+    if (taskList.length > 30) taskList.pop();
+  }
+  renderTasks();
+}
+
+function addTaskFromTool(d) {
+  const name = (d.name || d.tool || '').replace(/_/g, ' ').toUpperCase();
+  updateTask({
+    task_id: 't' + Date.now(),
+    task: name,
+    model: 'dispatcher',
+    status: 'running'
+  });
+}
+
+function renderTasks() {
+  const list = document.getElementById('tasks-list');
+  if (!taskList.length) {
+    list.innerHTML = '<div style="padding:40px 20px;text-align:center;font-family:var(--f-mono);font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase">NO TASKS IN QUEUE</div>';
+    document.getElementById('tasks-badge').textContent = '0 TASKS';
+    return;
+  }
+  document.getElementById('tasks-badge').textContent = taskList.length + ' TASKS';
+  list.innerHTML = taskList.map((t, i) => {
+    const pos = i + 1;
+    const posClass = pos === 1 ? 'p1' : pos === 2 ? 'p2' : pos === 3 ? 'p3' : '';
+    const indClass = { running: 'ind-running', done: 'ind-done', failed: 'ind-failed', COMPLETED: 'ind-done', RUNNING: 'ind-running' }[t.status] || 'ind-pending';
+    const chipClass = { running: 'chip-running', done: 'chip-done', failed: 'chip-failed', COMPLETED: 'chip-done', RUNNING: 'chip-running' }[t.status] || 'chip-pending';
+    const chipLabel = t.status?.toUpperCase() || 'QUEUED';
+    const dur = t.duration ? formatDur(t.duration) : '—';
+    const durClass = t.duration && t.duration < 5000 ? 'fast' : '';
+    return `<div class="task-row">
+      <div class="task-pos ${posClass}">${pos}</div>
+      <div><div class="task-indicator ${indClass}"></div></div>
+      <div class="task-info">
+        <div class="task-name">${t.name}</div>
+        <div class="task-sub">${t.id} · ${new Date(t.ts).toLocaleTimeString('en',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'})}</div>
+      </div>
+      <div class="task-model">${t.model.slice(0,20)}</div>
+      <div class="task-time ${durClass}">${dur}</div>
+      <div class="task-status"><span class="status-chip ${chipClass}">${chipLabel}</span></div>
+    </div>`;
+  }).join('');
+}
+
+function refreshTasks() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'get_tasks' }));
+  }
+  showToast('STANDINGS REFRESHED');
+}
+
+function formatDur(ms) {
+  if (!ms) return '—';
+  if (ms < 1000) return ms + 'ms';
+  return (ms/1000).toFixed(1) + 's';
+}
+
+/* ════════════════════════════════════════════
+   SECTOR TIMING LOG
+════════════════════════════════════════════ */
+function addToolLog(name, status, dur) {
+  const log = document.getElementById('tool-log');
+  const el  = document.createElement('div');
+  el.className = 'tool-log-item';
+  const statusClass = { ok: 'tl-ok', err: 'tl-err', run: 'tl-run' }[status];
+  const statusText  = { ok: '✓ OK', err: '✗ ERR', run: '⟳ RUN' }[status];
+  el.innerHTML = `<div class="tl-name">${name}</div>
+    <div class="tl-time">
+      <span class="tl-dur">${dur ? formatDur(dur) : '…'}</span>
+      <span class="tl-status ${statusClass}">${statusText}</span>
+    </div>`;
+  log.prepend(el);
+  // Keep last 20
+  while (log.children.length > 20) log.removeChild(log.lastChild);
+}
+
+/* ════════════════════════════════════════════
+   BRAIN / MEMORY
+════════════════════════════════════════════ */
+function renderMemory(entries) {
+  const grid = document.getElementById('brain-grid');
+  if (!entries || !entries.length) {
+    grid.innerHTML = `<div class="brain-empty"><div>🧠</div><div>MEMORY CORE EMPTY</div></div>`;
+    document.getElementById('brain-badge').textContent = '0 MEMORIES';
+    return;
+  }
+  document.getElementById('brain-badge').textContent = entries.length + ' MEMORIES';
+  grid.innerHTML = entries.map(e => `
+    <div class="memory-card">
+      <div class="mc-type">${e.type || 'MEMORY'}</div>
+      <div class="mc-content">${e.content || e.text || JSON.stringify(e).slice(0,200)}</div>
+      <div class="mc-time">${e.timestamp || e.created_at || '—'}</div>
+    </div>`).join('');
+}
+
+function fetchMemory() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'get_memory' }));
+  }
+  showToast('SYNCING STRATEGY BOARD…');
+}
+
+/* ════════════════════════════════════════════
+   AGENTS / TEAM LINEUP
+════════════════════════════════════════════ */
+function renderAgents() {
+  const grid = document.getElementById('agents-grid');
+  grid.innerHTML = agentDefs.map(a => `
+    <div class="agent-card ${a.status}" id="ag-${a.id}">
+      <div class="agent-header">
+        <div class="agent-icon">${a.icon}</div>
+        <div class="agent-id">
+          <div class="agent-name">${a.name}</div>
+          <div class="agent-model">${a.model}</div>
+        </div>
+        <div class="agent-status-dot"></div>
+      </div>
+      <div class="agent-stats">
+        <div class="agent-stat">
+          <span class="ast-label">ROLE</span>
+          <span class="ast-val">${a.role}</span>
+        </div>
+        <div class="agent-stat">
+          <span class="ast-label">STATUS</span>
+          <span class="ast-val ${a.status === 'active' ? 'green' : ''}">${a.status.toUpperCase()}</span>
+        </div>
+        <div class="agent-stat">
+          <span class="ast-label">CALLS</span>
+          <span class="ast-val" id="ag-calls-${a.id}">0</span>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function setAgentStatus(id, status) {
+  const card = document.getElementById('ag-' + id);
+  if (!card) return;
+  const ag = agentDefs.find(a => a.id === id);
+  if (ag) ag.status = status;
+  card.className = 'agent-card ' + status;
+  const sv = card.querySelector('.ast-val:last-child');
+  if (sv) { sv.textContent = status.toUpperCase(); sv.className = 'ast-val' + (status === 'active' ? ' green' : ''); }
+
+  if (status === 'active') {
+    const callEl = document.getElementById('ag-calls-' + id);
+    if (callEl) callEl.textContent = Number(callEl.textContent) + 1;
+  }
+}
+
+function agentForTool(toolName) {
+  const map = {
+    visual_inspect: 'vision', visual_click: 'vision',
+    hybrid_locate_click: 'braille', desktop_smooth_click: 'braille',
+    desktop_batch_actions: 'braille', desktop_press_keys: 'braille',
+    desktop_type_text: 'braille',
+    browser_navigate: 'browser', browser_extract_text: 'browser',
+    browser_click: 'browser', browser_screenshot: 'browser',
+    screen_imprint: 'cortex',
+    run_command: 'shell',
+    brain_query: 'cortex', brain_write: 'cortex',
+  };
+  return map[toolName] || 'hermes';
+}
+
+function refreshAgents() {
+  renderAgents();
+  showToast('LINEUP REFRESHED');
+}
+
+/* ════════════════════════════════════════════
+   VIEWPORT OVERLAY
+════════════════════════════════════════════ */
+function showViewport(url) {
+  document.getElementById('viewport-img').src = url;
+  document.getElementById('viewport-overlay').classList.add('visible');
+  document.getElementById('crosshair').style.display = 'none';
+  pendingCoords = null;
+}
+
+function hideViewport(e) {
+  if (e) e.stopPropagation();
+  document.getElementById('viewport-overlay').classList.remove('visible');
+}
+
+function toggleViewport() {
+  const ov = document.getElementById('viewport-overlay');
+  ov.classList.toggle('visible');
+}
+
+function handleOverlayClick(e) {
+  const img = document.getElementById('viewport-img');
+  if (e.target === img) {
+    const rect = img.getBoundingClientRect();
+    pendingCoords = { x: (e.clientX - rect.left) / rect.width, y: (e.clientY - rect.top) / rect.height };
+    const ch = document.getElementById('crosshair');
+    ch.style.left = (pendingCoords.x * 100) + '%';
+    ch.style.top  = (pendingCoords.y * 100) + '%';
+    ch.style.display = 'block';
+    document.getElementById('vp-correction').focus();
+  }
+}
+
+function handleVpKey(e) { if (e.key === 'Enter') sendCorrection(); }
+
+function sendCorrection() {
+  const text = document.getElementById('vp-correction').value.trim();
+  if (!text || !pendingCoords) return;
+  appendMsg('user', `[VIEWPORT @${Math.round(pendingCoords.x*100)}%,${Math.round(pendingCoords.y*100)}%] ${text}`);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'corrective_action', coords: pendingCoords, instruction: text }));
+  }
+  document.getElementById('vp-correction').value = '';
+  hideViewport(null);
+}
+
+/* ════════════════════════════════════════════
+   AUDIO
+════════════════════════════════════════════ */
+function getAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.connect(audioCtx.destination);
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+async function playAudio(buf) {
+  const ctx = getAudio();
+  try {
+    const decoded = await ctx.decodeAudioData(buf);
+    audioQueue.push(decoded);
+    scheduleAudio();
+  } catch(_) {}
+}
+
+function scheduleAudio() {
+  const ctx = getAudio();
+  const now = ctx.currentTime;
+  if (nextPlayTime < now) nextPlayTime = now;
+  while (audioQueue.length) {
+    const b   = audioQueue.shift();
+    const src = ctx.createBufferSource();
+    src.buffer = b;
+    const g   = ctx.createGain();
+    src.connect(g); g.connect(analyser);
+    src.start(nextPlayTime);
+    activeSources.push({ source: src, gainNode: g, endTime: nextPlayTime + b.duration });
+    nextPlayTime += b.duration;
+  }
+  activeSources = activeSources.filter(s => s.endTime > ctx.currentTime);
+}
+
+function interruptAudio() {
+  const ctx = getAudio(); const now = ctx.currentTime;
+  audioQueue = []; nextPlayTime = now;
+  activeSources.forEach(s => {
+    try {
+      s.gainNode.gain.setValueAtTime(s.gainNode.gain.value, now);
+      s.gainNode.gain.exponentialRampToValueAtTime(0.001, now + .12);
+      setTimeout(() => { try { s.source.stop(); } catch(_){} }, 150);
+    } catch(_) {}
+  });
+  activeSources = [];
+}
+
+/* ════════════════════════════════════════════
+   SPEECH
+════════════════════════════════════════════ */
+function initSpeech() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { document.getElementById('ptt-btn').style.display = 'none'; return; }
+  recognition = new SR();
+  recognition.continuous = false; recognition.interimResults = false;
+  recognition.onstart = () => {
+    isListening = true;
+    document.getElementById('ptt-btn').classList.add('listening');
+    document.getElementById('chat-input').placeholder = 'LISTENING…';
+  };
+  recognition.onresult = e => {
+    document.getElementById('chat-input').value = e.results[0][0].transcript;
+    sendMsg();
+  };
+  recognition.onerror = recognition.onend = () => {
+    isListening = false;
+    document.getElementById('ptt-btn').classList.remove('listening');
+    document.getElementById('chat-input').placeholder = 'Enter command — Press ENTER to transmit…';
+  };
+}
+
+function toggleSpeech() {
+  if (!recognition) return;
+  getAudio();
+  isListening ? recognition.stop() : recognition.start();
+}
+
+/* ════════════════════════════════════════════
+   STATUS + TOAST
+════════════════════════════════════════════ */
+function setStatus(state, label) {
+  const pill  = document.getElementById('session-status');
+  pill.className = state;
+  document.getElementById('s-label').textContent = label;
+}
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('visible'), 3500);
+}
+</script>
+</body>
+</html>
