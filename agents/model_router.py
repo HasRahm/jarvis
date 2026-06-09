@@ -44,6 +44,7 @@ _PROVIDERS = {
     "gpt-5.5":                 "openai",
     "gemma4:31b-cloud":        "ollama",
     "nvidia/nemotron-3-ultra-550b-a55b": "nvidia",
+    "moonshotai/kimi-k2.6":             "nvidia",
 }
 
 # API key env var names per provider
