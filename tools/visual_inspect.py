@@ -131,7 +131,7 @@ def visual_inspect(question: str, resize_width: int = 1280) -> str:
 # Vision API helpers
 # ---------------------------------------------------------------------------
 
-def _call_nvidia_vision(b64_data: str, question: str, api_key: str) -> str:
+def _call_nvidia_vision(b64_data: str, question: str, api_key: str, max_tokens: int = 1024) -> str:
     """Call moonshotai/kimi-k2.6 on NVIDIA NIM with a base64 PNG screenshot.
 
     Uses the OpenAI-compatible /v1/chat/completions endpoint at
@@ -161,7 +161,7 @@ def _call_nvidia_vision(b64_data: str, question: str, api_key: str) -> str:
                 ],
             }
         ],
-        "max_tokens": 1024,
+        "max_tokens": max_tokens,
         "temperature": 0.20,
         "top_p": 1.00,
         "stream": False,
@@ -193,7 +193,7 @@ def _call_nvidia_vision(b64_data: str, question: str, api_key: str) -> str:
         return f"ERROR: NVIDIA response parse failed: {exc}"
 
 
-def _call_anthropic_vision(b64_data: str, question: str, api_key: str) -> str:
+def _call_anthropic_vision(b64_data: str, question: str, api_key: str, max_tokens: int = 1024) -> str:
     """Call Claude claude-sonnet-4-6 with a base64 PNG screenshot."""
     try:
         import httpx
@@ -202,7 +202,7 @@ def _call_anthropic_vision(b64_data: str, question: str, api_key: str) -> str:
 
     payload = {
         "model": "claude-sonnet-4-6",
-        "max_tokens": 1024,
+        "max_tokens": max_tokens,
         "messages": [
             {
                 "role": "user",
@@ -251,7 +251,7 @@ def _call_anthropic_vision(b64_data: str, question: str, api_key: str) -> str:
         return f"ERROR: Anthropic response parse failed: {exc}"
 
 
-def _call_gemini_vision(b64_data: str, question: str, api_key: str) -> str:
+def _call_gemini_vision(b64_data: str, question: str, api_key: str, max_tokens: int = 1024) -> str:
     """Call Gemini 2.0 Flash with a base64 PNG screenshot."""
     try:
         import httpx
@@ -276,7 +276,7 @@ def _call_gemini_vision(b64_data: str, question: str, api_key: str) -> str:
                 ]
             }
         ],
-        "generationConfig": {"maxOutputTokens": 1024},
+        "generationConfig": {"maxOutputTokens": max_tokens},
     }
 
     try:

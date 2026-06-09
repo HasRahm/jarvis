@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 def visual_click(
     description: str,
     window_hint: str = None,
-    resize_width: int = 1280,
-    duration: float = 0.8,
+    resize_width: int = 1024,
+    duration: float = 0.4,
 ) -> str:
     """
     Find a UI element by visual description and click it using kimi-k2.6 Vision.
@@ -164,10 +164,14 @@ def visual_click(
 
     vision_response = None
 
+    # visual_click only needs a single "FOUND x y" line — cap output tokens low
+    # so the model stops generating immediately (faster completion).
+    VC_MAX_TOKENS = 64
+
     # Primary: NVIDIA kimi-k2.6
     nvidia_key = os.environ.get("NVIDIA_API_KEY", "").strip()
     if nvidia_key:
-        vision_response = _call_nvidia_vision(b64_data, prompt, nvidia_key)
+        vision_response = _call_nvidia_vision(b64_data, prompt, nvidia_key, max_tokens=VC_MAX_TOKENS)
         if vision_response.startswith("ERROR:"):
             logger.warning("[VisualClick] NVIDIA failed: %s. Trying Anthropic.", vision_response)
             vision_response = None
@@ -176,7 +180,7 @@ def visual_click(
     if vision_response is None:
         anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
         if anthropic_key:
-            vision_response = _call_anthropic_vision(b64_data, prompt, anthropic_key)
+            vision_response = _call_anthropic_vision(b64_data, prompt, anthropic_key, max_tokens=VC_MAX_TOKENS)
             if vision_response.startswith("ERROR:"):
                 logger.warning("[VisualClick] Anthropic failed: %s. Trying Gemini.", vision_response)
                 vision_response = None
@@ -185,7 +189,7 @@ def visual_click(
     if vision_response is None:
         gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
         if gemini_key:
-            vision_response = _call_gemini_vision(b64_data, prompt, gemini_key)
+            vision_response = _call_gemini_vision(b64_data, prompt, gemini_key, max_tokens=VC_MAX_TOKENS)
         else:
             return "[VisualClick] FAILED: No vision API key available (NVIDIA_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY)"
 

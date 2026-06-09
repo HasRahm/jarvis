@@ -84,48 +84,82 @@ class VisualVocabulary:
 
     # ── System Prompt Injection ───────────────────────────────────────────────
 
+    # Compact, always-injected summary (~3 KB instead of the full ~48 KB tables).
+    # The full tables are one cheap `vocab_lookup(category)` call away when a hard
+    # UI actually needs them — this keeps the per-turn prompt small for every task.
+    _CHEATSHEET = """--- VISUAL VOCABULARY (quick reference) ---
+Call `vocab_lookup("icons"|"logos"|"patterns")` for the FULL table when you need detail.
+
+ROUTING RULE (most important — pick the fast tool):
+- Native/HTML/Electron-chrome UI (real OS controls): try `hybrid_locate_click` FIRST —
+  it finds the element via the window graph + accessibility tree in ~1ms, NO vision call.
+- WebGL/OpenGL canvas (Figma canvas, Blender, 3D/game/map views): use `visual_click`
+  (vision) — the accessibility tree can't see inside a pixel canvas. screen_ocr also fails there.
+- When you DO use visual_click, ALWAYS pass window_hint so the screenshot is cropped to that
+  window (faster + more accurate). Batch focus+click+type+enter into ONE desktop_batch_actions call.
+
+COMMON ICONS (shape -> meaning):
+- magnifying glass = search   - gear/cog = settings        - X = close/dismiss
+- ☰ three lines = menu/nav    - + plus = add/create        - trash can = delete
+- pencil = edit               - ⋯/⋮ three dots = more menu  - ← / → = back / forward
+- house = home                - bell = notifications        - person = profile/account
+- ↻ circle arrow = refresh    - funnel = filter            - ↑↓ = sort
+- floppy/cloud-up = save      - down-arrow-box = download   - paperclip = attach
+- star = favorite             - checkmark = success/confirm - ! in triangle = warning
+- ▶ = play   ‖ = pause   ■ = stop   - eye = show/hide   - paper-plane = send
+
+APP ui_type (does screen_ocr / hybrid_locate_click work?):
+- Figma = electron_webgl (OCR FAILS on canvas -> visual_click)
+- Blender = opengl (OCR FAILS everywhere -> visual_click)
+- Chrome/Edge/Firefox = html (DOM ok; address bar = Ctrl+L)
+- VS Code = electron (cmd palette Ctrl+Shift+P, terminal Ctrl+`)
+- Slack/Discord/Teams/Notion = electron (search Ctrl+K; message input at bottom)
+- Word/Excel/PowerPoint = native_win32 + COM (prefer win32com automation)
+- File Explorer/Terminal/Notepad = native_win32 (OCR + hybrid_locate_click work)
+
+COMMON LAYOUT (where things live):
+- Top bar = global actions/search   - Left sidebar = navigation/file tree
+- Right panel = properties/inspector - Bottom bar = status / message input
+- Modal w/ dim overlay = must act (OK/Cancel) before continuing
+- Loading spinner = wait, don't click yet   - Card grid / list = click item to open
+--- END VISUAL VOCABULARY ---"""
+
+    def get_cheatsheet(self) -> str:
+        """Return the compact always-injected summary, plus any learned patterns."""
+        cs = self._CHEATSHEET
+        if self.learned:
+            cs += (
+                "\n\n--- RECENTLY LEARNED (high confidence, this/prior sessions) ---\n"
+                + self.learned
+                + "\n--- END LEARNED ---"
+            )
+        return cs
+
+    def lookup(self, category: str) -> str:
+        """Return the FULL table for a category: 'icons', 'logos', or 'patterns'."""
+        cat = (category or "").strip().lower()
+        if cat in ("icon", "icons"):
+            return self.icons or "No icon vocabulary loaded."
+        if cat in ("logo", "logos", "app", "apps", "app-logos"):
+            return self.logos or "No app-logo vocabulary loaded."
+        if cat in ("pattern", "patterns", "ui", "ui-patterns", "layout"):
+            return self.patterns or "No UI-pattern vocabulary loaded."
+        return (
+            f"Unknown vocab category '{category}'. "
+            "Valid categories: 'icons', 'logos', 'patterns'."
+        )
+
     def get_context_addition(self) -> str:
         """
-        Returns a formatted markdown block to append to the Hermes system prompt.
-        The agent can reference these tables when interpreting visual_inspect
-        output or forming visual_click descriptions.
+        Returns the compact cheatsheet to append to the Hermes system prompt.
+        (The full ~48 KB tables are fetched on demand via the vocab_lookup tool.)
 
         Returns empty string if all vocabulary files are missing (graceful
         degradation — no crash if visual-vocab/ doesn't exist yet).
         """
         if not self.icons and not self.logos and not self.patterns:
             return ""
-
-        sections = []
-
-        sections.append(
-            "--- VISUAL VOCABULARY LOADED ---\n"
-            "Use these reference tables when:\n"
-            "  1. Interpreting visual_inspect output — match described shapes to icon names\n"
-            "  2. Forming visual_click descriptions — use standard icon/pattern names\n"
-            "  3. Checking if OCR will work — see ui_type column in App Logo Guide\n"
-            "  4. Identifying which app is open — match logo description to App Logo Guide\n"
-        )
-
-        if self.icons:
-            sections.append("## Icon Dictionary\n" + self.icons)
-
-        if self.logos:
-            sections.append("## App Logo & Identity Guide\n" + self.logos)
-
-        if self.patterns:
-            sections.append("## UI Layout Patterns\n" + self.patterns)
-
-        if self.learned:
-            sections.append(
-                "## Recently Learned Patterns\n"
-                "> These were discovered in recent sessions — high confidence.\n"
-                + self.learned
-            )
-
-        sections.append("--- END VISUAL VOCABULARY ---")
-
-        return "\n\n" + "\n\n".join(sections) + "\n\n"
+        return "\n\n" + self.get_cheatsheet() + "\n\n"
 
     # ── Self-Learning ─────────────────────────────────────────────────────────
 
@@ -183,3 +217,8 @@ def get_vocab_context_addition() -> str:
 def vocab_learn(heading: str, content: str) -> str:
     """Convenience function for dispatcher.py import."""
     return VisualVocabulary().learn(heading, content)
+
+
+def vocab_lookup(category: str) -> str:
+    """Convenience function for dispatcher.py import — full table on demand."""
+    return VisualVocabulary().lookup(category)

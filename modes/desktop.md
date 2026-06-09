@@ -52,22 +52,43 @@ visual_inspect("Where is the search bar in the Community page? Give me its coord
 retry the same action again. Call `visual_inspect` to understand what happened, and use
 `visual_click` to interact with canvas elements. This prevents infinite retry loops.
 
-## Visual Vocabulary (Phase 22f)
+## SPEED RULES (read first — Phase 22h)
 
-You have a universal visual grammar loaded in your context (`--- VISUAL VOCABULARY LOADED ---`):
+Automation is slow when you take many small steps. Three rules keep it fast:
 
-- **Icon Dictionary**: What common icon shapes mean across ALL apps.
-  - Magnifying glass = search input. Gear = settings. Hamburger (≡) = navigation menu. Plus = create. Trash = delete.
-  - Use these names when forming `visual_click` descriptions: `visual_click("magnifying glass search icon in top bar")`
+1. **Batch everything into ONE call.** Each separate tool call is another slow LLM round-trip.
+   Put a whole interaction into a single `desktop_batch_actions` call — it now supports
+   `visual_click` and `visual_inspect` as action types, not just click/type:
+   ```
+   desktop_batch_actions([
+     {"type":"focus", "title_query":"Figma"},
+     {"type":"visual_click", "description":"Community search bar", "window_hint":"Figma"},
+     {"type":"type_text", "text":"dashboard UI kit"},
+     {"type":"press_keys", "keys":["enter"]}
+   ])
+   ```
+   That's 4 actions in 1 turn instead of 4 turns.
 
-- **App Logo Guide**: How to identify which app is open and which automation tools work.
-  - Check the `ui_type` column before choosing tools:
-    - `electron_webgl` (e.g., Figma) → **screen_ocr FAILS on canvas** → use `visual_click` + `visual_inspect`
-    - `opengl` (e.g., Blender) → **screen_ocr FAILS everywhere** → only `visual_click` + `visual_inspect`
-    - `native_win32`, `html`, `electron` → `screen_ocr` and `hybrid_locate_click` work
+2. **Pick the fast tool — vision is the FALLBACK, not the default.**
+   - Real OS UI (native_win32 / html / electron chrome, menus, inputs) → try `hybrid_locate_click`
+     FIRST. It finds the element via the window graph + accessibility tree in ~1 ms with NO
+     network call. If the element is real OS UI, the graph already knows where it is.
+   - Pixel canvas (WebGL/OpenGL — Figma canvas, Blender, 3D/game/map views) → use `visual_click`.
+     `ControlFromPoint` only returns the canvas container there, so vision is required.
 
-- **UI Layout Patterns**: How to interpret screen structure.
-  - Left sidebar = navigation. Top bar = actions/search. Right panel = properties. Modal = blocks interaction.
+3. **When you use `visual_click`, ALWAYS pass `window_hint`.** It crops the screenshot to that
+   window via the graph before sending to vision — smaller image = faster + more accurate.
+
+## Visual Vocabulary (Phase 22f/22h)
+
+A compact visual-grammar **cheatsheet** is loaded in your context (`--- VISUAL VOCABULARY (quick reference) ---`):
+icon shapes (magnifier=search, gear=settings, ≡=menu…), per-app `ui_type` (which tools work),
+and layout patterns. For the FULL table when the cheatsheet isn't enough, call:
+```
+vocab_lookup("icons")     # full icon shape -> meaning table
+vocab_lookup("logos")     # full app logo + ui_type + automation-notes table
+vocab_lookup("patterns")  # full UI layout pattern table
+```
 
 **After successfully automating a task**: call `vocab_learn` to record what you learned:
 ```

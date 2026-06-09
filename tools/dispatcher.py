@@ -168,6 +168,24 @@ TOOL_DEFINITIONS = [
   {
     "type": "function",
     "function": {
+      "name": "vocab_lookup",
+      "description": "Fetch the FULL visual-vocabulary table for a category when the quick-reference cheatsheet in your context isn't enough. Returns the complete table of icon shapes, app logos+ui_types, or UI layout patterns.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": ["icons", "logos", "patterns"],
+            "description": "'icons' = full icon shape->meaning table; 'logos' = full app logo + ui_type + automation-notes table; 'patterns' = full UI layout pattern table."
+          }
+        },
+        "required": ["category"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "delegate_task",
       "description": "Delegate a complex build task to the multi-agent IDE. Use this for tasks that involve creating full features with database, API, and UI components. The orchestrator will decompose the task and route subtasks to specialized agents (backend, frontend, QA).",
       "parameters": {
@@ -285,7 +303,7 @@ TOOL_DEFINITIONS = [
     "type": "function",
     "function": {
       "name": "desktop_batch_actions",
-      "description": "Execute a list of multiple GUI actions (mouse moves, clicks, keypresses, typing, and wait delays) sequentially in a single tool call to eliminate LLM latencies.",
+      "description": "Execute MULTIPLE GUI actions in ONE call to avoid a slow LLM round-trip per step. PREFER THIS for any sequence — e.g. focus a window, click a search bar (visual_click), type a query, press Enter — all in a single call. Each separate tool call is another LLM turn.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -297,12 +315,15 @@ TOOL_DEFINITIONS = [
               "properties": {
                 "type": {
                   "type": "string",
-                  "description": "The type of action: 'focus', 'click', 'type_text', 'press_keys', 'scroll', or 'wait'"
+                  "description": "Action type: 'focus', 'click', 'visual_click', 'visual_inspect', 'type_text', 'press_keys', 'scroll', or 'wait'"
                 },
                 "title_query": {"type": "string", "description": "Used with 'focus' action to search open window titles"},
                 "x": {"type": "integer", "description": "Used with 'click' action for X coordinate"},
                 "y": {"type": "integer", "description": "Used with 'click' action for Y coordinate"},
-                "duration": {"type": "number", "description": "Optional click mouse glide duration in seconds (default 1.5)"},
+                "duration": {"type": "number", "description": "Optional click/visual_click mouse glide duration in seconds (default 0.4)"},
+                "description": {"type": "string", "description": "Used with 'visual_click' — visual description of the element to find and click (for WebGL/canvas UIs)"},
+                "window_hint": {"type": "string", "description": "Used with 'visual_click' — partial window title to crop the screenshot to (faster + more accurate). Always provide when known."},
+                "question": {"type": "string", "description": "Used with 'visual_inspect' — what to look for on screen"},
                 "text": {"type": "string", "description": "Used with 'type_text' action to type text with realistic human pauses"},
                 "keys": {
                   "type": "array",
@@ -523,7 +544,7 @@ def dispatch(fn_name: str, args: dict, orch_agent=None):
     # The Cortex is designed to protect shell/file ops from running in wrong apps, not to block
     # intentional window navigation (pressing WIN, clicking apps, etc.)
     _CORTEX_EXEMPT = {
-        "brain_query", "brain_write", "vocab_learn", "read_file", "list_dir", "run_command",
+        "brain_query", "brain_write", "vocab_learn", "vocab_lookup", "read_file", "list_dir", "run_command",
         # GUI tools — these ARE the context switching, exempting them is intentional:
         "desktop_smooth_click", "desktop_type_text", "desktop_press_keys", "desktop_scroll",
         "desktop_focus_window", "desktop_get_active_window", "desktop_batch_actions",
@@ -628,6 +649,9 @@ def _dispatch_raw(fn_name: str, args: dict):
     elif fn_name == "vocab_learn":                                     # Phase 22f
         from core.system.visual_vocab import vocab_learn
         return vocab_learn(args.get("heading", ""), args.get("content", ""))
+    elif fn_name == "vocab_lookup":                                    # Phase 22h
+        from core.system.visual_vocab import vocab_lookup
+        return vocab_lookup(args.get("category", ""))
     elif fn_name == "delegate_task":
         from core.orchestrator.dag import run_dag
         result = run_dag(args.get("task"), dry_run=args.get("dry_run", False))
