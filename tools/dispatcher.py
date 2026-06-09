@@ -1,4 +1,6 @@
 import json
+import os
+import sys
 from tools.filesystem import read_file, write_file, list_dir
 from tools.shell import run_command
 from tools.browser import browser_navigate, browser_extract_text, browser_click, browser_screenshot
