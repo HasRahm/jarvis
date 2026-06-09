@@ -234,6 +234,16 @@ The project is currently being developed on a **Windows** environment, meaning s
   - `agents/model_router.py`: `get_provider()` now logs a warning instead of silently returning `"unknown"` for unmapped models.
   - `core/hermes/hermes_cli_runner.py`: Added `.env` self-load at top so runner works standalone (not just via jarvis-cli.py subprocess).
 
+### Phase 22c: Mouse Braille Cursor + Verification Loop (COMPLETED)
+- **Root cause fixed — wrong window bug**: UIAutomation `WalkControl()` bleeds across window boundaries — with Figma focused, it still returned the Windows Taskbar's `SearchButton` (AutoID=SearchButton, y=1008) because the accessibility tree is not scoped to the foreground HWND. Confirmed via `scratch/desktop_ui_cache.json` index 0.
+- **Layer 2 replaced — Mouse Braille** (`tools/hybrid_cursor.py`): Old `_layer2_braille()` (WalkControl UIAutomation tree) replaced by `_layer2_mouse_braille(target, window_node)`. Uses `auto.ControlFromPoint(x, y)` to probe a grid of points **inside the target window's pixel bounds** — like a finger reading braille. Probe coordinates are clamped to `[wx+5..wx+ww-5, wy+35..wy+wh-5]`, so the taskbar (y≈1008) can never be probed. Two-pass scan: coarse (60px step, top 40% of window) then fine (25px step, full window). On match, cursor is already at target — click immediately.
+- **Layer 1 extended**: `_layer1_graph_focus()` now returns 3-tuple `(ok, msg, window_node)`. `window_node` carries `{x, y, w, h}` from the Win32 window graph for use by Layer 2b bounds.
+- **Verification loop added** (`tools/hybrid_cursor.py`): `hybrid_locate_click()` now accepts `verify_text` and `max_retries` params. After each successful click, `_verify_outcome()` checks: (1) `ScreenImprintGraph` density delta vs. pre-click baseline (fast, ~100ms/frame), (2) `_check_text_on_screen()` OCR scan for expected text. On failure: retries the full Layer 1→2b→3 sequence up to `max_retries` times.
+- **Pre-click baseline**: `hybrid_locate_click` captures a screen imprint snapshot before each click attempt and passes it as `pre_action_imprint` to `_verify_outcome`, ensuring changes during the click itself are detected (not just post-seeding).
+- **`_check_text_on_screen(text, min_conf)`**: New helper — OCR screen check without clicking; used by verification loop.
+- **Speed improvement**: ControlFromPoint (~1ms/call) vs full WalkControl tree (2-5s). Coarse pass finds top-of-window elements (toolbars, search bars) typically in <10 probes.
+- **`tools/dispatcher.py`**: Updated `hybrid_locate_click` tool definition to add `verify_text` and `max_retries` params; updated `description` to reflect Mouse Braille; updated dispatch call to pass new params.
+
 ### Phase 22b: Hybrid Cursor Location System & Dispatcher Bug Fixes (COMPLETED)
 - **`tools/hybrid_cursor.py`** (new): `hybrid_locate_click(target, window_hint)` — 3-layer cursor system:
   - **Layer 1 (Graph)**: `get_3d_window_graph()` verifies the target window exists in the Win32 stack; `desktop_focus_window()` brings it to front; `desktop_get_active_window()` confirms focus succeeded. On focus failure, **skips Layer 2 entirely** (UIAutomation on wrong window causes infinite loops) and jumps to Layer 3.

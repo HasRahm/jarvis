@@ -345,7 +345,7 @@ TOOL_DEFINITIONS = [
     "type": "function",
     "function": {
       "name": "hybrid_locate_click",
-      "description": "Locate a UI element and click it using a hybrid 3-layer approach: (1) Graph — confirms window exists and focuses it via Win32, (2) Braille — UIAutomation accessibility tree lookup, (3) Screenshot OCR — visual fallback using pytesseract. Use this instead of desktop_get_ui_tree + desktop_interact_with_element for robust element clicking when window focus cannot be guaranteed.",
+      "description": "Locate a UI element and click it using a hybrid 3-layer approach: (1) Graph — confirms window exists and focuses it via Win32, (2) MouseBraille — ControlFromPoint grid scan INSIDE the window bounds (cursor acts as a braille finger; never probes taskbar/other windows), (3) Screenshot OCR — visual fallback using pytesseract. Supports verify_text to check the outcome and auto-retry if the expected result isn't visible.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -356,6 +356,14 @@ TOOL_DEFINITIONS = [
           "window_hint": {
             "type": "string",
             "description": "Partial window title (e.g. 'Figma', 'Spotify'). Optional but strongly recommended to avoid clicking the wrong window."
+          },
+          "verify_text": {
+            "type": "string",
+            "description": "Text expected to appear on screen AFTER clicking (e.g. 'scheduling' after clicking the search bar). If provided, the function verifies the outcome via OCR and retries automatically if not found."
+          },
+          "max_retries": {
+            "type": "integer",
+            "description": "How many times to retry the full click sequence if verification fails. Default 2."
           }
         },
         "required": ["target"]
@@ -575,9 +583,14 @@ def _dispatch_raw(fn_name: str, args: dict):
         return desktop_get_ui_tree(args.get("max_depth", 8), args.get("search_query"))
     elif fn_name == "desktop_interact_with_element":
         return desktop_interact_with_element(args.get("index"), args.get("action", "click"), args.get("text"))
-    elif fn_name == "hybrid_locate_click":                          # Phase 22b
+    elif fn_name == "hybrid_locate_click":                          # Phase 22c
         from tools.hybrid_cursor import hybrid_locate_click
-        return hybrid_locate_click(args.get("target", ""), args.get("window_hint"))
+        return hybrid_locate_click(
+            args.get("target", ""),
+            args.get("window_hint"),
+            args.get("verify_text"),
+            int(args.get("max_retries", 2)),
+        )
     elif fn_name == "screen_imprint":
         from core.system.screen_imprint import ScreenImprintGraph
         return json.dumps(ScreenImprintGraph().imprint(), indent=2)
