@@ -342,6 +342,27 @@ TOOL_DEFINITIONS = [
   {
     "type": "function",
     "function": {
+      "name": "hybrid_locate_click",
+      "description": "Locate a UI element and click it using a hybrid 3-layer approach: (1) Graph — confirms window exists and focuses it via Win32, (2) Braille — UIAutomation accessibility tree lookup, (3) Screenshot OCR — visual fallback using pytesseract. Use this instead of desktop_get_ui_tree + desktop_interact_with_element for robust element clicking when window focus cannot be guaranteed.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "Text label of the UI element to click (e.g. 'Search', 'Community', 'Note taking app')"
+          },
+          "window_hint": {
+            "type": "string",
+            "description": "Partial window title (e.g. 'Figma', 'Spotify'). Optional but strongly recommended to avoid clicking the wrong window."
+          }
+        },
+        "required": ["target"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "screen_imprint",
       "description": "Capture the current screen density matrix, ASCII map, and changes.",
       "parameters": {"type": "object", "properties": {}}
@@ -426,6 +447,7 @@ def dispatch(fn_name: str, args: dict, orch_agent=None):
         "desktop_smooth_click", "desktop_type_text", "desktop_press_keys", "desktop_scroll",
         "desktop_focus_window", "desktop_get_active_window", "desktop_batch_actions",
         "desktop_screenshot", "desktop_get_ui_tree", "desktop_interact_with_element",
+        "hybrid_locate_click",
         "visual_servo_click", "browser_click", "browser_navigate", "browser_screenshot",
         "screen_imprint", "screen_ocr", "get_3d_window_graph", "get_window_stack",
     }
@@ -551,15 +573,47 @@ def _dispatch_raw(fn_name: str, args: dict):
         return desktop_get_ui_tree(args.get("max_depth", 8), args.get("search_query"))
     elif fn_name == "desktop_interact_with_element":
         return desktop_interact_with_element(args.get("index"), args.get("action", "click"), args.get("text"))
+    elif fn_name == "hybrid_locate_click":                          # Phase 22b
+        from tools.hybrid_cursor import hybrid_locate_click
+        return hybrid_locate_click(args.get("target", ""), args.get("window_hint"))
     elif fn_name == "screen_imprint":
         from core.system.screen_imprint import ScreenImprintGraph
         return json.dumps(ScreenImprintGraph().imprint(), indent=2)
     elif fn_name == "screen_ocr":
-        from core.system.screen_reader import JarvisScreenReader
-        return json.dumps(JarvisScreenReader().read_all_text(), indent=2)
+        # Fix: was calling async JarvisScreenReader().read_all_text() synchronously.
+        # Replaced with direct mss + pytesseract sync implementation.
+        try:
+            import mss as _mss
+            import pytesseract as _tess
+            from PIL import Image as _Image
+            if sys.platform == "win32":
+                _tess_bin = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+                if os.path.exists(_tess_bin):
+                    if hasattr(_tess, "pytesseract"):
+                        _tess.pytesseract.tesseract_cmd = _tess_bin
+                    else:
+                        _tess.tesseract_cmd = _tess_bin
+            with _mss.mss() as _sct:
+                _raw = _sct.grab(_sct.monitors[1])
+                _img = _Image.frombytes("RGB", (_raw.width, _raw.height), _raw.bgra, "raw", "BGRX")
+            _text = _tess.image_to_string(_img)
+            _data = _tess.image_to_data(_img, output_type=_tess.Output.DICT)
+            _words = [
+                {"text": t, "x": l + w // 2, "y": tp + h // 2, "conf": c}
+                for t, l, tp, w, h, c in zip(
+                    _data["text"], _data["left"], _data["top"],
+                    _data["width"], _data["height"], _data["conf"]
+                )
+                if t.strip() and int(c) > 40
+            ]
+            return json.dumps({"raw_text": _text, "words": _words}, indent=2)
+        except Exception as _e:
+            return json.dumps({"error": str(_e)}, indent=2)
     elif fn_name == "get_window_stack":
-        from core.system.screen_reader import JarvisScreenReader
-        return json.dumps(JarvisScreenReader().read_window_stack(), indent=2)
+        # Fix: was calling async JarvisScreenReader().read_window_stack() synchronously.
+        # Replaced with existing sync ctypes implementation in tools/windows.py.
+        from tools.windows import get_window_stack as _gws
+        return json.dumps(_gws(), indent=2)
     elif fn_name.startswith("mcp__"):
         parts = fn_name.split("__", 2)
         if len(parts) == 3 and _mcp_bridge is not None:

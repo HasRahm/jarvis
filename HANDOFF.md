@@ -234,6 +234,15 @@ The project is currently being developed on a **Windows** environment, meaning s
   - `agents/model_router.py`: `get_provider()` now logs a warning instead of silently returning `"unknown"` for unmapped models.
   - `core/hermes/hermes_cli_runner.py`: Added `.env` self-load at top so runner works standalone (not just via jarvis-cli.py subprocess).
 
+### Phase 22b: Hybrid Cursor Location System & Dispatcher Bug Fixes (COMPLETED)
+- **`tools/hybrid_cursor.py`** (new): `hybrid_locate_click(target, window_hint)` — 3-layer cursor system:
+  - **Layer 1 (Graph)**: `get_3d_window_graph()` verifies the target window exists in the Win32 stack; `desktop_focus_window()` brings it to front; `desktop_get_active_window()` confirms focus succeeded. On focus failure, **skips Layer 2 entirely** (UIAutomation on wrong window causes infinite loops) and jumps to Layer 3.
+  - **Layer 2 (Braille)**: `desktop_get_ui_tree(search_query=target)` queries UIAutomation on the now-confirmed foreground window; reads freshly-written `scratch/desktop_ui_cache.json`; finds exact then partial name match; calls `desktop_interact_with_element(index)`.
+  - **Layer 3 (OCR)**: `mss` screenshot (bypasses `/workspace` Docker path issue of `desktop_screenshot()`) + `pytesseract.image_to_data(DICT)`; supports single-word (exact conf>50, partial conf>30) and multi-word targets (adjacent same block+line tokens, min conf>30, click bounding-box center).
+- **`screen_ocr` bug fixed** (`tools/dispatcher.py`): Was calling async `JarvisScreenReader().read_all_text()` synchronously — returned a coroutine object. Replaced with direct `mss` + `pytesseract` sync implementation returning `{raw_text, words[]}`.
+- **`get_window_stack` bug fixed** (`tools/dispatcher.py`): Was calling async `JarvisScreenReader().read_window_stack()`. Replaced with `tools.windows.get_window_stack()` (existing sync ctypes Win32 implementation).
+- **Tool registered**: `hybrid_locate_click` added to `TOOL_DEFINITIONS`, `_CORTEX_EXEMPT`, and `_dispatch_raw()` in `dispatcher.py`.
+
 ## Important Architectural Rules
 
 1. **`AGENTS.md` is the only shared state between agents.** Agents must not call each other's APIs directly.
