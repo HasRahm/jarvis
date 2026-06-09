@@ -112,9 +112,17 @@ def main():
 
     skills_engine = SkillsEngine()
     skills_addition = skills_engine.get_skills_prompt_addition(prompt_content)
-    
+
+    # Phase 22f: Universal visual vocabulary — icon shapes, app logos, UI patterns
+    try:
+        from core.system.visual_vocab import get_vocab_context_addition
+        vocab_addition = get_vocab_context_addition()
+    except Exception as _ve:
+        print(Fore.YELLOW + f"[VisualVocab] Could not load vocabulary: {_ve}" + Style.RESET_ALL)
+        vocab_addition = ""
+
     messages = [
-        {"role": "system", "content": system_instruction + skills_addition},
+        {"role": "system", "content": system_instruction + skills_addition + vocab_addition},
         {"role": "user", "content": prompt_content}
     ]
 

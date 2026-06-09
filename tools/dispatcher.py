@@ -147,6 +147,27 @@ TOOL_DEFINITIONS = [
   {
     "type": "function",
     "function": {
+      "name": "vocab_learn",
+      "description": "Record a newly discovered UI pattern, icon location, or app-specific behavior to grow the visual vocabulary dataset. Call this after successfully automating something to help future sessions. Example: after clicking Figma's Community search bar, record its approximate location and what worked.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "heading": {
+            "type": "string",
+            "description": "Short descriptive title for what was learned, e.g. 'Figma Community search bar location on 1920px screen' or 'VS Code command palette keyboard shortcut'"
+          },
+          "content": {
+            "type": "string",
+            "description": "Detailed description: what you found, where it was, what automation worked, any app-specific gotchas. Include coordinates if known."
+          }
+        },
+        "required": ["heading", "content"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "delegate_task",
       "description": "Delegate a complex build task to the multi-agent IDE. Use this for tasks that involve creating full features with database, API, and UI components. The orchestrator will decompose the task and route subtasks to specialized agents (backend, frontend, QA).",
       "parameters": {
@@ -502,7 +523,7 @@ def dispatch(fn_name: str, args: dict, orch_agent=None):
     # The Cortex is designed to protect shell/file ops from running in wrong apps, not to block
     # intentional window navigation (pressing WIN, clicking apps, etc.)
     _CORTEX_EXEMPT = {
-        "brain_query", "brain_write", "read_file", "list_dir", "run_command",
+        "brain_query", "brain_write", "vocab_learn", "read_file", "list_dir", "run_command",
         # GUI tools — these ARE the context switching, exempting them is intentional:
         "desktop_smooth_click", "desktop_type_text", "desktop_press_keys", "desktop_scroll",
         "desktop_focus_window", "desktop_get_active_window", "desktop_batch_actions",
@@ -604,6 +625,9 @@ def _dispatch_raw(fn_name: str, args: dict):
         return brain_query(args.get("query"))
     elif fn_name == "brain_write":
         return brain_write(args.get("slug"), args.get("content"))
+    elif fn_name == "vocab_learn":                                     # Phase 22f
+        from core.system.visual_vocab import vocab_learn
+        return vocab_learn(args.get("heading", ""), args.get("content", ""))
     elif fn_name == "delegate_task":
         from core.orchestrator.dag import run_dag
         result = run_dag(args.get("task"), dry_run=args.get("dry_run", False))

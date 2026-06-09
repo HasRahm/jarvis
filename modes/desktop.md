@@ -52,6 +52,32 @@ visual_inspect("Where is the search bar in the Community page? Give me its coord
 retry the same action again. Call `visual_inspect` to understand what happened, and use
 `visual_click` to interact with canvas elements. This prevents infinite retry loops.
 
+## Visual Vocabulary (Phase 22f)
+
+You have a universal visual grammar loaded in your context (`--- VISUAL VOCABULARY LOADED ---`):
+
+- **Icon Dictionary**: What common icon shapes mean across ALL apps.
+  - Magnifying glass = search input. Gear = settings. Hamburger (≡) = navigation menu. Plus = create. Trash = delete.
+  - Use these names when forming `visual_click` descriptions: `visual_click("magnifying glass search icon in top bar")`
+
+- **App Logo Guide**: How to identify which app is open and which automation tools work.
+  - Check the `ui_type` column before choosing tools:
+    - `electron_webgl` (e.g., Figma) → **screen_ocr FAILS on canvas** → use `visual_click` + `visual_inspect`
+    - `opengl` (e.g., Blender) → **screen_ocr FAILS everywhere** → only `visual_click` + `visual_inspect`
+    - `native_win32`, `html`, `electron` → `screen_ocr` and `hybrid_locate_click` work
+
+- **UI Layout Patterns**: How to interpret screen structure.
+  - Left sidebar = navigation. Top bar = actions/search. Right panel = properties. Modal = blocks interaction.
+
+**After successfully automating a task**: call `vocab_learn` to record what you learned:
+```
+vocab_learn(
+  heading="Figma Community search bar — found at y=95 on 1920x1080",
+  content="visual_click('search input at top of Community canvas') reliably focuses it. Typing works after click."
+)
+```
+This builds the vocabulary dataset for future sessions — the more you record, the better future automations become.
+
 ## Workflow
 
 1. **Observe** — Use `desktop_get_active_window` and `get_3d_window_graph` to understand current state
