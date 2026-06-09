@@ -234,6 +234,15 @@ The project is currently being developed on a **Windows** environment, meaning s
   - `agents/model_router.py`: `get_provider()` now logs a warning instead of silently returning `"unknown"` for unmapped models.
   - `core/hermes/hermes_cli_runner.py`: Added `.env` self-load at top so runner works standalone (not just via jarvis-cli.py subprocess).
 
+### Phase 22f: visual_click window_hint — Graph-Based Window Cropping (COMPLETED)
+- **What changed**: `visual_click` now accepts an optional `window_hint` parameter (e.g. `window_hint="Figma"`). When provided, the full-screen screenshot is cropped to the target window's pixel bounds using `get_3d_window_graph()` before being sent to the vision API.
+- **Why**: Sending a full 1920×1080 screenshot to vision means the model must search the entire screen. Cropping to the window (e.g. 1440×900) gives the model only the relevant area — higher accuracy, lower API cost, and guarantees the click lands inside the right window.
+- **Flow**: `get_3d_window_graph()` → find node where `window_hint` is in title → crop `img` to `(wx, wy, wx+ww, wy+wh)` → resize cropped region to 1280px → send to vision → parse `FOUND x y` in *crop-relative coords* → scale back: `actual_x = wx + int(parsed_x * ww / resize_width)` → `desktop_smooth_click(actual_x, actual_y)`.
+- **Fallbacks**: If `window_hint` not found in graph, or graph lookup throws, falls back to full-screen (same as before). `graph_note` string in return value explains which path was taken.
+- **`tools/visual_click.py`**: Updated signature `(description, window_hint=None, resize_width=1280, duration=0.8)`. Section 1b inserted after screenshot capture. Resize, coordinate scaling, and return string all updated.
+- **`tools/dispatcher.py`**: `visual_click` tool schema updated — `window_hint` property added with description. Dispatch call updated to pass `args.get("window_hint")` as 2nd positional arg.
+- **Files changed**: `tools/visual_click.py`, `tools/dispatcher.py`.
+
 ### Phase 22e: visual_click — Vision-Guided Clicking for WebGL/Canvas (COMPLETED)
 - **Root cause fixed**: Agent reported "✅ Search submitted" without actually clicking the Figma Community search bar. `hybrid_locate_click` (Mouse Braille / ControlFromPoint) returns the WebGL canvas *container* — not elements *inside* it. Figma Community renders its search input, result cards, and all navigation inside a WebGL context.
 - **`tools/visual_click.py`** (new): Finds any UI element by visual description and clicks it. Flow: mss screenshot → PIL resize (1280px) → Claude Vision with strict `"FOUND x y / NOT FOUND"` prompt → parse `(x, y)` → scale from resized-image coords to actual screen resolution → `desktop_smooth_click(actual_x, actual_y)`. Reuses `_call_anthropic_vision` / `_call_gemini_vision` from `visual_inspect.py` — no code duplication.

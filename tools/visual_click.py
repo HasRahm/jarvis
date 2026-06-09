@@ -1,6 +1,6 @@
 # tools/visual_click.py
 """
-Visual Click — Vision-Guided Element Clicking (Phase 22e)
+Visual Click — Vision-Guided Element Clicking (Phase 22e/f)
 
 Finds a UI element by visual description and clicks it. Works for ANY rendered
 surface: HTML/DOM, WebGL canvas, Electron, native apps — ControlFromPoint and
@@ -9,15 +9,18 @@ pytesseract are not used.
 This is the same technique Claude Computer Use and OpenAI Operator use:
   screenshot → vision model identifies element coordinates → click at those coords
 
-Flow:
-  mss screenshot → PIL resize (1280px)
-    → Claude Vision: "Find [description] → reply FOUND x y"
-    → parse (x, y) from resized image
-    → scale to actual screen resolution
-    → desktop_smooth_click(actual_x, actual_y)
+Flow (with window_hint):
+  mss full screenshot
+    → get_3d_window_graph() → crop to target window bounds (wx, wy, ww, wh)
+    → resize CROP to 1280px  [smaller image → faster + cheaper API call]
+    → kimi-k2.6: "Find [description] → reply FOUND x y"  (coords in cropped image)
+    → scale back: actual_x = wx + int(parsed_x * ww / resize_width)
+    → desktop_smooth_click(actual_x, actual_y)   [guaranteed inside target window]
 
-Reuses _call_anthropic_vision / _call_gemini_vision from tools/visual_inspect.py
-to avoid duplicating the API-call logic.
+Without window_hint: full screen is sent (fallback, same as before).
+
+Reuses _call_nvidia_vision / _call_anthropic_vision / _call_gemini_vision
+from tools/visual_inspect.py — no code duplication.
 """
 
 import os
@@ -32,43 +35,41 @@ logger = logging.getLogger(__name__)
 
 def visual_click(
     description: str,
+    window_hint: str = None,
     resize_width: int = 1280,
     duration: float = 0.8,
 ) -> str:
     """
-    Find a UI element by visual description and click it using Claude Vision.
+    Find a UI element by visual description and click it using kimi-k2.6 Vision.
 
     Designed for WebGL/canvas/Electron UIs where ``hybrid_locate_click`` (which
     uses UIAutomation ControlFromPoint) fails because the element is rendered
     inside a pixel canvas rather than the OS accessibility tree.
 
     Args:
-        description: What to find and click, e.g.:
-                     "search bar in the Figma Community main area"
-                     "Community tab in the Figma left sidebar"
-                     "the blue Submit button near the bottom of the form"
-        resize_width: Screenshot is resized to this width before sending
-                      (default 1280px). Coordinates are scaled back to the
-                      full screen resolution automatically.
-        duration:     Mouse movement duration for smooth_click (seconds).
-                      Default 0.8s gives a natural-looking movement.
+        description:  What to find and click, e.g.:
+                      "search bar in the Figma Community main area"
+                      "Community tab in the Figma left sidebar"
+                      "the blue Submit button near the bottom of the form"
+        window_hint:  Partial window title (e.g. "Figma", "Chrome"). When
+                      provided the screenshot is CROPPED to that window's
+                      pixel bounds before being sent to vision — improves
+                      accuracy and reduces API cost. Uses get_3d_window_graph
+                      to find the window. If the window is not found, falls
+                      back to the full-screen image.
+        resize_width: Width to resize the image before sending (default 1280).
+                      Applied AFTER cropping when window_hint is used.
+        duration:     Mouse movement smoothness in seconds (default 0.8s).
 
     Returns:
-        A trace string, e.g.:
-          "[VisualClick] SUCCESS
-           Vision: FOUND 847 92
-           Scaled: (1270, 138) on 1920x1080 screen
-           Click: Moved to (1270, 138) and clicked"
-
-        On failure:
-          "[VisualClick] FAILED: vision model could not locate '...' ..."
+        "[VisualClick] SUCCESS / FAILED" trace string with coords at each stage.
     """
     if not description or not description.strip():
         return "ERROR: visual_click requires a non-empty 'description' parameter"
     description = description.strip()
 
     # ------------------------------------------------------------------ #
-    # 1. Capture screen + get actual resolution for coordinate scaling     #
+    # 1. Capture full screen + get resolution                              #
     # ------------------------------------------------------------------ #
     try:
         import mss
@@ -84,12 +85,48 @@ def visual_click(
         return f"[VisualClick] FAILED: screenshot capture error: {exc}"
 
     # ------------------------------------------------------------------ #
-    # 2. Resize proportionally                                             #
+    # 1b. Graph method — crop to target window bounds if window_hint given  #
+    # ------------------------------------------------------------------ #
+    crop_offset_x = 0  # window origin in screen coords (added back after scaling)
+    crop_offset_y = 0
+    crop_w = screen_w   # dimensions of the region sent to vision
+    crop_h = screen_h
+    graph_note = "full screen (no window_hint)"
+
+    if window_hint:
+        try:
+            from tools.windows import get_3d_window_graph
+            graph = get_3d_window_graph()
+            nodes = graph.get("nodes", [])
+            hint_lower = window_hint.lower()
+            match = next((n for n in nodes if hint_lower in n.get("title", "").lower()), None)
+
+            if match:
+                wx  = max(0, match["x"])
+                wy  = max(0, match["y"])
+                ww  = min(match["w"], screen_w - wx)
+                wh  = min(match["h"], screen_h - wy)
+
+                if ww > 50 and wh > 50:   # sanity check — ignore zero-size windows
+                    img = img.crop((wx, wy, wx + ww, wy + wh))
+                    crop_offset_x = wx
+                    crop_offset_y = wy
+                    crop_w, crop_h = ww, wh
+                    graph_note = f"cropped to '{match['title']}' @ ({wx},{wy}) {ww}x{wh}"
+                else:
+                    graph_note = f"window '{match['title']}' bounds too small ({ww}x{wh}), using full screen"
+            else:
+                titles = [n.get("title", "") for n in nodes[:5]]
+                graph_note = f"window_hint '{window_hint}' not found in graph {titles}, using full screen"
+        except Exception as exc:
+            graph_note = f"graph lookup failed ({exc}), using full screen"
+
+    # ------------------------------------------------------------------ #
+    # 2. Resize proportionally (applied to cropped region)                 #
     # ------------------------------------------------------------------ #
     try:
-        orig_w, orig_h = img.size
-        scale = resize_width / orig_w
-        new_h = int(orig_h * scale)
+        scale = resize_width / crop_w
+        new_h = int(crop_h * scale)
         img = img.resize((resize_width, new_h), Image.LANCZOS)
     except Exception as exc:
         return f"[VisualClick] FAILED: resize error: {exc}"
@@ -192,10 +229,12 @@ def visual_click(
         )
 
     # ------------------------------------------------------------------ #
-    # 7. Scale from resized-image coords to actual screen coords           #
+    # 7. Scale from resized-image coords back to actual screen coords      #
+    #    Vision coords are in the resized crop → scale to crop dims        #
+    #    then add the window's screen offset (crop_offset_x/y)             #
     # ------------------------------------------------------------------ #
-    actual_x = int(parsed_x * screen_w / resize_width)
-    actual_y = int(parsed_y * screen_h / new_h)
+    actual_x = crop_offset_x + int(parsed_x * crop_w / resize_width)
+    actual_y = crop_offset_y + int(parsed_y * crop_h / new_h)
 
     # Clamp to screen bounds with a small margin
     actual_x = max(5, min(actual_x, screen_w - 5))
@@ -216,6 +255,7 @@ def visual_click(
     return (
         f"[VisualClick] SUCCESS\n"
         f"Description: '{description}'\n"
+        f"Graph: {graph_note}\n"
         f"Vision response: {vision_response.strip()[:120]}\n"
         f"Parsed image coords: ({parsed_x}, {parsed_y}) in {resize_width}x{new_h}\n"
         f"Scaled screen coords: ({actual_x}, {actual_y}) on {screen_w}x{screen_h}\n"

@@ -411,7 +411,7 @@ TOOL_DEFINITIONS = [
     "type": "function",
     "function": {
       "name": "visual_click",
-      "description": "Find a UI element by visual description and click it using Claude Vision. Works for WebGL/canvas/Electron UIs where hybrid_locate_click fails (e.g. Figma Community search bar, Electron app content, browser SPA buttons). Vision model identifies the element's pixel coordinates in a screenshot and clicks at the scaled screen position. Example: visual_click('search bar in the Figma Community main area')",
+      "description": "Find a UI element by visual description and click it using kimi-k2.6 Vision. Works for WebGL/canvas/Electron UIs where hybrid_locate_click fails (e.g. Figma Community search bar, Electron app content, browser SPA buttons). Provide window_hint to crop the screenshot to just that window before sending — more accurate, cheaper, and guaranteed to click inside the right window. Example: visual_click('search bar in Figma Community', window_hint='Figma')",
       "parameters": {
         "type": "object",
         "properties": {
@@ -419,9 +419,13 @@ TOOL_DEFINITIONS = [
             "type": "string",
             "description": "Visual description of what to find and click, e.g. 'search bar in Figma Community main area' or 'Community tab in left sidebar'"
           },
+          "window_hint": {
+            "type": "string",
+            "description": "Partial window title to crop screenshot to (e.g. 'Figma', 'Chrome'). Uses the Win32 window graph to find the window bounds and crop before sending to vision. Strongly recommended for accuracy."
+          },
           "resize_width": {
             "type": "integer",
-            "description": "Width to resize screenshot before sending to vision API (default 1280). Higher = more detail for small elements."
+            "description": "Width to resize image before sending to vision API (default 1280). Applied after cropping."
           },
           "duration": {
             "type": "number",
@@ -676,10 +680,11 @@ def _dispatch_raw(fn_name: str, args: dict):
             args.get("question", "What is currently visible on screen?"),
             int(args.get("resize_width", 1280)),
         )
-    elif fn_name == "visual_click":                                   # Phase 22e
+    elif fn_name == "visual_click":                                   # Phase 22e/f
         from tools.visual_click import visual_click
         return visual_click(
             args.get("description", ""),
+            args.get("window_hint"),                                 # Phase 22f
             int(args.get("resize_width", 1280)),
             float(args.get("duration", 0.8)),
         )
