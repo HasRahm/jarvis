@@ -97,29 +97,101 @@ def visual_inspect(question: str, resize_width: int = 1280) -> str:
     )
 
     # ------------------------------------------------------------------ #
-    # 5a. Primary: Anthropic Claude Vision
+    # 5a. Primary: NVIDIA kimi-k2.6 Vision
     # ------------------------------------------------------------------ #
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if api_key:
-        result = _call_anthropic_vision(b64_data, full_question, api_key)
+    nvidia_key = os.environ.get("NVIDIA_API_KEY", "").strip()
+    if nvidia_key:
+        result = _call_nvidia_vision(b64_data, full_question, nvidia_key)
+        if not result.startswith("ERROR:"):
+            return result
+        logger.warning("[VisualInspect] NVIDIA call failed: %s. Trying Anthropic.", result)
+
+    # ------------------------------------------------------------------ #
+    # 5b. Fallback 1: Anthropic Claude Vision
+    # ------------------------------------------------------------------ #
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if anthropic_key:
+        result = _call_anthropic_vision(b64_data, full_question, anthropic_key)
         if not result.startswith("ERROR:"):
             return result
         logger.warning("[VisualInspect] Anthropic call failed: %s. Trying Gemini.", result)
 
     # ------------------------------------------------------------------ #
-    # 5b. Fallback: Gemini Vision
+    # 5c. Fallback 2: Gemini Vision
     # ------------------------------------------------------------------ #
     gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if gemini_key:
         result = _call_gemini_vision(b64_data, full_question, gemini_key)
         return result
 
-    return "ERROR: No vision API key available. Set ANTHROPIC_API_KEY or GEMINI_API_KEY in .env"
+    return "ERROR: No vision API key available. Set NVIDIA_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY in .env"
 
 
 # ---------------------------------------------------------------------------
 # Vision API helpers
 # ---------------------------------------------------------------------------
+
+def _call_nvidia_vision(b64_data: str, question: str, api_key: str) -> str:
+    """Call moonshotai/kimi-k2.6 on NVIDIA NIM with a base64 PNG screenshot.
+
+    Uses the OpenAI-compatible /v1/chat/completions endpoint at
+    https://integrate.api.nvidia.com with multimodal image_url content.
+    """
+    try:
+        import httpx
+    except ImportError:
+        return "ERROR: httpx not installed — run: pip install httpx"
+
+    payload = {
+        "model": "moonshotai/kimi-k2.6",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{b64_data}",
+                        },
+                    },
+                    {
+                        "type": "text",
+                        "text": question,
+                    },
+                ],
+            }
+        ],
+        "max_tokens": 1024,
+        "temperature": 0.20,
+        "top_p": 1.00,
+        "stream": False,
+    }
+
+    try:
+        resp = httpx.post(
+            "https://integrate.api.nvidia.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=45.0,
+        )
+    except httpx.TimeoutException:
+        return "ERROR: NVIDIA API timeout (45s)"
+    except Exception as exc:
+        return f"ERROR: NVIDIA API request failed: {exc}"
+
+    if resp.status_code != 200:
+        return f"ERROR: NVIDIA API {resp.status_code}: {resp.text[:300]}"
+
+    try:
+        choices = resp.json()["choices"]
+        return choices[0]["message"]["content"].strip()
+    except Exception as exc:
+        return f"ERROR: NVIDIA response parse failed: {exc}"
+
 
 def _call_anthropic_vision(b64_data: str, question: str, api_key: str) -> str:
     """Call Claude claude-sonnet-4-6 with a base64 PNG screenshot."""

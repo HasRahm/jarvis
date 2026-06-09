@@ -123,24 +123,36 @@ def visual_click(
     # ------------------------------------------------------------------ #
     # 5. Call vision API                                                   #
     # ------------------------------------------------------------------ #
-    from tools.visual_inspect import _call_anthropic_vision, _call_gemini_vision
+    from tools.visual_inspect import _call_nvidia_vision, _call_anthropic_vision, _call_gemini_vision
 
     vision_response = None
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if api_key:
-        vision_response = _call_anthropic_vision(b64_data, prompt, api_key)
+
+    # Primary: NVIDIA kimi-k2.6
+    nvidia_key = os.environ.get("NVIDIA_API_KEY", "").strip()
+    if nvidia_key:
+        vision_response = _call_nvidia_vision(b64_data, prompt, nvidia_key)
         if vision_response.startswith("ERROR:"):
-            logger.warning("[VisualClick] Anthropic failed: %s. Trying Gemini.", vision_response)
+            logger.warning("[VisualClick] NVIDIA failed: %s. Trying Anthropic.", vision_response)
             vision_response = None
 
+    # Fallback 1: Anthropic Claude Vision
+    if vision_response is None:
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        if anthropic_key:
+            vision_response = _call_anthropic_vision(b64_data, prompt, anthropic_key)
+            if vision_response.startswith("ERROR:"):
+                logger.warning("[VisualClick] Anthropic failed: %s. Trying Gemini.", vision_response)
+                vision_response = None
+
+    # Fallback 2: Gemini Vision
     if vision_response is None:
         gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
         if gemini_key:
             vision_response = _call_gemini_vision(b64_data, prompt, gemini_key)
         else:
-            return "[VisualClick] FAILED: No vision API key available (ANTHROPIC_API_KEY / GEMINI_API_KEY)"
+            return "[VisualClick] FAILED: No vision API key available (NVIDIA_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY)"
 
-    if vision_response.startswith("ERROR:"):
+    if vision_response is None or vision_response.startswith("ERROR:"):
         return f"[VisualClick] FAILED: vision API error — {vision_response}"
 
     # ------------------------------------------------------------------ #
