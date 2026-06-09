@@ -15,7 +15,7 @@ class ScreenImprintGraph:
         self.grid_size = grid_size
         self.last_imprint = None
 
-    async def imprint(self) -> Dict[str, Any]:
+    def imprint(self) -> Dict[str, Any]:
         """Captures the screen and builds the halftone density matrix utilizing high-speed NumPy vectorization."""
         with mss.mss() as sct:
             monitor = sct.monitors[1]  # Primary monitor
@@ -112,7 +112,7 @@ class ScreenImprintGraph:
         self.last_imprint = None
         while True:
             try:
-                res = await self.imprint()
+                res = self.imprint()
                 if res["changes"]["changed"]:
                     await callback(res)  # Await the async callback
             except Exception as e:

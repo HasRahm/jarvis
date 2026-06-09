@@ -531,13 +531,12 @@ def call_llm(messages, model="gemma4:31b-cloud", tools=None):
     Rotates through FALLBACK_CHAIN in order when a model fails.
     """
     FALLBACK_CHAIN = [
-        "kimi-k2.6:cloud",          # Ollama cloud proxy — free, no API key
-        "gemma4:31b-cloud",          # Ollama cloud proxy — free, no API key
-        "gpt-oss:120b-cloud",        # Ollama cloud proxy — free, no API key
+        "gemma4:31b-cloud",          # Ollama cloud proxy — free, no API key (primary free model)
         "claude-sonnet-4-6",         # Anthropic — paid but reliable
         "gpt-5.4",                   # OpenAI — fallback if quota available
         "gemini-3.1-pro-preview",    # Google Gemini — fallback
         "gemini-2.5-pro",            # Google Gemini — last resort
+        # Removed: kimi-k2.6:cloud, gpt-oss:120b-cloud — require paid Ollama subscription
     ]
 
     models_to_try = [model]
@@ -598,7 +597,8 @@ def call_llm(messages, model="gemma4:31b-cloud", tools=None):
                 return _call_anthropic_api(anthropic_key, m, messages, tools)
                 
             # 4. OpenAI Cloud Routing
-            elif m_lower.startswith("gpt-") or "openai" in m_lower or "gpt" in m_lower:
+            # Guard: :cloud and :latest suffix models belong to Ollama — never route to OpenAI.
+            elif (m_lower.startswith("gpt-") or "openai" in m_lower or "gpt" in m_lower) and not m_lower.endswith(":cloud") and not m_lower.endswith(":latest"):
                 openai_key = os.environ.get("OPENAI_API_KEY")
                 if not openai_key:
                     raise ValueError("OPENAI_API_KEY is not defined.")

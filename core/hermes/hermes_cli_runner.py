@@ -1,3 +1,11 @@
+# Force UTF-8 stdout/stderr so emoji and non-ASCII content (e.g. from browser_extract_text)
+# don't crash on Windows where the default codec is cp1252.
+import sys as _sys, io as _io
+if hasattr(_sys.stdout, "buffer"):
+    _sys.stdout = _io.TextIOWrapper(_sys.stdout.buffer, encoding="utf-8", errors="replace")
+if hasattr(_sys.stderr, "buffer"):
+    _sys.stderr = _io.TextIOWrapper(_sys.stderr.buffer, encoding="utf-8", errors="replace")
+
 # Auto-load .env so runner works standalone (not just via jarvis-cli.py subprocess)
 import os as _os
 _env_path = _os.path.join(
