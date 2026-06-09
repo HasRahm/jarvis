@@ -389,6 +389,27 @@ TOOL_DEFINITIONS = [
   {
     "type": "function",
     "function": {
+      "name": "visual_inspect",
+      "description": "Take a screenshot and ask a vision AI (Claude Sonnet) what it sees. Use this when screen_ocr fails — e.g. WebGL/canvas apps like Figma Community, Electron apps, or browser SPAs where OCR only returns sidebar/nav text. Returns natural-language description of what is visible on screen, including approximate pixel coordinates for UI elements. Example: visual_inspect('What Pokemon designs are shown in the Figma Community search results?')",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "What to look for on screen, e.g. 'What search results are shown in the main area?' or 'Where is the search bar and what text is in it?'"
+          },
+          "resize_width": {
+            "type": "integer",
+            "description": "Width to resize screenshot before sending (default 1280). Lower = faster/cheaper; higher = more detail for small text."
+          }
+        },
+        "required": ["question"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "get_window_stack",
       "description": "Return the ordered list of windows with their z-depth, bounds, and titles.",
       "parameters": {"type": "object", "properties": {}}
@@ -459,7 +480,7 @@ def dispatch(fn_name: str, args: dict, orch_agent=None):
         "desktop_screenshot", "desktop_get_ui_tree", "desktop_interact_with_element",
         "hybrid_locate_click",
         "visual_servo_click", "browser_click", "browser_navigate", "browser_screenshot",
-        "screen_imprint", "screen_ocr", "get_3d_window_graph", "get_window_stack",
+        "screen_imprint", "screen_ocr", "visual_inspect", "get_3d_window_graph", "get_window_stack",
     }
     # Check spatial context home before executing any mutating tool
     if os.environ.get("JARVIS_CI") != "true" and fn_name not in _CORTEX_EXEMPT:
@@ -624,6 +645,12 @@ def _dispatch_raw(fn_name: str, args: dict):
             return json.dumps({"raw_text": _text, "words": _words}, indent=2)
         except Exception as _e:
             return json.dumps({"error": str(_e)}, indent=2)
+    elif fn_name == "visual_inspect":                                 # Phase 22d
+        from tools.visual_inspect import visual_inspect
+        return visual_inspect(
+            args.get("question", "What is currently visible on screen?"),
+            int(args.get("resize_width", 1280)),
+        )
     elif fn_name == "get_window_stack":
         # Fix: was calling async JarvisScreenReader().read_window_stack() synchronously.
         # Replaced with existing sync ctypes implementation in tools/windows.py.

@@ -234,6 +234,15 @@ The project is currently being developed on a **Windows** environment, meaning s
   - `agents/model_router.py`: `get_provider()` now logs a warning instead of silently returning `"unknown"` for unmapped models.
   - `core/hermes/hermes_cli_runner.py`: Added `.env` self-load at top so runner works standalone (not just via jarvis-cli.py subprocess).
 
+### Phase 22d: visual_inspect — Vision AI Screen Reading (COMPLETED)
+- **Problem solved**: `screen_ocr` (pytesseract) is blind to WebGL/canvas-rendered UIs. Figma Community, Electron app main content, and browser SPA content return zero useful text — only the HTML sidebar nav is readable. This caused an infinite retry loop where the agent retyped "pokemon app theme" 5 times because OCR kept returning unchanged sidebar text.
+- **Solution**: `tools/visual_inspect.py` (new) — captures screen via mss, resizes to 1280px wide (cost control), base64-encodes, POSTs to **Anthropic Vision API** (`claude-sonnet-4-6`). Falls back to **Gemini 2.0 Flash** vision if `ANTHROPIC_API_KEY` is missing. Returns natural-language description with approximate `(x, y)` coordinates for UI elements.
+- **How Claude Computer Use / Codex Operator solve this**: They are multimodal — screenshots go directly to the vision model. `visual_inspect` is the same bridge for Jarvis: local text model (gemma4) acts as the brain, Claude Vision acts as the eyes.
+- **Usage**: `visual_inspect("What Pokemon designs are shown in the Figma Community search results?")` → Claude Vision returns: "I can see 6 design cards: 'Pokémon GO UI Kit' at (180,320), 'Pokemon App Design Kit' at (420,320)..."
+- **`modes/desktop.md` updated**: Added `visual_inspect` to tool table + "When OCR Fails" section with critical rule: "If `screen_ocr` returns only sidebar/nav text after an action, do NOT retry. Call `visual_inspect` instead."
+- **`tools/dispatcher.py` updated**: Added tool schema (27 tools total), `_CORTEX_EXEMPT`, dispatch case.
+- **Live test confirmed**: Claude Vision correctly described the Cursor IDE screen, active chat session title, model being used, and files being edited — proving canvas/electron content is fully readable.
+
 ### Phase 22c: Mouse Braille Cursor + Verification Loop (COMPLETED)
 - **Root cause fixed — wrong window bug**: UIAutomation `WalkControl()` bleeds across window boundaries — with Figma focused, it still returned the Windows Taskbar's `SearchButton` (AutoID=SearchButton, y=1008) because the accessibility tree is not scoped to the foreground HWND. Confirmed via `scratch/desktop_ui_cache.json` index 0.
 - **Layer 2 replaced — Mouse Braille** (`tools/hybrid_cursor.py`): Old `_layer2_braille()` (WalkControl UIAutomation tree) replaced by `_layer2_mouse_braille(target, window_node)`. Uses `auto.ControlFromPoint(x, y)` to probe a grid of points **inside the target window's pixel bounds** — like a finger reading braille. Probe coordinates are clamped to `[wx+5..wx+ww-5, wy+35..wy+wh-5]`, so the taskbar (y≈1008) can never be probed. Two-pass scan: coarse (60px step, top 40% of window) then fine (25px step, full window). On match, cursor is already at target — click immediately.
