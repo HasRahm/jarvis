@@ -410,6 +410,31 @@ TOOL_DEFINITIONS = [
   {
     "type": "function",
     "function": {
+      "name": "visual_click",
+      "description": "Find a UI element by visual description and click it using Claude Vision. Works for WebGL/canvas/Electron UIs where hybrid_locate_click fails (e.g. Figma Community search bar, Electron app content, browser SPA buttons). Vision model identifies the element's pixel coordinates in a screenshot and clicks at the scaled screen position. Example: visual_click('search bar in the Figma Community main area')",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Visual description of what to find and click, e.g. 'search bar in Figma Community main area' or 'Community tab in left sidebar'"
+          },
+          "resize_width": {
+            "type": "integer",
+            "description": "Width to resize screenshot before sending to vision API (default 1280). Higher = more detail for small elements."
+          },
+          "duration": {
+            "type": "number",
+            "description": "Mouse movement smoothness in seconds (default 0.8). Higher = slower/more natural."
+          }
+        },
+        "required": ["description"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "get_window_stack",
       "description": "Return the ordered list of windows with their z-depth, bounds, and titles.",
       "parameters": {"type": "object", "properties": {}}
@@ -480,7 +505,7 @@ def dispatch(fn_name: str, args: dict, orch_agent=None):
         "desktop_screenshot", "desktop_get_ui_tree", "desktop_interact_with_element",
         "hybrid_locate_click",
         "visual_servo_click", "browser_click", "browser_navigate", "browser_screenshot",
-        "screen_imprint", "screen_ocr", "visual_inspect", "get_3d_window_graph", "get_window_stack",
+        "screen_imprint", "screen_ocr", "visual_inspect", "visual_click", "get_3d_window_graph", "get_window_stack",
     }
     # Check spatial context home before executing any mutating tool
     if os.environ.get("JARVIS_CI") != "true" and fn_name not in _CORTEX_EXEMPT:
@@ -650,6 +675,13 @@ def _dispatch_raw(fn_name: str, args: dict):
         return visual_inspect(
             args.get("question", "What is currently visible on screen?"),
             int(args.get("resize_width", 1280)),
+        )
+    elif fn_name == "visual_click":                                   # Phase 22e
+        from tools.visual_click import visual_click
+        return visual_click(
+            args.get("description", ""),
+            int(args.get("resize_width", 1280)),
+            float(args.get("duration", 0.8)),
         )
     elif fn_name == "get_window_stack":
         # Fix: was calling async JarvisScreenReader().read_window_stack() synchronously.

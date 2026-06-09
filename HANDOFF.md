@@ -234,6 +234,15 @@ The project is currently being developed on a **Windows** environment, meaning s
   - `agents/model_router.py`: `get_provider()` now logs a warning instead of silently returning `"unknown"` for unmapped models.
   - `core/hermes/hermes_cli_runner.py`: Added `.env` self-load at top so runner works standalone (not just via jarvis-cli.py subprocess).
 
+### Phase 22e: visual_click — Vision-Guided Clicking for WebGL/Canvas (COMPLETED)
+- **Root cause fixed**: Agent reported "✅ Search submitted" without actually clicking the Figma Community search bar. `hybrid_locate_click` (Mouse Braille / ControlFromPoint) returns the WebGL canvas *container* — not elements *inside* it. Figma Community renders its search input, result cards, and all navigation inside a WebGL context.
+- **`tools/visual_click.py`** (new): Finds any UI element by visual description and clicks it. Flow: mss screenshot → PIL resize (1280px) → Claude Vision with strict `"FOUND x y / NOT FOUND"` prompt → parse `(x, y)` → scale from resized-image coords to actual screen resolution → `desktop_smooth_click(actual_x, actual_y)`. Reuses `_call_anthropic_vision` / `_call_gemini_vision` from `visual_inspect.py` — no code duplication.
+- **Coordinate scaling**: `actual_x = int(parsed_x * screen_w / resize_width)` — resized-image (1280px) coords are always scaled back to the actual monitor resolution (e.g. 1920×1080).
+- **Two-pass parse**: Pass 1 matches `FOUND x y` (strict); Pass 2 matches any `(x, y)` pattern as fallback.
+- **`tools/dispatcher.py`**: Added `visual_click` to TOOL_DEFINITIONS (28 tools), `_CORTEX_EXEMPT`, and dispatch case.
+- **`modes/desktop.md`**: Updated "When OCR Fails" section — `visual_click` is now the primary tool for canvas/WebGL element interaction; `visual_inspect` for verification.
+- **Live test confirmed**: `visual_click("Cursor chat input box")` → Vision: `FOUND 619 607` → scaled to `(928, 910)` on 1920×1080 → clicked successfully.
+
 ### Phase 22d: visual_inspect — Vision AI Screen Reading (COMPLETED)
 - **Problem solved**: `screen_ocr` (pytesseract) is blind to WebGL/canvas-rendered UIs. Figma Community, Electron app main content, and browser SPA content return zero useful text — only the HTML sidebar nav is readable. This caused an infinite retry loop where the agent retyped "pokemon app theme" 5 times because OCR kept returning unchanged sidebar text.
 - **Solution**: `tools/visual_inspect.py` (new) — captures screen via mss, resizes to 1280px wide (cost control), base64-encodes, POSTs to **Anthropic Vision API** (`claude-sonnet-4-6`). Falls back to **Gemini 2.0 Flash** vision if `ANTHROPIC_API_KEY` is missing. Returns natural-language description with approximate `(x, y)` coordinates for UI elements.
