@@ -531,10 +531,13 @@ def call_llm(messages, model="gemma4:31b-cloud", tools=None):
     Rotates through FALLBACK_CHAIN in order when a model fails.
     """
     FALLBACK_CHAIN = [
-        "gpt-5.4",
-        "gemini-3.1-pro-preview",
-        "gemini-2.5-pro",
-        "claude-sonnet-4-6"
+        "kimi-k2.6:cloud",          # Ollama cloud proxy — free, no API key
+        "gemma4:31b-cloud",          # Ollama cloud proxy — free, no API key
+        "gpt-oss:120b-cloud",        # Ollama cloud proxy — free, no API key
+        "claude-sonnet-4-6",         # Anthropic — paid but reliable
+        "gpt-5.4",                   # OpenAI — fallback if quota available
+        "gemini-3.1-pro-preview",    # Google Gemini — fallback
+        "gemini-2.5-pro",            # Google Gemini — last resort
     ]
 
     models_to_try = [model]
@@ -547,8 +550,13 @@ def call_llm(messages, model="gemma4:31b-cloud", tools=None):
         try:
             m_lower = m.lower()
             
-            # 1. Local Ollama Routing
-            if m_lower == "gemma4:31b-cloud" or "gemma" in m_lower:
+            # 1. Local Ollama Routing — catches all Ollama-named models:
+            #    ":cloud" and ":latest" are Ollama's naming conventions for proxied/local models.
+            #    Must run BEFORE vendor checks so gpt-oss:120b-cloud etc. don't hit OpenAI routing.
+            if (m_lower.endswith(":cloud") or m_lower.endswith(":latest") or
+                    "gemma" in m_lower or m_lower.startswith("llama") or
+                    m_lower.startswith("qwen") or m_lower.startswith("nomic") or
+                    m_lower.startswith("mxbai")):
                 if is_ollama_available():
                     print(Fore.CYAN + f"[LLM Adapter] Routing request to local Ollama (model: {m})..." + Style.RESET_ALL)
                     sys.stdout.flush()

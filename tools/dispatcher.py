@@ -4,11 +4,9 @@ from tools.shell import run_command
 from tools.browser import browser_navigate, browser_extract_text, browser_click, browser_screenshot
 from brain.query import brain_query
 from brain.write import brain_write
-from core.orchestrator.dag import run_dag
-from tools.visual_servo import visual_servo_click
+# Heavy modules (dag, mcp_bridge, visual_servo) imported lazily to prevent startup deadlocks
 from tools.desktop_automation import desktop_smooth_click, desktop_type_text, desktop_press_keys, desktop_scroll, desktop_get_active_window, desktop_focus_window, desktop_batch_actions, desktop_screenshot
 from tools.windows import get_3d_window_graph
-from core.system.mcp_bridge import JarvisMCPBridge
 from tools.desktop_ui_tree import desktop_get_ui_tree, desktop_interact_with_element
 
 
@@ -340,19 +338,57 @@ TOOL_DEFINITIONS = [
         "required": ["index"]
       }
     }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "screen_imprint",
+      "description": "Capture the current screen density matrix, ASCII map, and changes.",
+      "parameters": {"type": "object", "properties": {}}
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "screen_ocr",
+      "description": "Read all text currently visible on the screen using OCR.",
+      "parameters": {"type": "object", "properties": {}}
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_window_stack",
+      "description": "Return the ordered list of windows with their z-depth, bounds, and titles.",
+      "parameters": {"type": "object", "properties": {}}
+    }
   }
 ]
 
-mcp_bridge = JarvisMCPBridge()
-TOOL_DEFINITIONS.extend(mcp_bridge.get_mcp_tool_definitions())
+# Lazy-loaded MCP bridge and plugin tools — initialized on first dispatch call
+# to prevent asyncio thread deadlocks when Docker Desktop isn't running.
+_mcp_bridge = None
+_tools_extended = False
 
-# Load dynamic plugin tool definitions
-try:
-    from core.system.plugin_loader import plugin_loader
-    if plugin_loader.tool_definitions:
-        TOOL_DEFINITIONS.extend(plugin_loader.tool_definitions)
-except Exception as pe:
-    logger.warning(f"Failed loading plugin tool definitions: {pe}")
+def _ensure_tools_loaded():
+    global _mcp_bridge, _tools_extended, TOOL_DEFINITIONS
+    if _tools_extended:
+        return
+    _tools_extended = True
+    try:
+        from core.system.mcp_bridge import JarvisMCPBridge
+        _mcp_bridge = JarvisMCPBridge()
+        TOOL_DEFINITIONS.extend(_mcp_bridge.get_mcp_tool_definitions())
+    except Exception as me:
+        import logging
+        logging.getLogger(__name__).warning(f"MCP bridge init failed: {me}")
+    try:
+        from core.system.plugin_loader import plugin_loader
+        if plugin_loader.tool_definitions:
+            TOOL_DEFINITIONS.extend(plugin_loader.tool_definitions)
+    except Exception as pe:
+        import logging
+        logging.getLogger(__name__).warning(f"Failed loading plugin tool definitions: {pe}")
 
 _breakers = {}
 
@@ -372,19 +408,32 @@ def get_breaker(tool_name: str):
         _breakers[tool_name] = CircuitBreaker(tool_name)
     return _breakers[tool_name]
 
-def dispatch(fn_name: str, args: dict):
+def dispatch(fn_name: str, args: dict, orch_agent=None):
     """Wrapped tool dispatch with circuit breaker protection and spatial context checks"""
+    _ensure_tools_loaded()
     import os
     import time
     import logging
     
     logger = logging.getLogger(__name__)
     
+    # Desktop/GUI automation tools deliberately change window context — exempt them from the Cortex.
+    # The Cortex is designed to protect shell/file ops from running in wrong apps, not to block
+    # intentional window navigation (pressing WIN, clicking apps, etc.)
+    _CORTEX_EXEMPT = {
+        "brain_query", "brain_write", "read_file", "list_dir", "run_command",
+        # GUI tools — these ARE the context switching, exempting them is intentional:
+        "desktop_smooth_click", "desktop_type_text", "desktop_press_keys", "desktop_scroll",
+        "desktop_focus_window", "desktop_get_active_window", "desktop_batch_actions",
+        "desktop_screenshot", "desktop_get_ui_tree", "desktop_interact_with_element",
+        "visual_servo_click", "browser_click", "browser_navigate", "browser_screenshot",
+        "screen_imprint", "screen_ocr", "get_3d_window_graph", "get_window_stack",
+    }
     # Check spatial context home before executing any mutating tool
-    if os.environ.get("JARVIS_CI") != "true" and fn_name not in ["brain_query", "brain_write", "read_file", "list_dir", "run_command"]:
+    if os.environ.get("JARVIS_CI") != "true" and fn_name not in _CORTEX_EXEMPT:
         try:
             from core.orchestrator.dag import get_orchestrator
-            orch = get_orchestrator()
+            orch = orch_agent or get_orchestrator()
             if orch and getattr(orch, "task_id", None):
                 cortex = get_cortex()
                 
@@ -474,9 +523,11 @@ def _dispatch_raw(fn_name: str, args: dict):
     elif fn_name == "brain_write":
         return brain_write(args.get("slug"), args.get("content"))
     elif fn_name == "delegate_task":
+        from core.orchestrator.dag import run_dag
         result = run_dag(args.get("task"), dry_run=args.get("dry_run", False))
         return json.dumps(result, indent=2, default=str)
     elif fn_name == "visual_servo_click":
+        from tools.visual_servo import visual_servo_click
         return visual_servo_click(args.get("target_template_path"), args.get("timeout_sec", 5.0), args.get("Kp", 0.3))
     elif fn_name == "desktop_smooth_click":
         return desktop_smooth_click(args.get("x"), args.get("y"), args.get("duration", 1.5))
@@ -500,11 +551,20 @@ def _dispatch_raw(fn_name: str, args: dict):
         return desktop_get_ui_tree(args.get("max_depth", 8), args.get("search_query"))
     elif fn_name == "desktop_interact_with_element":
         return desktop_interact_with_element(args.get("index"), args.get("action", "click"), args.get("text"))
+    elif fn_name == "screen_imprint":
+        from core.system.screen_imprint import ScreenImprintGraph
+        return json.dumps(ScreenImprintGraph().imprint(), indent=2)
+    elif fn_name == "screen_ocr":
+        from core.system.screen_reader import JarvisScreenReader
+        return json.dumps(JarvisScreenReader().read_all_text(), indent=2)
+    elif fn_name == "get_window_stack":
+        from core.system.screen_reader import JarvisScreenReader
+        return json.dumps(JarvisScreenReader().read_window_stack(), indent=2)
     elif fn_name.startswith("mcp__"):
         parts = fn_name.split("__", 2)
-        if len(parts) == 3:
+        if len(parts) == 3 and _mcp_bridge is not None:
             server, tool = parts[1], parts[2]
-            return mcp_bridge.execute_mcp_tool(server, tool, args)
+            return _mcp_bridge.execute_mcp_tool(server, tool, args)
         else:
             raise ValueError(f"Invalid MCP tool name: {fn_name}")
     else:
