@@ -15,22 +15,22 @@ load_dotenv(os.path.join(_project_root, ".env"))
 
 # Default model assignments (June 2026)
 _DEFAULTS = {
-    "orchestrator": "gemma4:31b-cloud",
+    "orchestrator": "nvidia/nemotron-3-ultra-550b-a55b",
     "frontend":     "gemini-3.1-pro-preview",
     "backend":      "claude-sonnet-4-6",
-    "qa":           "gpt-5.4",
+    "qa":           "nvidia/nemotron-3-ultra-550b-a55b",
     "verifier":     "gemini-3.5-flash",
     "iac":          "claude-sonnet-4-6",
 }
 
 # Fallback chains: if primary is rate-limited or unavailable (10b)
 _FALLBACKS = {
-    "frontend":     ["claude-sonnet-4-6", "gpt-5.4"],
-    "backend":      ["gpt-5.4", "gemini-3.1-pro-preview"],
+    "frontend":     ["claude-sonnet-4-6", "gemini-3.1-pro-preview"],
+    "backend":      ["claude-sonnet-4-6", "gemini-3.1-pro-preview"],
     "qa":           ["claude-sonnet-4-6", "gemini-3.1-pro-preview"],
     "verifier":     ["gemini-3.1-pro-preview"],
-    "iac":          ["gpt-5.4"],
-    "orchestrator": [],
+    "iac":          ["claude-sonnet-4-6"],
+    "orchestrator": ["claude-sonnet-4-6"],
 }
 
 # Provider mapping for SDK selection
@@ -43,6 +43,7 @@ _PROVIDERS = {
     "gpt-5.4":                 "openai",
     "gpt-5.5":                 "openai",
     "gemma4:31b-cloud":        "ollama",
+    "nvidia/nemotron-3-ultra-550b-a55b": "nvidia",
 }
 
 # API key env var names per provider
@@ -51,6 +52,7 @@ _API_KEY_VARS = {
     "anthropic": "ANTHROPIC_API_KEY",
     "openai":    "OPENAI_API_KEY",
     "ollama":    None,  # local, no key needed
+    "nvidia":    "NVIDIA_API_KEY",
 }
 
 
@@ -70,7 +72,15 @@ def get_fallbacks(role: str) -> list[str]:
 
 def get_provider(model: str) -> str:
     """Get the provider name for a model string."""
-    return _PROVIDERS.get(model, "unknown")
+    provider = _PROVIDERS.get(model)
+    if provider is None:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"[model_router] No provider mapping for model '{model}'. "
+            "Add it to _PROVIDERS in agents/model_router.py"
+        )
+        return "unknown"
+    return provider
 
 
 def get_api_key(provider: str) -> str | None:

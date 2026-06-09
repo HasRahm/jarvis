@@ -135,7 +135,11 @@ Source HTML context for structure:
             logger.info(f"Running default visual verifier on model: {default_model}")
             
             from google import genai
-            client = genai.Client(api_key=get_api_key("google"))
+            from google.genai import types as genai_types
+            client = genai.Client(
+                api_key=get_api_key("google"),
+                http_options=genai_types.HttpOptions(timeout=90000)  # 90s timeout
+            )
             response = client.models.generate_content(
                 model=default_model,
                 contents=[prompt_text, image_part],

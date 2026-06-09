@@ -188,6 +188,7 @@ The project is currently being developed on a **Windows** environment, meaning s
 - **Target Location Verification & Window Focusing:** Integrated native window management tools (`desktop_get_active_window` and `desktop_focus_window` utilizing `pygetwindow`) into `tools/desktop_automation.py` and the dispatcher registry. Fully equipped the AI brain with the ability to safely query active foreground applications, restore/maximize minimized targets, and focus overlapping or stacked windows, preventing target collision and blind-typing corruption.
 - **CP1252-Safe Terminal Print Encoding:** Hardened the window detection tools to filter out non-ASCII/CP1252 character maps (e.g. zero-width spaces `\u200b` and emojis) to prevent terminal print crashes on Windows.
 - **Visual Validation Suite:** Added robust test cases in `tests/test_desktop_windows.py` achieving 100% green coverage for graphical context verification, window matching, and focus transitions.
+- **Startup Deadlock Resilience:** Completely refactored core imports (`ollama` and `playwright.sync_api` headless tools) to be localized and lazily evaluated at runtime. This prevents silent background thread deadlocks (e.g., hung `ollama` local servers or native Win32 `greenlet` thread crashes during headless browser init) from permanently freezing the `jarvis-cli.py` interactive shell or API runner on initialization.
 - **Contextual On-the-Fly Skills Injection:** Natively integrated the dynamic `SkillsEngine` directly into `core/gemma4_loop.py`. Whenever the user enters a prompt, Jarvis tokenizes it on-the-fly, matches keywords against all 407 custom developer skills, and injects the top 3 corresponding skill instruction manuals directly into the loop's system context, preventing agent confusion or stuck states.
 - **Lossless System-Wide Unicode Escape Failsafes:** Wrapped all dynamic console prints inside `core/gemma4_loop.py` (both final responses and tool-call variables) with dynamic system encoding maps and `'replace'` fallback handlers. This prevents complex emojis (`🎨`), special shapes (`🎯`), or foreign character sets matched from skill files or computed by LLMs from throwing fatal CP1252 / `charmap` crashes in the Windows command line, achieving 100% execution resilience.
 
@@ -221,6 +222,18 @@ The project is currently being developed on a **Windows** environment, meaning s
 - **Navigation**: Landing page and HUD nav both link to `console.html`. Nav pill on console links back to landing + HUD + phone.
 - **Live URL**: https://jarvis-henna-nu.vercel.app/console
 
+### Phase 22: API Hardening, Streaming & LinkedIn Outreach Tools (COMPLETED)
+- **pyautogui lazy import fix** (`tools/desktop_ui_tree.py`): Removed module-level `import pyautogui` that caused dispatcher to hang on startup when `desktop_automation` was already loaded in `sys.modules`. Import now happens lazily inside `desktop_interact_with_element()` only.
+- **`.env` auto-load in `jarvis-cli.py`**: Added pre-subprocess `.env` parsing so all API keys are available to Hermes subprocesses regardless of launch context.
+- **Streaming + tool chunking in `llm_adapter.py`** (user-rewritten): Replaced all LLM HTTP calls with `httpx.stream()` for chunked request bodies and SSE stream parsing — eliminates silent 600s hangs on slow/unavailable models. Added `_select_relevant_tools()` that caps tool definitions at `MAX_TOOLS=32` per request using keyword scoring.
+- **LinkedIn outreach script** (`scratch/linkedin_outreach.py`): Uses non-headless Playwright (`headless=False`, `slow_mo=120ms`) with anti-webdriver flag and natural mouse scrolling to bypass LinkedIn bot detection. Uses Google `site:linkedin.com/in` search to avoid login walls. Streaming `gpt-4o` for all message generation. Output: `workspaces/outreach/tampa-engineers.json` (3 Tampa AI/ML engineers, personalized <300 char messages).
+- **Full codebase API hardening** (5 files patched):
+  - `agents/base_agent.py`: Added `timeout=90.0` to OpenAI + Anthropic clients; added `http_options=HttpOptions(timeout=90000)` to Google genai client; added streaming (`stream=True`) to OpenAI calls; switched ollama to `ollama.Client(timeout=90)`.
+  - `agents/qa_agent.py`: Added `HttpOptions(timeout=90000)` to genai client in visual verifier.
+  - `core/system/llm_adapter.py`: Removed hardcoded NVIDIA API key fallback (security fix); added OpenRouter routing branch for `openrouter/` prefix models and `OPENROUTER_MODEL` env var.
+  - `agents/model_router.py`: `get_provider()` now logs a warning instead of silently returning `"unknown"` for unmapped models.
+  - `core/hermes/hermes_cli_runner.py`: Added `.env` self-load at top so runner works standalone (not just via jarvis-cli.py subprocess).
+
 ## Important Architectural Rules
 
 1. **`AGENTS.md` is the only shared state between agents.** Agents must not call each other's APIs directly.
@@ -237,3 +250,11 @@ The project is currently being developed on a **Windows** environment, meaning s
 3. Configure your API keys in the `.env` file (Google Gemini, Anthropic Claude, OpenAI, and Gemma4 endpoints).
 4. Start the system via `powershell -ExecutionPolicy Bypass -File scripts/start_local.ps1`.
 5. Check `tunnel_err.log` for the Cloudflare tunnel URL, then open `https://<tunnel-url>/phone` on your phone.
+
+---
+
+## Agent Handoff (Claude Code)
+If you are picking up this workspace context, here are the immediate next steps and context:
+1. **Figma Design System:** Screen 1 (`Phone Main`) was successfully drawn via `gpt-5.4` desktop automation. **Screens 2-5 (`Phone Agents`, `Phone Voice Active`, `Desktop Terminal`, `Design Tokens`) are pending.** Please assist the user in completing these designs.
+2. **Desktop Automation Blockers Fixed:** The background `jarvis-cli.py` thread deadlocks (caused by `ollama` local routing hanging on headless browser tool imports) have been fully fixed and decoupled. Desktop tooling can now run safely.
+3. **Current Active Run:** Jarvis is currently executing a live LinkedIn outreach generation script in the background. Do not kill or restart `jarvis-cli.py` while the mouse is moving!

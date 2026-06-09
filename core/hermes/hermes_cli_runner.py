@@ -1,9 +1,23 @@
+# Auto-load .env so runner works standalone (not just via jarvis-cli.py subprocess)
+import os as _os
+_env_path = _os.path.join(
+    _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))),
+    ".env"
+)
+if _os.path.isfile(_env_path):
+    with open(_env_path, encoding="utf-8") as _ef:
+        for _line in _ef:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                _os.environ.setdefault(_k.strip(), _v.strip())
+
 import os
 import sys
 import argparse
 import uuid
 import json
-import ollama
+# import ollama
 from colorama import Fore, Style, init
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -21,6 +35,7 @@ FALLBACK_MODEL = os.environ.get("JARVIS_FALLBACK_MODEL", "gemma4:31b-cloud")
 def get_available_model():
     try:
         if is_ollama_available():
+            import ollama
             client = ollama.Client(timeout=5.0)
             models = [m.get("model") or m.get("name") for m in client.list().get("models", [])]
             if PRIMARY_MODEL in models:
@@ -43,6 +58,11 @@ def emit_osc_777(event_type, session_id, **kwargs):
     sys.stdout.write(f"\x1b]777;notify;warp://cli-agent;{json_str}\x07")
     sys.stdout.flush()
 
+class AgentContext:
+    def __init__(self, task_id):
+        self.task_id = task_id
+        self.allow_cortex = True
+
 def main():
     parser = argparse.ArgumentParser(description="Hermes CLI Runner for Warp integration")
     parser.add_argument("-p", "--prompt", required=True, help="Path to the prompt text file")
@@ -58,6 +78,7 @@ def main():
 
     model = args.model
     session_id = f"hermes_{uuid.uuid4().hex[:12]}"
+    agent_ctx = AgentContext(session_id)
     cwd = os.getcwd()
 
     # 1. Emit Session Start
@@ -127,7 +148,7 @@ def main():
                     tool_input["file_path"] = fn_args["file_path"]
 
                 try:
-                    result = dispatch(fn, fn_args)
+                    result = dispatch(fn, fn_args, orch_agent=agent_ctx)
                 except Exception as e:
                     result = f"ERROR: {e}"
 

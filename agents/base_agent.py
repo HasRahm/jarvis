@@ -270,7 +270,11 @@ class BaseAgent(ABC):
 
             if provider == "google":
                 from google import genai
-                client = genai.Client(api_key=get_api_key("google"))
+                from google.genai import types as genai_types
+                client = genai.Client(
+                    api_key=get_api_key("google"),
+                    http_options=genai_types.HttpOptions(timeout=90000)  # 90s timeout
+                )
                 response = client.models.generate_content(
                     model=model,
                     contents=user_prompt,
@@ -286,7 +290,7 @@ class BaseAgent(ABC):
 
             elif provider == "anthropic":
                 import anthropic
-                client = anthropic.Anthropic(api_key=get_api_key("anthropic"))
+                client = anthropic.Anthropic(api_key=get_api_key("anthropic"), timeout=90.0)
                 response = client.messages.create(
                     model=model,
                     max_tokens=8192,
@@ -303,7 +307,7 @@ class BaseAgent(ABC):
 
             elif provider == "openai":
                 import openai
-                client = openai.OpenAI(api_key=get_api_key("openai"))
+                client = openai.OpenAI(api_key=get_api_key("openai"), timeout=90.0)
                 params = {
                     "model": model,
                     "messages": [
@@ -316,18 +320,29 @@ class BaseAgent(ABC):
                 else:
                     params["max_tokens"] = 8192
 
-                response = client.chat.completions.create(**params)
-                response_text = response.choices[0].message.content
-                
+                # Use streaming to prevent silent hangs on slow/unavailable models
+                params["stream"] = True
+                response_stream = client.chat.completions.create(**params)
+                chunks = []
+                last_chunk = None
+                for chunk in response_stream:
+                    last_chunk = chunk
+                    delta = chunk.choices[0].delta.content
+                    if delta:
+                        chunks.append(delta)
+                response_text = "".join(chunks)
+
                 try:
-                    input_tokens = getattr(response.usage, "prompt_tokens", input_tokens)
-                    output_tokens = getattr(response.usage, "completion_tokens", 0)
+                    usage = getattr(last_chunk, "usage", None)
+                    input_tokens = getattr(usage, "prompt_tokens", input_tokens) if usage else input_tokens
+                    output_tokens = getattr(usage, "completion_tokens", 0) if usage else len(response_text) // 4
                 except Exception:
                     output_tokens = len(response_text) // 4
 
             elif provider == "ollama":
                 import ollama
-                response = ollama.chat(
+                ol_client = ollama.Client(timeout=90)
+                response = ol_client.chat(
                     model=model,
                     messages=[
                         {"role": "system", "content": system_prompt},
