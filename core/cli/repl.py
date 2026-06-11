@@ -160,18 +160,25 @@ class JarvisRepl:
         if self.session is None:
             self.session = self._build_session()
         self._banner()
+        interrupted_once = False
         while True:
             # ── read a line ──────────────────────────────────────────────────
             try:
                 raw = self.session.prompt([("class:prompt", "❯ ")])
             except KeyboardInterrupt:
-                # Ctrl-C at the prompt clears the line and stays in the REPL.
+                # First Ctrl-C at the prompt warns; a second in a row exits.
+                if interrupted_once:
+                    self.console.print("[dim]bye.[/]")
+                    break
+                interrupted_once = True
+                self.console.print("[dim](press Ctrl-C again to exit, or keep typing)[/]")
                 continue
             except EOFError:
                 # Ctrl-D leaves.
                 self.console.print("[dim]bye.[/]")
                 break
 
+            interrupted_once = False
             text = raw.strip()
             if not text:
                 continue
@@ -393,7 +400,15 @@ class JarvisRepl:
 
         worker = threading.Thread(target=target, daemon=True, name=f"tool-{fn}")
         worker.start()
-        worker.join(timeout)
+        # Join in small slices, not one long join: on Windows a blocking
+        # lock acquire suppresses Ctrl-C delivery, so join(120) would make
+        # the REPL appear dead to Ctrl-C for the full timeout. Between short
+        # joins, KeyboardInterrupt is delivered and propagates to run()'s
+        # cancel handler within ~200ms.
+        import time as _time
+        deadline = _time.monotonic() + timeout
+        while worker.is_alive() and _time.monotonic() < deadline:
+            worker.join(0.2)
 
         if worker.is_alive():
             return (f"ERROR: tool '{fn}' timed out after {timeout:.0f}s and was "
@@ -422,7 +437,7 @@ class JarvisRepl:
         self.console.print(t)
         self.console.print(
             "[dim]Also: [bold]@file[/] to attach a file · [bold]!cmd[/] to run shell · "
-            "[bold]Ctrl-L[/] clear · [bold]Ctrl-D[/] exit[/]")
+            "[bold]Ctrl-L[/] clear · [bold]Ctrl-C[/] cancel turn (×2 to exit) · [bold]Ctrl-D[/] exit[/]")
 
     def _cmd_model(self, arg):
         cur = os.environ.get("JARVIS_PRIMARY_MODEL", "gemma4:31b-cloud")
