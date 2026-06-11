@@ -103,7 +103,7 @@ def _build_css(theme: str = "dark") -> str:
     }}
     #status_bar {{
         background: {t['header_bg']};
-        color: dim {t['text']};
+        color: {t['text']};
         height: 1;
         border-top: solid {t['border']};
         padding: 0 1;
