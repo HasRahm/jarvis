@@ -1,0 +1,127 @@
+"""Tests for the inline streaming REPL (core/cli/repl.py).
+
+Covers the pure logic — completer, command classification, @file expansion,
+and the llm_adapter stream-hook routing — without needing a real TTY.
+"""
+import os
+import sys
+import pytest
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from prompt_toolkit.document import Document
+from core.cli.repl import JarvisCompleter, JarvisRepl, _AGENT_MODES, _INLINE, _short
+
+
+class TestCompleter:
+    def setup_method(self):
+        self.c = JarvisCompleter()
+
+    def _complete(self, text):
+        return [comp.text for comp in self.c.get_completions(Document(text), None)]
+
+    def test_slash_prefix_filters(self):
+        out = self._complete("/mod")
+        assert "/model" in out and "/models" in out
+        assert "/research" not in out
+
+    def test_slash_research(self):
+        out = self._complete("/res")
+        assert "/research" in out
+
+    def test_empty_slash_returns_many(self):
+        out = self._complete("/")
+        assert len(out) >= 20
+
+    def test_no_completion_for_plain_text(self):
+        out = self._complete("open chrome and search")
+        assert out == []
+
+    def test_slash_with_space_stops_completing(self):
+        # once an argument is being typed, no command completion
+        out = self._complete("/model gpt")
+        assert out == []
+
+    def test_file_completion_finds_known_file(self, tmp_path, monkeypatch):
+        (tmp_path / "alpha.txt").write_text("x")
+        (tmp_path / "beta.txt").write_text("y")
+        monkeypatch.chdir(tmp_path)
+        out = self._complete("read @al")
+        assert any("alpha" in o for o in out)
+
+
+class TestCommandClassification:
+    def test_agent_modes_complete(self):
+        for m in ("research", "diagnose", "browse", "desktop", "excel", "shell", "auto", "screen"):
+            assert m in _AGENT_MODES
+
+    def test_inline_commands(self):
+        for c in ("help", "model", "models", "tools", "clear", "theme", "exit", "quit"):
+            assert c in _INLINE
+
+    def test_agent_and_inline_disjoint(self):
+        assert _AGENT_MODES.isdisjoint(_INLINE), "a command can't be both agent and inline"
+
+
+class TestFileExpansion:
+    def setup_method(self):
+        self.repl = JarvisRepl()
+
+    def test_expands_existing_file(self, tmp_path, monkeypatch):
+        f = tmp_path / "note.md"
+        f.write_text("SECRET_MARKER_123", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        result = self.repl._expand_file_refs("summarise @note.md please")
+        assert "SECRET_MARKER_123" in result
+        assert "FILE: note.md" in result
+
+    def test_no_refs_returns_unchanged(self):
+        text = "just a normal prompt with no refs"
+        assert self.repl._expand_file_refs(text) == text
+
+    def test_missing_file_is_skipped_gracefully(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        result = self.repl._expand_file_refs("look at @does_not_exist.txt")
+        # original text preserved, no crash, no file block appended
+        assert "does_not_exist.txt" in result
+        assert "--- FILE:" not in result
+
+
+class TestStreamHookRouting:
+    def test_hook_receives_tokens(self):
+        from core.system import llm_adapter
+        captured = []
+        llm_adapter.set_stream_hook(lambda t, k: captured.append((k, t)))
+        llm_adapter._emit("hello ", "content", raw_print=lambda: None)
+        llm_adapter._emit("reason", "reasoning", raw_print=lambda: None)
+        llm_adapter.set_stream_hook(None)
+        assert ("content", "hello ") in captured
+        assert ("reasoning", "reason") in captured
+
+    def test_falls_back_to_raw_print_when_unset(self):
+        from core.system import llm_adapter
+        llm_adapter.set_stream_hook(None)
+        flag = []
+        llm_adapter._emit("x", "content", raw_print=lambda: flag.append(1))
+        assert flag == [1]
+
+    def test_hook_exception_does_not_break_stream(self):
+        from core.system import llm_adapter
+        def bad_hook(t, k):
+            raise RuntimeError("boom")
+        llm_adapter.set_stream_hook(bad_hook)
+        flag = []
+        # exception in hook should fall through to raw_print, not propagate
+        llm_adapter._emit("x", "content", raw_print=lambda: flag.append(1))
+        llm_adapter.set_stream_hook(None)
+        assert flag == [1]
+
+
+class TestShortHelper:
+    def test_short_passthrough(self):
+        assert _short("abc") == "abc"
+
+    def test_short_truncates(self):
+        out = _short("z" * 200)
+        assert len(out) <= 80
+        assert out.endswith("…")

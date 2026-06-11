@@ -8,6 +8,31 @@ from colorama import Fore, Style
 
 HAS_OLLAMA = True # We will import locally when needed
 
+# ── Optional streaming hook ─────────────────────────────────────────────────
+# When set, the adapter routes streamed tokens to this callback instead of
+# printing them raw to stdout. The REPL uses this to render live markdown.
+# Signature: hook(text: str, kind: str)  where kind ∈ {"content", "reasoning"}.
+# When None (default — CLI/TUI), behaviour is unchanged: tokens print to stdout.
+_STREAM_HOOK = None
+
+
+def set_stream_hook(fn):
+    """Register (or clear with None) a callback that receives streamed tokens."""
+    global _STREAM_HOOK
+    _STREAM_HOOK = fn
+
+
+def _emit(text: str, kind: str = "content", *, raw_print):
+    """Send a streamed token to the hook if registered, else fall back to raw_print()."""
+    if _STREAM_HOOK is not None:
+        try:
+            _STREAM_HOOK(text, kind)
+            return
+        except Exception:
+            pass  # never let a UI hook break the stream
+    raw_print()
+
+
 def yield_json_chunks(data: dict, chunk_size=1024):
     """Generator that yields a JSON dict in bytes chunks (Karpathy-style chunked streaming)."""
     json_bytes = json.dumps(data).encode('utf-8')
@@ -224,9 +249,14 @@ def _call_openai_compatible_api(api_key, base_url, model, messages, tools):
                     choices = data.get("choices", [])
                     if choices:
                         msg = choices[0].get("message", {})
+                        # reasoning_content (chain-of-thought) — present on gpt-oss-120b and similar reasoning models
+                        if msg.get("reasoning_content"):
+                            _emit(msg["reasoning_content"], "reasoning",
+                                  raw_print=lambda: print(Fore.MAGENTA + msg["reasoning_content"] + Style.RESET_ALL, end="", flush=True))
                         if msg.get("content"):
                             res_content = msg["content"]
-                            print(res_content, end="", flush=True)
+                            _emit(res_content, "content",
+                                  raw_print=lambda: print(res_content, end="", flush=True))
                         if msg.get("tool_calls"):
                             for i, tc in enumerate(msg["tool_calls"]):
                                 raw_tool_calls[i] = {
@@ -252,11 +282,13 @@ def _call_openai_compatible_api(api_key, base_url, model, messages, tools):
                         
                         if "reasoning_content" in delta and delta["reasoning_content"]:
                             res_content += delta["reasoning_content"]
-                            print(Fore.MAGENTA + delta["reasoning_content"] + Style.RESET_ALL, end="", flush=True)
-                            
+                            _emit(delta["reasoning_content"], "reasoning",
+                                  raw_print=lambda: print(Fore.MAGENTA + delta["reasoning_content"] + Style.RESET_ALL, end="", flush=True))
+
                         if "content" in delta and delta["content"]:
                             res_content += delta["content"]
-                            print(delta["content"], end="", flush=True)
+                            _emit(delta["content"], "content",
+                                  raw_print=lambda: print(delta["content"], end="", flush=True))
                             
                         if "tool_calls" in delta and delta["tool_calls"]:
                             for tc in delta["tool_calls"]:
@@ -488,7 +520,8 @@ def _call_anthropic_api(api_key, model, messages, tools):
                         delta = data["delta"]
                         if delta["type"] == "text_delta":
                             res_content += delta["text"]
-                            print(".", end="", flush=True)
+                            _emit(delta["text"], "content",
+                                  raw_print=lambda: print(".", end="", flush=True))
                         elif delta["type"] == "input_json_delta":
                             idx = data["index"]
                             raw_tool_calls[idx]["arguments"] += delta["partial_json"]
@@ -549,10 +582,35 @@ def call_llm(messages, model="gemma4:31b-cloud", tools=None):
         try:
             m_lower = m.lower()
             
+            # 0. NVIDIA gpt-oss routing — must run BEFORE :cloud Ollama catch-all.
+            #    gpt-oss:120b-cloud → openai/gpt-oss-120b on integrate.api.nvidia.com
+            #    Strips the ":cloud" / ":latest" Ollama-style tag and adds "openai/" prefix.
+            if "gpt-oss" in m_lower:
+                nvidia_key = os.environ.get("NVIDIA_API_KEY")
+                if not nvidia_key:
+                    raise ValueError("NVIDIA_API_KEY is not defined.")
+                # Normalise: "gpt-oss:120b-cloud" → "openai/gpt-oss-120b"
+                #             "openai/gpt-oss-120b" → unchanged
+                if m_lower.startswith("openai/"):
+                    nvidia_model = m  # already canonical
+                else:
+                    # strip optional :tag suffix, then prepend openai/
+                    base = m.split(":")[0]  # "gpt-oss"
+                    size = m.split(":")[1].replace("-cloud", "").replace("-latest", "") if ":" in m else ""
+                    nvidia_model = f"openai/{base}-{size}" if size else f"openai/{base}"
+                print(Fore.CYAN + f"[LLM Adapter] Routing request to NVIDIA API (model: {nvidia_model})..." + Style.RESET_ALL)
+                sys.stdout.flush()
+                return _call_openai_compatible_api(
+                    api_key=nvidia_key,
+                    base_url="https://integrate.api.nvidia.com/v1/",
+                    model=nvidia_model,
+                    messages=messages,
+                    tools=tools
+                )
+
             # 1. Local Ollama Routing — catches all Ollama-named models:
             #    ":cloud" and ":latest" are Ollama's naming conventions for proxied/local models.
-            #    Must run BEFORE vendor checks so gpt-oss:120b-cloud etc. don't hit OpenAI routing.
-            if (m_lower.endswith(":cloud") or m_lower.endswith(":latest") or
+            elif (m_lower.endswith(":cloud") or m_lower.endswith(":latest") or
                     "gemma" in m_lower or m_lower.startswith("llama") or
                     m_lower.startswith("qwen") or m_lower.startswith("nomic") or
                     m_lower.startswith("mxbai")):

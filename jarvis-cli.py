@@ -354,8 +354,13 @@ def show_qr_code(hermes_secret: str = None):
         print("\n⚠️ HERMES_SECRET not set locally — phone must use a stored/manual token.\n")
 
 def main():
-    # If run with no arguments, or explicitly with --tui, launch the TUI Console
-    if len(sys.argv) == 1 or "--tui" in sys.argv:
+    # No arguments → launch the inline streaming REPL (Claude Code / Gemini CLI style).
+    # --tui explicitly launches the full-screen Textual dashboard instead.
+    if len(sys.argv) == 1:
+        from core.cli.repl import JarvisRepl
+        JarvisRepl().run()
+        sys.exit(0)
+    if "--tui" in sys.argv:
         from core.cli.app import JarvisTuiApp
         app = JarvisTuiApp()
         app.run()
@@ -366,7 +371,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python jarvis-cli.py                  # Launches interactive TUI Console
+  python jarvis-cli.py                  # Launches the inline streaming REPL (default)
+  python jarvis-cli.py --tui            # Launches the full-screen Textual dashboard
   python jarvis-cli.py --doctor
   python jarvis-cli.py --screen
   python jarvis-cli.py --mode research --task "Find 20 AI startups hiring"
@@ -375,7 +381,7 @@ Examples:
   python jarvis-cli.py --mode auto --task "Check disk space and clean temp files"
         """
     )
-    parser.add_argument("--tui", action="store_true", help="Launch interactive TUI Console")
+    parser.add_argument("--tui", action="store_true", help="Launch the full-screen Textual dashboard (default is the inline REPL)")
     parser.add_argument("--doctor", action="store_true", help="Run health check")
     parser.add_argument("--screen", action="store_true", help="Dump visual screen block dashboard")
     parser.add_argument("--remote", action="store_true", help="Start Hermes server and show QR code")
