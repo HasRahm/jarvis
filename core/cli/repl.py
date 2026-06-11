@@ -84,10 +84,22 @@ class JarvisCompleter(Completer):
 
 class JarvisRepl:
     def __init__(self):
+        # Force UTF-8 on the streams FIRST. On a legacy Windows console the
+        # encoding is cp1252, and rich raises UnicodeEncodeError on glyphs like
+        # ❯ ✗ ◀ … — which would otherwise crash the REPL (even inside the error
+        # handler). reconfigure() mutates the existing stream in place, so the
+        # references we pin below stay valid and now emit UTF-8 safely.
+        for stream in (sys.stdout, sys.stderr):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
         # Pin the console to the real stdout captured now, so rendering keeps
         # working even while we temporarily redirect sys.stdout to a sink during
         # an agent turn (to swallow the adapter's raw token prints).
         self.console = Console(file=sys.stdout)
+        self._real_stdout = sys.stdout
         self.chat_history: list[dict] = []
         self._jarvis_cli = None
         self._theme = "dark"
@@ -149,39 +161,85 @@ class JarvisRepl:
             self.session = self._build_session()
         self._banner()
         while True:
+            # ── read a line ──────────────────────────────────────────────────
             try:
                 raw = self.session.prompt([("class:prompt", "❯ ")])
-            except (EOFError, KeyboardInterrupt):
-                self.console.print("\n[dim]bye.[/]")
+            except KeyboardInterrupt:
+                # Ctrl-C at the prompt clears the line and stays in the REPL.
+                continue
+            except EOFError:
+                # Ctrl-D leaves.
+                self.console.print("[dim]bye.[/]")
                 break
 
             text = raw.strip()
             if not text:
                 continue
 
-            # !shell passthrough
-            if text.startswith("!"):
-                self._run_shell(text[1:].strip())
-                continue
+            # ── dispatch, fully insulated ────────────────────────────────────
+            # Nothing a single line does — a tool crash, a model error, a bad
+            # command — should ever drop the user out of the REPL.
+            try:
+                if self._dispatch_line(text) == "EXIT":
+                    self.console.print("[dim]bye.[/]")
+                    break
+            except KeyboardInterrupt:
+                # Ctrl-C during a running turn cancels it and returns to prompt.
+                self.console.print("\n[yellow]⊗ cancelled — back to prompt[/]")
+            except Exception as e:
+                # Any other failure is shown but never fatal.
+                self._print_error(e)
+            finally:
+                # Defensive: a turn redirects sys.stdout; make sure it's restored
+                # even if something unwound abnormally.
+                if sys.stdout is not self._real_stdout:
+                    sys.stdout = self._real_stdout
 
-            # /slash command
-            if text.startswith("/"):
-                cmd  = text.split()[0][1:].lower()
-                arg  = text[len(cmd) + 1:].strip()
-                if cmd in _INLINE:
-                    if cmd in ("exit", "quit"):
-                        self.console.print("[dim]bye.[/]")
-                        break
-                    self._handle_inline(cmd, arg)
-                    continue
-                if cmd in _AGENT_MODES:
-                    self._agent_turn(cmd, arg)
-                    continue
-                self.console.print(f"[yellow]Unknown command:[/] /{cmd}  [dim](try /help)[/]")
-                continue
+    def _dispatch_line(self, text: str):
+        """Handle one input line. Returns 'EXIT' to leave the REPL, else None."""
+        # !shell passthrough
+        if text.startswith("!"):
+            self._run_shell(text[1:].strip())
+            return None
 
-            # Plain text → auto-mode agent turn (expand @file refs first)
-            self._agent_turn("auto", text)
+        # /slash command
+        if text.startswith("/"):
+            cmd = text.split()[0][1:].lower()
+            arg = text[len(cmd) + 1:].strip()
+            if cmd in ("exit", "quit"):
+                return "EXIT"
+            if cmd in _INLINE:
+                self._handle_inline(cmd, arg)
+                return None
+            if cmd in _AGENT_MODES:
+                self._agent_turn(cmd, arg)
+                return None
+            self.console.print(f"[yellow]Unknown command:[/] /{cmd}  [dim](try /help)[/]")
+            return None
+
+        # Plain text → auto-mode agent turn
+        self._agent_turn("auto", text)
+        return None
+
+    def _print_error(self, e: Exception):
+        """Show an error without dumping a raw traceback (unless JARVIS_DEBUG=1).
+
+        This is the REPL's safety net, so it must never raise — if rich itself
+        fails (e.g. a console encoding edge case) we fall back to a plain write.
+        """
+        try:
+            self.console.print(f"\n[red]x {type(e).__name__}:[/] {e}")
+            if os.environ.get("JARVIS_DEBUG") == "1":
+                import traceback
+                self.console.print(Text(traceback.format_exc(), style="dim red"))
+            else:
+                self.console.print("[dim]  (set JARVIS_DEBUG=1 for the full traceback)[/]")
+        except Exception:
+            try:
+                self._real_stdout.write(f"\nError: {type(e).__name__}: {e}\n")
+                self._real_stdout.flush()
+            except Exception:
+                pass
 
     # ── shell passthrough ───────────────────────────────────────────────────────
 
@@ -243,7 +301,7 @@ class JarvisRepl:
         messages = [{"role": "system", "content": system_instruction + skills}] + self.chat_history
         model = os.environ.get("JARVIS_PRIMARY_MODEL", cli.DEFAULT_MODEL)
 
-        real_stdout = sys.stdout
+        real_stdout = self._real_stdout
 
         class _Sink:
             def write(self, *a, **k): pass
@@ -279,7 +337,7 @@ class JarvisRepl:
             except Exception as e:
                 sys.stdout = real_stdout
                 set_stream_hook(None)
-                self.console.print(f"[red]✗ {e}[/]")
+                self._print_error(e)
                 return
 
             messages.append(msg)

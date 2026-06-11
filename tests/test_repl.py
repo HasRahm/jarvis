@@ -117,6 +117,43 @@ class TestStreamHookRouting:
         assert flag == [1]
 
 
+class TestResilience:
+    """A single bad line must never drop the user out of the REPL."""
+
+    def setup_method(self):
+        self.repl = JarvisRepl()
+
+    def test_dispatch_exit_command(self):
+        assert self.repl._dispatch_line("/exit") == "EXIT"
+        assert self.repl._dispatch_line("/quit") == "EXIT"
+
+    def test_dispatch_unknown_command_returns_none(self):
+        # unknown slash command should not raise, just return None
+        assert self.repl._dispatch_line("/bogus") is None
+
+    def test_dispatch_inline_does_not_raise(self):
+        # /help is inline and must complete without raising
+        assert self.repl._dispatch_line("/help") is None
+
+    def test_agent_turn_error_is_caught_not_raised(self, monkeypatch):
+        # Force the agent turn to blow up; _dispatch_line must swallow via _agent_turn's guard
+        def boom(*a, **k):
+            raise RuntimeError("simulated model failure")
+        monkeypatch.setattr(self.repl, "_agent_turn", lambda *a, **k: boom())
+        # The run-loop wraps _dispatch_line; here we assert _agent_turn raising
+        # is the only thing that propagates, so the loop's try/except can catch it.
+        with pytest.raises(RuntimeError):
+            self.repl._dispatch_line("hello world")
+
+    def test_print_error_never_raises(self):
+        # _print_error must handle any exception object without raising itself
+        self.repl._print_error(ValueError("x"))
+        self.repl._print_error(RuntimeError("boom"))
+
+    def test_real_stdout_captured(self):
+        assert self.repl._real_stdout is not None
+
+
 class TestShortHelper:
     def test_short_passthrough(self):
         assert _short("abc") == "abc"
