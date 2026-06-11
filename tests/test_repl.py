@@ -154,6 +154,41 @@ class TestResilience:
         assert self.repl._real_stdout is not None
 
 
+class TestDispatchTimeout:
+    """A hung tool must never freeze the REPL — it gets abandoned with an error."""
+
+    def setup_method(self):
+        self.repl = JarvisRepl()
+
+    def test_fast_tool_returns_result(self):
+        result = self.repl._dispatch_with_timeout(lambda fn, a: f"ok:{fn}", "my_tool", {})
+        assert result == "ok:my_tool"
+
+    def test_tool_exception_becomes_error_string(self):
+        def boom(fn, a):
+            raise RuntimeError("tool exploded")
+        result = self.repl._dispatch_with_timeout(boom, "bad_tool", {})
+        assert isinstance(result, str)
+        assert "tool exploded" in result
+
+    def test_hung_tool_times_out(self, monkeypatch):
+        import time
+        monkeypatch.setenv("JARVIS_TOOL_TIMEOUT", "1")
+        def hang(fn, a):
+            time.sleep(30)
+        result = self.repl._dispatch_with_timeout(hang, "hung_tool", {})
+        assert "timed out" in result
+        assert "hung_tool" in result
+
+    def test_timeout_env_var_respected(self, monkeypatch):
+        import time
+        monkeypatch.setenv("JARVIS_TOOL_TIMEOUT", "2")
+        start = time.time()
+        self.repl._dispatch_with_timeout(lambda fn, a: time.sleep(60), "slow", {})
+        elapsed = time.time() - start
+        assert elapsed < 10, "timeout env var was not respected"
+
+
 class TestShortHelper:
     def test_short_passthrough(self):
         assert _short("abc") == "abc"

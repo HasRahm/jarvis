@@ -321,21 +321,31 @@ class JarvisRepl:
                 return Group(*parts)
 
             try:
+                real_stderr = sys.stderr
                 with Live(render(), console=self.console, refresh_per_second=12,
                           vertical_overflow="visible") as live:
                     def hook(t, kind):
                         buf[kind] = buf.get(kind, "") + t
                         live.update(render())
                     set_stream_hook(hook)
-                    sys.stdout = _Sink()           # swallow adapter's raw token prints
+                    # Swallow the adapter's raw prints on BOTH streams — its
+                    # fallback-chain tracebacks go to stderr and would otherwise
+                    # bleed through and corrupt the live render region.
+                    sys.stdout = _Sink()
+                    sys.stderr = _Sink()
                     try:
                         msg = call_llm(messages=messages, model=model, tools=TOOL_DEFINITIONS)
                     finally:
                         sys.stdout = real_stdout
+                        sys.stderr = real_stderr
                         set_stream_hook(None)
-                        live.update(render())       # ensure final frame is the full markdown
+                        if buf["content"] or buf["reasoning"]:
+                            live.update(render())   # final frame = full markdown
+                        else:
+                            live.update(Text(""))   # tool-only turn: clear 'thinking…'
             except Exception as e:
                 sys.stdout = real_stdout
+                sys.stderr = real_stderr
                 set_stream_hook(None)
                 self._print_error(e)
                 return
@@ -356,14 +366,41 @@ class JarvisRepl:
                     Text(f"{fn}", style="bold yellow") + Text(f"  {args_str}", style="dim"),
                     title="tool", title_align="left", border_style="yellow", padding=(0, 1),
                 ))
-                try:
-                    result = dispatch(fn, args)
-                except Exception as e:
-                    result = f"ERROR: {e}"
+                result = self._dispatch_with_timeout(dispatch, fn, args)
                 preview = str(result)[:400]
                 self.console.print(Text(f"  ⮑ {preview}", style="dim"))
                 self.chat_history.append({"role": "tool", "content": str(result)})
                 messages.append({"role": "tool", "content": str(result)})
+
+    def _dispatch_with_timeout(self, dispatch_fn, fn: str, args):
+        """Run a tool in a worker thread with a hard timeout.
+
+        A tool that blocks forever (window activation under Windows' foreground
+        lock, an MCP connect, a stuck subprocess…) must never freeze the REPL.
+        The worker is a daemon thread: on timeout we abandon it and move on.
+        Ctrl-C while waiting raises KeyboardInterrupt from join(), which the
+        run() loop turns into a turn-cancel.
+        """
+        import threading
+        timeout = float(os.environ.get("JARVIS_TOOL_TIMEOUT", "120"))
+        box = {}
+
+        def target():
+            try:
+                box["result"] = dispatch_fn(fn, args)
+            except Exception as e:
+                box["error"] = e
+
+        worker = threading.Thread(target=target, daemon=True, name=f"tool-{fn}")
+        worker.start()
+        worker.join(timeout)
+
+        if worker.is_alive():
+            return (f"ERROR: tool '{fn}' timed out after {timeout:.0f}s and was "
+                    f"abandoned. (Tune with JARVIS_TOOL_TIMEOUT.)")
+        if "error" in box:
+            return f"ERROR: {box['error']}"
+        return box.get("result", "")
 
     # ── inline command handlers ──────────────────────────────────────────────────
 
