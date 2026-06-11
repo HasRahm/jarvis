@@ -3,7 +3,8 @@ import asyncio
 import json
 import os
 from fastapi.testclient import TestClient
-from core.hermes.server import app, hermes_event_manager, get_visual_context_history, HERMES_SECRET
+from core.hermes.server import app, hermes_event_manager, get_visual_context_history
+HERMES_SECRET = os.environ.get("HERMES_SECRET", "")
 pytest.importorskip("playwright", reason="playwright not installed")
 from tools.browser import browser_resolve_element_at_coords
 
