@@ -26,11 +26,13 @@ def test_find_occlusions():
     assert len(vs_code_blocked_by_dialog) == 0
 
 @patch("tools.windows.ctypes")
-@patch("tools.windows.pyautogui")
-def test_get_3d_window_graph(mock_pyautogui, mock_ctypes):
-    # Mock pyautogui.position() — patch the whole module object since
-    # pyautogui may be None in CI mode (JARVIS_CI=true guard).
+@patch("tools.windows._get_pyautogui")
+def test_get_3d_window_graph(mock_get_pyautogui, mock_ctypes):
+    # tools.windows lazy-loads pyautogui via _get_pyautogui() (no module-level
+    # pyautogui attribute exists) — patch the accessor.
+    mock_pyautogui = MagicMock()
     mock_pyautogui.position.return_value = (100, 200)
+    mock_get_pyautogui.return_value = mock_pyautogui
     
     # Mock ctypes.windll.user32.GetTopWindow to return None (no windows)
     mock_user32 = mock_ctypes.windll.user32

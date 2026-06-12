@@ -58,12 +58,24 @@ def visual_inspect(question: str, resize_width: int = 1280) -> str:
     try:
         import mss
         from PIL import Image
+        from tools.agent_cursor import cursor_hidden
 
-        with mss.mss() as sct:
-            raw = sct.grab(sct.monitors[1])
-            img = Image.frombytes("RGB", (raw.width, raw.height), raw.bgra, "raw", "BGRX")
+        with cursor_hidden():
+            with mss.mss() as sct:
+                raw = sct.grab(sct.monitors[1])
+                img = Image.frombytes("RGB", (raw.width, raw.height), raw.bgra, "raw", "BGRX")
     except Exception as exc:
         return f"ERROR: screenshot capture failed: {exc}"
+
+    # Agent view: record that the full screen was sent to the vision model
+    try:
+        from tools.agent_view import AgentViewSession
+        _vs = AgentViewSession("visual_inspect")
+        _vs.add_vision_crop((0, 0, img.size[0], img.size[1]), None,
+                            note=f"inspect: {question[:100]}")
+        _vs.save()
+    except Exception:
+        pass
 
     # ------------------------------------------------------------------ #
     # 2. Resize proportionally to control API cost

@@ -44,6 +44,13 @@ def desktop_smooth_click(x: int, y: int, duration: float = 0.4) -> str:
     pyautogui = _get_pyautogui()
     if not pyautogui: return "ERROR: pyautogui not installed"
     try:
+        # Agent-cursor overlay follows every physical click (no-op when off)
+        from tools import agent_cursor
+        agent_cursor.move_to(x, y)
+        agent_cursor.pulse()
+    except Exception:
+        pass
+    try:
         start_x, start_y = pyautogui.position()
         print(f"  [DESKTOP] Gliding mouse from ({start_x}, {start_y}) to ({x}, {y}) over {duration}s...")
         pyautogui.moveTo(x, y, duration=duration, tween=pyautogui.easeInOutQuad)

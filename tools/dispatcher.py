@@ -186,6 +186,50 @@ TOOL_DEFINITIONS = [
   {
     "type": "function",
     "function": {
+      "name": "smart_fill",
+      "description": "GRAPH-FIRST form filling (preferred over visual_click+type for any native/HTML app): locates a field by description using the UI accessibility tree, fills it via virtual input (UIA ValuePattern/SendKeys — the physical mouse never moves), and verifies via OCR. Falls back to vision automatically only when the graph has no match (canvas/WebGL surfaces). Doctrine: the GRAPH locates and acts; VISION (visual_inspect) reads and verifies; reserve visual_click for canvas-only UIs.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "field_description": {"type": "string", "description": "Natural description of the field, e.g. 'search box', 'email address field', 'first name input'"},
+          "text": {"type": "string", "description": "The text to type into the field"},
+          "window_hint": {"type": "string", "description": "Partial window title to focus first (e.g. 'Chrome', 'Notepad'). Strongly recommended."},
+          "press_enter": {"type": "boolean", "description": "Press Enter after filling (submit). Default false."}
+        },
+        "required": ["field_description", "text"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "agent_view",
+      "description": "Manage annotated 'what the agent sees' debug screenshots. When ON, every locate/click operation saves a PNG to scratch/agent_view/ showing window-graph rectangles, mouse-braille probe points (gray=miss, green=hit), matched element boxes, OCR word boxes, and vision crop+result coordinates. Actions: 'on', 'off', 'status', 'latest' (returns newest PNG path; set open_file true to open it for the user).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {"type": "string", "enum": ["latest", "on", "off", "status"], "description": "What to do. Default 'latest'."},
+          "open_file": {"type": "boolean", "description": "With 'latest': also open the PNG in the user's image viewer."}
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "agent_cursor",
+      "description": "Control the visible agent-cursor overlay: a click-through teal ring showing where the agent is acting on screen, even during virtual input when the physical mouse never moves. Actions: 'on', 'off', 'status'.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {"type": "string", "enum": ["on", "off", "status"], "description": "Default 'status'."}
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "delegate_task",
       "description": "Delegate a complex build task to the multi-agent IDE. Use this for tasks that involve creating full features with database, API, and UI components. The orchestrator will decompose the task and route subtasks to specialized agents (backend, frontend, QA).",
       "parameters": {
@@ -545,6 +589,7 @@ def dispatch(fn_name: str, args: dict, orch_agent=None):
     # intentional window navigation (pressing WIN, clicking apps, etc.)
     _CORTEX_EXEMPT = {
         "brain_query", "brain_write", "vocab_learn", "vocab_lookup", "read_file", "list_dir", "run_command",
+        "smart_fill", "agent_view", "agent_cursor",
         # GUI tools — these ARE the context switching, exempting them is intentional:
         "desktop_smooth_click", "desktop_type_text", "desktop_press_keys", "desktop_scroll",
         "desktop_focus_window", "desktop_get_active_window", "desktop_batch_actions",
@@ -652,6 +697,20 @@ def _dispatch_raw(fn_name: str, args: dict):
     elif fn_name == "vocab_lookup":                                    # Phase 22h
         from core.system.visual_vocab import vocab_lookup
         return vocab_lookup(args.get("category", ""))
+    elif fn_name == "smart_fill":                                      # Phase 24
+        from tools.virtual_input import smart_fill
+        return smart_fill(
+            args.get("field_description", ""),
+            args.get("text", ""),
+            args.get("window_hint"),
+            bool(args.get("press_enter", False)),
+        )
+    elif fn_name == "agent_view":                                      # Phase 24
+        from tools.agent_view import agent_view_tool
+        return agent_view_tool(args.get("action", "latest"), bool(args.get("open_file", False)))
+    elif fn_name == "agent_cursor":                                    # Phase 24
+        from tools.agent_cursor import agent_cursor_tool
+        return agent_cursor_tool(args.get("action", "status"))
     elif fn_name == "delegate_task":
         from core.orchestrator.dag import run_dag
         result = run_dag(args.get("task"), dry_run=args.get("dry_run", False))

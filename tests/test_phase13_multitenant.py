@@ -57,12 +57,13 @@ class TestAuthenticate:
             del os.environ["SUPABASE_JWT_SECRET"]
 
     def test_default_secret_fallback(self):
-        """When HERMES_SECRET is unset, auth uses 'default_secret'."""
+        """Phase 22g fail-closed: when HERMES_SECRET is unset, ALL tokens are
+        rejected — the old 'default_secret' constant must NOT authenticate."""
         os.environ.pop("HERMES_SECRET", None)
         os.environ.pop("SUPABASE_JWT_SECRET", None)
         from core.auth import authenticate
         ok, user_id = authenticate("default_secret")
-        assert ok is True
+        assert ok is False
         assert user_id is None
         # Restore
         os.environ["HERMES_SECRET"] = "test-secret-13"

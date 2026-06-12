@@ -41,7 +41,7 @@ def test_desktop_batch_actions_success(
     
     # Assert each native tool was invoked with correct parameters
     mock_focus.assert_called_once_with("chrome")
-    mock_click.assert_called_once_with(100, 200, duration=1.5)
+    mock_click.assert_called_once_with(100, 200, duration=0.4)  # Phase 22h fast-UI default
     mock_type.assert_called_once_with("https://www.linkedin.com")
     mock_press.assert_called_once_with(["ctrl", "t"])
     mock_scroll.assert_called_once_with(-100, steps=5)

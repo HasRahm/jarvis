@@ -66,7 +66,7 @@ def _setup_tesseract():
 # Layer 1 — Graph (Win32 window stack)
 # ---------------------------------------------------------------------------
 
-def _layer1_graph_focus(window_hint: str) -> tuple:
+def _layer1_graph_focus(window_hint: str, view_session=None) -> tuple:
     """
     Verify the target window exists in the Win32 stack and bring it to the
     foreground.
@@ -81,6 +81,8 @@ def _layer1_graph_focus(window_hint: str) -> tuple:
 
     try:
         graph = get_3d_window_graph()
+        if view_session is not None:
+            view_session.add_window_graph(graph)
         nodes = graph.get("nodes", [])
         hint_lower = window_hint.lower()
 
@@ -112,7 +114,7 @@ def _layer1_graph_focus(window_hint: str) -> tuple:
 # Layer 2b — Mouse Braille (ControlFromPoint grid scan)
 # ---------------------------------------------------------------------------
 
-def _layer2_mouse_braille(target: str, window_node: dict) -> tuple:
+def _layer2_mouse_braille(target: str, window_node: dict, view_session=None) -> tuple:
     """
     Scan a grid of points INSIDE the target window's pixel bounds using
     auto.ControlFromPoint(x, y) — the mouse cursor acts as a braille-reading
@@ -164,16 +166,45 @@ def _layer2_mouse_braille(target: str, window_node: dict) -> tuple:
                         continue
                     ctrl_name = (ctrl.Name or "").strip()
                     if not ctrl_name:
+                        if view_session is not None:
+                            view_session.add_probe(px, py, hit=False)
                         continue
                     if target_lower in ctrl_name.lower():
                         rect = ctrl.BoundingRectangle
                         cx = rect.left + rect.width() // 2
                         cy = rect.top + rect.height() // 2
+                        if view_session is not None:
+                            view_session.add_probe(px, py, hit=True)
+                            view_session.add_match_box(
+                                rect.left, rect.top, rect.width(), rect.height(),
+                                ctrl_name)
+
+                        # Virtual input first: invoke the control through UIA
+                        # patterns without moving the physical mouse.
+                        from tools.virtual_input import (
+                            virtual_input_enabled, select_strategies, execute_strategy)
+                        if virtual_input_enabled():
+                            from tools import agent_cursor
+                            agent_cursor.move_to(cx, cy)
+                            agent_cursor.pulse()
+                            role = ctrl.ControlTypeName.replace("Control", "")
+                            for strategy in select_strategies(role, "click"):
+                                if strategy == "physical":
+                                    break
+                                v_ok, v_msg = execute_strategy(ctrl, strategy)
+                                if v_ok:
+                                    return True, (
+                                        f"mouse-braille: '{ctrl_name}' [{ctrl.ControlTypeName}] "
+                                        f"at ({cx},{cy}) probe=({px},{py}) -> {v_msg} (virtual)"
+                                    )
+
                         click_result = desktop_smooth_click(cx, cy, duration=0.5)
                         return True, (
                             f"mouse-braille: '{ctrl_name}' [{ctrl.ControlTypeName}] "
-                            f"at ({cx},{cy}) probe=({px},{py}) -> {click_result}"
+                            f"at ({cx},{cy}) probe=({px},{py}) -> {click_result} (physical)"
                         )
+                    if view_session is not None:
+                        view_session.add_probe(px, py, hit=False)
                 except Exception:
                     continue
         return False, None
@@ -196,7 +227,7 @@ def _layer2_mouse_braille(target: str, window_node: dict) -> tuple:
 # Layer 3 — Screenshot OCR fallback
 # ---------------------------------------------------------------------------
 
-def _layer3_ocr(target: str) -> tuple:
+def _layer3_ocr(target: str, view_session=None) -> tuple:
     """
     Capture the current screen with mss and use pytesseract to locate *target*
     text by bounding box, then smooth-click the center.
@@ -216,15 +247,19 @@ def _layer3_ocr(target: str) -> tuple:
         import mss
         from PIL import Image
         from tools.desktop_automation import desktop_smooth_click
+        from tools.agent_cursor import cursor_hidden
 
-        # Capture the primary monitor directly via mss
-        with mss.mss() as sct:
-            raw = sct.grab(sct.monitors[1])
-            img = Image.frombytes(
-                "RGB", (raw.width, raw.height), raw.bgra, "raw", "BGRX"
-            )
+        # Capture the primary monitor directly via mss (overlay ring hidden)
+        with cursor_hidden():
+            with mss.mss() as sct:
+                raw = sct.grab(sct.monitors[1])
+                img = Image.frombytes(
+                    "RGB", (raw.width, raw.height), raw.bgra, "raw", "BGRX"
+                )
 
         data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+        if view_session is not None:
+            view_session.add_ocr_words(data)
         texts = data["text"]
         target_lower = target.lower()
         target_words = target_lower.split()
@@ -307,9 +342,11 @@ def _check_text_on_screen(text: str, min_conf: int = 40) -> tuple:
     try:
         import mss
         from PIL import Image
-        with mss.mss() as sct:
-            raw = sct.grab(sct.monitors[1])
-            img = Image.frombytes("RGB", (raw.width, raw.height), raw.bgra, "raw", "BGRX")
+        from tools.agent_cursor import cursor_hidden
+        with cursor_hidden():
+            with mss.mss() as sct:
+                raw = sct.grab(sct.monitors[1])
+                img = Image.frombytes("RGB", (raw.width, raw.height), raw.bgra, "raw", "BGRX")
         data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
         text_lower = text.lower()
         for i, tok in enumerate(data["text"]):
@@ -356,17 +393,24 @@ def _verify_outcome(
         # Seed now; only catches changes AFTER this point
         imprinter.imprint()
 
-    start = time.time()
-    changed = False
-    top_region = {}
-    while (time.time() - start) < min(timeout, 3.0):
-        result = imprinter.imprint()
-        if result["changes"]["changed"]:
-            changed = True
-            regions = result["changes"].get("regions", [])
-            top_region = regions[0] if regions else {}
-            break
-        time.sleep(0.1)
+    # Hide the agent-cursor ring while polling — its pixels would register as
+    # a density delta and produce false "screen changed" results.
+    from tools import agent_cursor
+    agent_cursor.hide()
+    try:
+        start = time.time()
+        changed = False
+        top_region = {}
+        while (time.time() - start) < min(timeout, 3.0):
+            result = imprinter.imprint()
+            if result["changes"]["changed"]:
+                changed = True
+                regions = result["changes"].get("regions", [])
+                top_region = regions[0] if regions else {}
+                break
+            time.sleep(0.1)
+    finally:
+        agent_cursor.show()
 
     if not changed:
         return False, "Screen did not change after action"
@@ -431,9 +475,12 @@ def hybrid_locate_click(
     target = target.strip()
     overall_trace = []
 
+    from tools.agent_view import AgentViewSession
+
     for attempt in range(max_retries + 1):
         attempt_label = f"[Attempt {attempt + 1}/{max_retries + 1}]"
         trace = []
+        view_session = AgentViewSession(f"hybrid_{target[:20]}")
 
         # ---------------------------------------------------------------- #
         # Pre-click baseline snapshot (for verify_outcome)                  #
@@ -452,14 +499,14 @@ def hybrid_locate_click(
         # ---------------------------------------------------------------- #
         window_node = None
         if window_hint:
-            l1_ok, l1_msg, window_node = _layer1_graph_focus(window_hint)
+            l1_ok, l1_msg, window_node = _layer1_graph_focus(window_hint, view_session)
             label = "OK" if l1_ok else "FAILED"
             trace.append(f"Layer 1 (Graph): {label} — {l1_msg}")
 
             if not l1_ok:
                 # Focus failed — jump straight to OCR
                 logger.warning("[HybridCursor] Layer 1 failed. Jumping to Layer 3.")
-                l3_ok, l3_msg = _layer3_ocr(target)
+                l3_ok, l3_msg = _layer3_ocr(target, view_session)
                 trace.append("Layer 2b (MouseBraille): SKIPPED — Layer 1 focus failed")
                 trace.append(f"Layer 3 (OCR): {'OK' if l3_ok else 'FAILED'} — {l3_msg}")
                 click_ok = l3_ok
@@ -467,7 +514,7 @@ def hybrid_locate_click(
                 # -------------------------------------------------------- #
                 # Layer 2b — Mouse Braille: ControlFromPoint grid scan      #
                 # -------------------------------------------------------- #
-                l2_ok, l2_msg = _layer2_mouse_braille(target, window_node)
+                l2_ok, l2_msg = _layer2_mouse_braille(target, window_node, view_session)
                 trace.append(f"Layer 2b (MouseBraille): {'OK' if l2_ok else 'FAILED'} — {l2_msg}")
 
                 if l2_ok:
@@ -477,14 +524,14 @@ def hybrid_locate_click(
                     # Layer 3 — OCR fallback                                 #
                     # ---------------------------------------------------- #
                     logger.warning("[HybridCursor] Layer 2b failed. Falling back to Layer 3.")
-                    l3_ok, l3_msg = _layer3_ocr(target)
+                    l3_ok, l3_msg = _layer3_ocr(target, view_session)
                     trace.append(f"Layer 3 (OCR): {'OK' if l3_ok else 'FAILED'} — {l3_msg}")
                     click_ok = l3_ok
         else:
             trace.append("Layer 1 (Graph): SKIPPED — no window_hint provided")
             trace.append("Layer 2b (MouseBraille): SKIPPED — no window bounds")
             # Jump straight to OCR
-            l3_ok, l3_msg = _layer3_ocr(target)
+            l3_ok, l3_msg = _layer3_ocr(target, view_session)
             trace.append(f"Layer 3 (OCR): {'OK' if l3_ok else 'FAILED'} — {l3_msg}")
             click_ok = l3_ok
 
@@ -500,6 +547,8 @@ def hybrid_locate_click(
             trace.append(f"Verify ('{verify_text}'): {'OK' if v_ok else 'FAILED'} — {v_msg}")
 
             overall_trace.append(f"{attempt_label}\n  " + "\n  ".join(trace))
+            view_session.add_note("\n".join(trace))
+            view_session.save()
 
             if v_ok:
                 return f"[HybridCursor] SUCCESS\n" + "\n".join(overall_trace)
@@ -517,6 +566,8 @@ def hybrid_locate_click(
         else:
             # No verify requested, or click itself failed
             overall_trace.append(f"{attempt_label}\n  " + "\n  ".join(trace))
+            view_session.add_note("\n".join(trace))
+            view_session.save()
             status = "SUCCESS" if click_ok else "FAILED"
             return f"[HybridCursor] {status}\n" + "\n".join(overall_trace)
 

@@ -74,15 +74,21 @@ def visual_click(
     try:
         import mss
         from PIL import Image
+        from tools.agent_cursor import cursor_hidden
 
-        with mss.mss() as sct:
-            mon = sct.monitors[1]
-            screen_w = mon["width"]
-            screen_h = mon["height"]
-            raw = sct.grab(mon)
-            img = Image.frombytes("RGB", (raw.width, raw.height), raw.bgra, "raw", "BGRX")
+        with cursor_hidden():
+            with mss.mss() as sct:
+                mon = sct.monitors[1]
+                screen_w = mon["width"]
+                screen_h = mon["height"]
+                raw = sct.grab(mon)
+                img = Image.frombytes("RGB", (raw.width, raw.height), raw.bgra, "raw", "BGRX")
     except Exception as exc:
         return f"[VisualClick] FAILED: screenshot capture error: {exc}"
+
+    # Agent view session (no-op unless JARVIS_AGENT_VIEW=1)
+    from tools.agent_view import AgentViewSession
+    view_session = AgentViewSession(f"visual_{description[:20]}")
 
     # ------------------------------------------------------------------ #
     # 1b. Graph method — crop to target window bounds if window_hint given  #
@@ -97,6 +103,7 @@ def visual_click(
         try:
             from tools.windows import get_3d_window_graph
             graph = get_3d_window_graph()
+            view_session.add_window_graph(graph)
             nodes = graph.get("nodes", [])
             hint_lower = window_hint.lower()
             match = next((n for n in nodes if hint_lower in n.get("title", "").lower()), None)
@@ -243,6 +250,15 @@ def visual_click(
     # Clamp to screen bounds with a small margin
     actual_x = max(5, min(actual_x, screen_w - 5))
     actual_y = max(5, min(actual_y, screen_h - 5))
+
+    # Record what the model saw and where it pointed, then save (pre-click)
+    view_session.add_vision_crop(
+        (crop_offset_x, crop_offset_y, crop_w, crop_h),
+        (actual_x, actual_y),
+        note=vision_response.strip()[:120],
+    )
+    view_session.add_note(f"visual_click '{description[:60]}' -> screen ({actual_x},{actual_y})")
+    view_session.save()
 
     # ------------------------------------------------------------------ #
     # 8. Click                                                             #

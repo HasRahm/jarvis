@@ -4,12 +4,9 @@ import json
 import time
 import logging
 import tempfile
-pyautogui = None
-if os.environ.get("JARVIS_CI") != "true":
-    try:
-        import pyautogui
-    except (ImportError, KeyError, Exception):
-        pass
+# pyautogui imported lazily inside desktop_interact_with_element to prevent
+# module-level hang when desktop_automation is already in sys.modules (pyautogui
+# blocks on second init in the same process context).
 
 
 logger = logging.getLogger(__name__)
@@ -148,29 +145,54 @@ def desktop_interact_with_element(index: int, action: str = "click", text: str =
 
     x_center = target["x"] + target["w"] // 2
     y_center = target["y"] + target["h"] // 2
-    
+
+    # ── Virtual input first (Phase 24): act through UIA patterns without
+    #    moving the physical mouse. hover/right_click have no UIA equivalent
+    #    and always use the physical path. On failure we fall through to the
+    #    original pyautogui block, prefixed so the agent learns which apps
+    #    need physical/vision interaction.
+    action = action.lower()
+    virtual_note = ""
+    if action == "click" or (action == "type" and text):
+        try:
+            from tools.virtual_input import virtual_interact, virtual_input_enabled
+            from tools.agent_view import AgentViewSession
+            if virtual_input_enabled():
+                vs = AgentViewSession(f"element_{index}")
+                ok, vmsg, need_physical = virtual_interact(target, action, text, vs)
+                vs.add_note(f"element {index} {action}: {vmsg}")
+                vs.save()
+                if ok:
+                    return (f"[virtual] Successfully performed '{action}' on element {index} "
+                            f"({target['role']} '{target['name']}') -> {vmsg}")
+                virtual_note = f"[physical-fallback: {vmsg[:120]}] "
+        except Exception as e:
+            virtual_note = f"[physical-fallback: virtual input error {e}] "
+
     try:
-        from tools.desktop_automation import desktop_smooth_click, desktop_type_text, desktop_press_keys
-        
+        from tools.desktop_automation import desktop_smooth_click, desktop_type_text, desktop_press_keys, _get_pyautogui
+        pyautogui = _get_pyautogui()
+        if not pyautogui:
+            return "ERROR: pyautogui not available"
+
         # Bring focus back or verify bounds
         screen_w, screen_h = pyautogui.size()
         if not (0 <= x_center < screen_w and 0 <= y_center < screen_h):
             return f"ERROR: Element coordinates ({x_center}, {y_center}) are offscreen."
 
-        action = action.lower()
         if action == "click":
             res = desktop_smooth_click(x_center, y_center, duration=0.8)
-            return f"Successfully clicked element {index} ({target['role']} '{target['name']}') -> {res}"
-            
+            return f"{virtual_note}Successfully clicked element {index} ({target['role']} '{target['name']}') -> {res}"
+
         elif action == "hover":
             pyautogui.moveTo(x_center, y_center, duration=0.8, tween=pyautogui.easeInOutQuad)
             return f"Successfully hovered over element {index}"
-            
+
         elif action == "right_click":
             pyautogui.moveTo(x_center, y_center, duration=0.8, tween=pyautogui.easeInOutQuad)
             pyautogui.rightClick()
             return f"Successfully right-clicked element {index}"
-            
+
         elif action == "type":
             if not text:
                 return "ERROR: Text parameter is required for 'type' action."
@@ -184,7 +206,7 @@ def desktop_interact_with_element(index: int, action: str = "click", text: str =
                 pyautogui.press("backspace")
                 time.sleep(0.1)
             res = desktop_type_text(text)
-            return f"Successfully typed into element {index} -> {res}"
+            return f"{virtual_note}Successfully typed into element {index} -> {res}"
             
         else:
             return f"ERROR: Unknown action type '{action}'."

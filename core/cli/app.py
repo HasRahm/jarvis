@@ -37,6 +37,9 @@ SLASH_COMMANDS = [
     # Workflow
     ("/batch",     "Run multiple tasks in parallel (comma-separated)", "/batch"),
     ("/pipeline",  "Run a saved multi-step pipeline by name",          "/pipeline"),
+    # Agent perception & cursor (Phase 24)
+    ("/agentview", "Toggle/open annotated agent-view screenshots",     "/agentview"),
+    ("/cursor",    "Toggle the visible agent cursor overlay",          "/cursor"),
     # UI controls
     ("/clear",     "Clear the output stream",                          "/clear"),
     ("/theme",     "Switch theme: dark | matrix | light | ocean",      "/theme"),

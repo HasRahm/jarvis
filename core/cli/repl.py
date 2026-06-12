@@ -35,7 +35,7 @@ from core.cli.app import SLASH_COMMANDS, _THEMES
 _AGENT_MODES = {"research", "diagnose", "browse", "desktop", "excel", "shell", "auto", "screen"}
 # Commands handled locally inside the REPL (no agent loop)
 _INLINE = {"help", "model", "models", "tools", "clear", "theme", "vocab",
-           "history", "export", "exit", "quit", "doctor"}
+           "history", "export", "exit", "quit", "doctor", "agentview", "cursor"}
 
 _HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".jarvis_repl_history")
 
@@ -523,6 +523,32 @@ class JarvisRepl:
     def _cmd_doctor(self, arg):
         try:
             self._lazy_jarvis_cli().doctor()
+        except Exception as e:
+            self.console.print(f"[red]{e}[/]")
+
+    def _cmd_agentview(self, arg):
+        """Annotated 'what the agent sees' screenshots: on | off | open | status."""
+        try:
+            from tools.agent_view import agent_view_tool
+            sub = (arg or "status").strip().lower()
+            if sub == "open":
+                self.console.print(agent_view_tool("latest", open_file=True))
+            elif sub in ("on", "off", "status", "latest"):
+                self.console.print(agent_view_tool(sub))
+            else:
+                self.console.print("[dim]usage: /agentview on | off | open | status[/]")
+        except Exception as e:
+            self.console.print(f"[red]{e}[/]")
+
+    def _cmd_cursor(self, arg):
+        """Visible agent-cursor overlay ring: on | off | status."""
+        try:
+            from tools.agent_cursor import agent_cursor_tool
+            sub = (arg or "status").strip().lower()
+            if sub in ("on", "off", "status"):
+                self.console.print(agent_cursor_tool(sub))
+            else:
+                self.console.print("[dim]usage: /cursor on | off | status[/]")
         except Exception as e:
             self.console.print(f"[red]{e}[/]")
 
