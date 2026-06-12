@@ -35,7 +35,8 @@ from core.cli.app import SLASH_COMMANDS, _THEMES
 _AGENT_MODES = {"research", "diagnose", "browse", "desktop", "excel", "shell", "auto", "screen"}
 # Commands handled locally inside the REPL (no agent loop)
 _INLINE = {"help", "model", "models", "tools", "clear", "theme", "vocab",
-           "history", "export", "exit", "quit", "doctor", "agentview", "cursor"}
+           "history", "export", "exit", "quit", "doctor", "agentview", "cursor",
+           "remote"}
 
 _HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".jarvis_repl_history")
 
@@ -539,6 +540,64 @@ class JarvisRepl:
                 self.console.print("[dim]usage: /agentview on | off | open | status[/]")
         except Exception as e:
             self.console.print(f"[red]{e}[/]")
+
+    def _cmd_remote(self, arg):
+        """Hermes remote pairing: start | stop | status.
+
+        'start' launches `jarvis-cli.py --remote` in its OWN console window —
+        the flow needs a live terminal for the QR code and a blocking uvicorn
+        server, so it can't run inside the REPL. The REPL tracks the child
+        process for stop/status.
+        """
+        import subprocess
+        sub = (arg or "start").strip().lower()
+        proc = getattr(self, "_remote_proc", None)
+        alive = proc is not None and proc.poll() is None
+
+        if sub in ("", "start"):
+            if alive:
+                self.console.print(f"[yellow]Remote session already running (pid {proc.pid}). "
+                                   f"Use /remote stop first.[/]")
+                return
+            try:
+                py = sys.executable
+                cli = os.path.join(os.getcwd(), "jarvis-cli.py")
+                self._remote_proc = subprocess.Popen(
+                    [py, cli, "--remote"],
+                    cwd=os.getcwd(),
+                    creationflags=subprocess.CREATE_NEW_CONSOLE,
+                )
+                self.console.print(
+                    f"[green]Remote pairing started[/] [dim](pid {self._remote_proc.pid})[/]\n"
+                    "[dim]A new console window is opening with the Cloudflare tunnel, "
+                    "pairing QR code, and Hermes server logs.\n"
+                    "Scan the QR with your phone to pair. "
+                    "Manage with /remote status · /remote stop[/]")
+            except Exception as e:
+                self.console.print(f"[red]Failed to start remote session: {e}[/]")
+
+        elif sub == "stop":
+            if not alive:
+                self.console.print("[dim]No remote session running.[/]")
+                return
+            try:
+                # Kill the whole tree — the child owns a cloudflared subprocess
+                # that plain terminate() would orphan (tunnel left open).
+                subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                               capture_output=True)
+                self._remote_proc = None
+                self.console.print("[green]Remote session stopped[/] [dim](server + tunnel killed)[/]")
+            except Exception as e:
+                self.console.print(f"[red]Failed to stop: {e}[/]")
+
+        elif sub == "status":
+            if alive:
+                self.console.print(f"[green]Remote session running[/] [dim](pid {proc.pid}) — "
+                                   f"QR + logs are in its console window[/]")
+            else:
+                self.console.print("[dim]No remote session running. Start with /remote[/]")
+        else:
+            self.console.print("[dim]usage: /remote [start|stop|status][/]")
 
     def _cmd_cursor(self, arg):
         """Visible agent-cursor overlay ring: on | off | status."""

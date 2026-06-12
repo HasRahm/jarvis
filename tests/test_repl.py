@@ -189,6 +189,66 @@ class TestDispatchTimeout:
         assert elapsed < 10, "timeout env var was not respected"
 
 
+class TestRemoteCommand:
+    """/remote must be a functional inline command (it previously fell through
+    to 'Unknown command')."""
+
+    def setup_method(self):
+        self.repl = JarvisRepl()
+
+    def test_remote_is_inline(self):
+        assert "remote" in _INLINE
+
+    def test_remote_not_agent_mode(self):
+        assert "remote" not in _AGENT_MODES
+
+    def test_handler_exists(self):
+        assert callable(getattr(self.repl, "_cmd_remote", None))
+
+    def test_status_with_no_session(self, capsys):
+        import io
+        from rich.console import Console
+        buf = io.StringIO()
+        self.repl.console = Console(file=buf, force_terminal=False)
+        self.repl._cmd_remote("status")
+        assert "No remote session" in buf.getvalue()
+
+    def test_stop_with_no_session(self):
+        import io
+        from rich.console import Console
+        buf = io.StringIO()
+        self.repl.console = Console(file=buf, force_terminal=False)
+        self.repl._cmd_remote("stop")
+        assert "No remote session" in buf.getvalue()
+
+    def test_start_spawns_new_console(self, monkeypatch):
+        import io, subprocess
+        from rich.console import Console
+        buf = io.StringIO()
+        self.repl.console = Console(file=buf, force_terminal=False)
+        spawned = {}
+
+        class FakeProc:
+            pid = 4242
+            def poll(self):
+                return None
+
+        def fake_popen(cmd, **kw):
+            spawned["cmd"] = cmd
+            spawned["flags"] = kw.get("creationflags")
+            return FakeProc()
+
+        monkeypatch.setattr(subprocess, "Popen", fake_popen)
+        self.repl._cmd_remote("start")
+        assert spawned["cmd"][1].endswith("jarvis-cli.py")
+        assert "--remote" in spawned["cmd"]
+        assert spawned["flags"] == subprocess.CREATE_NEW_CONSOLE
+        assert "Remote pairing started" in buf.getvalue()
+        # second start while running is refused
+        self.repl._cmd_remote("start")
+        assert "already running" in buf.getvalue()
+
+
 class TestShortHelper:
     def test_short_passthrough(self):
         assert _short("abc") == "abc"
