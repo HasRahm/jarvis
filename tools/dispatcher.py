@@ -147,6 +147,49 @@ TOOL_DEFINITIONS = [
   {
     "type": "function",
     "function": {
+      "name": "open_app",
+      "description": """<tool>open_app</tool>
+<purpose>Adaptively open an application using a fallback decision tree — so you don't have to improvise which path works.</purpose>
+<decision_tree>
+  1. Is a window for this app already open? -> focus it.
+  2. Is the native Windows app installed? -> launch it and confirm the window appears.
+  3. Otherwise -> open the web app in the user's REAL desktop browser (visible).
+</decision_tree>
+<input>app_name: e.g. 'chrome', 'notion', 'spotify', 'codex'. prefer: 'auto' (default, full tree) | 'native' (no web fallback) | 'web' (straight to browser).</input>
+<output>A trace string saying which path was taken (focused existing / launched native / opened in browser). Always verify the result with visual_inspect or desktop_get_active_window if the next step depends on the app being ready.</output>
+<when_to_use>ALWAYS prefer this over guessing whether to launch an exe vs open a URL. It encodes the 'check window first, then native, then browser' logic for you.</when_to_use>""",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "app_name": {"type": "string", "description": "Name of the app to open, e.g. 'chrome', 'notion', 'codex'"},
+          "prefer": {"type": "string", "enum": ["auto", "native", "web"], "description": "Path preference. Default 'auto' runs the full decision tree."}
+        },
+        "required": ["app_name"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "web_search",
+      "description": """<tool>web_search</tool>
+<purpose>Search the live web for information BEYOND your training cutoff — new technology, library/model versions, prices, releases, news, current events, anything that may have changed.</purpose>
+<input>query: a focused search query. max_results: 1-10 (default 5).</input>
+<output>A numbered list of results (title, url, snippet). Chain with browser_navigate + browser_extract_text to read a full page when a snippet isn't enough.</output>
+<when_to_use>Whenever the answer depends on current/recent facts, OR you are unsure your knowledge is up to date. Do NOT answer from stale memory about versions, prices, or events — search first.</when_to_use>""",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string", "description": "The search query"},
+          "max_results": {"type": "integer", "description": "Number of results to return (1-10, default 5)"}
+        },
+        "required": ["query"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "run_backend_agent",
       "description": """<agent>backend</agent>
 <model>claude-sonnet-4-6 (fallback: gemini-3.1-pro-preview)</model>
@@ -699,6 +742,7 @@ def dispatch(fn_name: str, args: dict, orch_agent=None):
         "brain_query", "brain_write", "vocab_learn", "vocab_lookup", "read_file", "list_dir", "run_command",
         "smart_fill", "agent_view", "agent_cursor",
         "run_backend_agent", "run_frontend_agent", "run_qa_agent", "run_iac_agent", "run_skill",
+        "open_app", "web_search",
         # GUI tools — these ARE the context switching, exempting them is intentional:
         "desktop_smooth_click", "desktop_type_text", "desktop_press_keys", "desktop_scroll",
         "desktop_focus_window", "desktop_get_active_window", "desktop_batch_actions",
@@ -909,6 +953,12 @@ def _dispatch_raw(fn_name: str, args: dict):
         # Replaced with existing sync ctypes implementation in tools/windows.py.
         from tools.windows import get_window_stack as _gws
         return json.dumps(_gws(), indent=2)
+    elif fn_name == "open_app":                                        # Phase 27
+        from tools.open_app import open_app
+        return open_app(args.get("app_name", ""), args.get("prefer", "auto"))
+    elif fn_name == "web_search":                                      # Phase 27
+        from tools.web_search import web_search
+        return web_search(args.get("query", ""), int(args.get("max_results", 5)))
     elif fn_name == "run_backend_agent":                               # Phase 26
         from agents.agent_tools import run_backend_agent
         return run_backend_agent(args.get("task", ""), args.get("user_id"))

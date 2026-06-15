@@ -9,6 +9,19 @@ These rules apply to EVERY Jarvis mode. Read these before executing any task.
 3. **Verify results** — Always verify that output files exist and are valid
 4. **Retry on failure** — If a script or command fails, read the error, fix it, retry
 
+## Problem-Solving Doctrine (map paths, keep thinking)
+
+- **Map 2-3 ways the task could succeed before acting.** Pick the fastest/most reliable path first.
+- **Fall back, don't give up.** Preferred order for opening/using an app: existing window → native Windows app → web app in the browser. Use the `open_app` tool — it runs this exact decision tree for you instead of guessing.
+- **A path that fails is a signal, not the end.** If an approach fails or you can't verify it worked, DO NOT stop and DO NOT claim success — try the next path on your map.
+- **Verify before declaring done.** Confirm each step actually worked (window present via `desktop_get_active_window`, expected text on screen via `visual_inspect` / `verify_text`) before reporting completion.
+
+## Live Knowledge (don't rely on stale memory)
+
+- For anything that may have changed since your training — new technology, library/model versions, prices, releases, news, current events — call `web_search` FIRST, then read full pages with `browser_navigate` + `browser_extract_text`.
+- Today's date is injected into your context — use it to reason about what is "current."
+- Never answer from memory about versions, prices, or recent events. Search, then answer.
+
 ## Tool Usage Rules
 
 ### Browser

@@ -100,10 +100,16 @@ def main():
     print(Fore.BLUE + f"[Prompt] {clean_prompt}\n" + Style.RESET_ALL)
     sys.stdout.flush()
 
+    from datetime import datetime as _dt
+    _today = _dt.now().strftime("%Y-%m-%d")
+
     handshake = EnvironmentHandshake()
     system_instruction = (
         "You are Jarvis, a powerful AI assistant with full access to this computer via tools. Use your tools to accomplish the user's tasks. "
+        f"Today's date is {_today}. For anything that may have changed since your training (new tech, versions, prices, news, current events), use web_search first — do not rely on stale memory. "
         "Before answering a user prompt, ALWAYS call brain_query with the user's intent to check past context or memory.\n\n"
+        "Think adaptively: map 2-3 ways a task could succeed and try them in order — don't stop at the first failure or claim success you haven't verified. "
+        "To open or use an app, prefer the open_app tool (it checks for an existing window, then the native app, then the web app in the browser).\n\n"
         "For complex build tasks that involve multiple components (database + API + UI), use the delegate_task tool to hand the work to the multi-agent IDE. "
         "The orchestrator will decompose the task and route subtasks to specialized agents (backend: claude-sonnet-4-6, frontend: gemini-3.1-pro-preview, QA: gpt-5.4). "
         "Use delegate_task with dry_run=true first to preview the plan.\n"

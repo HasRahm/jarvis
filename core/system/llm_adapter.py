@@ -42,6 +42,26 @@ def yield_json_chunks(data: dict, chunk_size=1024):
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "google/gemma-4-31b-it:free")
 
+def _get_temperature(model: str) -> float:
+    """Resolve sampling temperature (Phase 27).
+
+    Priority: JARVIS_TEMPERATURE env override → per-model tuned value → balanced default.
+    Default raised from 0.3 to 0.6 so the orchestrator explores alternative approaches
+    while staying reliable enough for tool-call JSON. Set JARVIS_TEMPERATURE=0.3 to
+    restore the old conservative behaviour on a flaky machine.
+    """
+    env = os.environ.get("JARVIS_TEMPERATURE")
+    if env:
+        try:
+            return float(env)
+        except ValueError:
+            pass
+    m = (model or "").lower()
+    if "nemotron" in m or m.startswith("nvidia/") or "moonshotai" in m:
+        return 1.0  # reasoning models keep their tuned value
+    return 0.6
+
+
 def is_ollama_available():
     if not HAS_OLLAMA:
         return False
@@ -206,17 +226,15 @@ def _call_openai_compatible_api(api_key, base_url, model, messages, tools):
     payload = {
         "model": model,
         "messages": formatted_messages,
-        "temperature": 0.3,
+        "temperature": _get_temperature(model),
         "stream": True
     }
-    
+
     if "nemotron" in model.lower() or model.lower().startswith("nvidia/"):
-        payload["temperature"] = 1.0
         payload["top_p"] = 0.95
         payload["max_tokens"] = 16384
         payload["reasoning_budget"] = 1024
     elif "moonshotai" in model.lower():
-        payload["temperature"] = 1.0
         payload["top_p"] = 1.0
         payload["max_tokens"] = 16384
 
@@ -473,6 +491,7 @@ def _call_anthropic_api(api_key, model, messages, tools):
         "model": anthropic_model,
         "max_tokens": 4096,
         "messages": anthropic_messages,
+        "temperature": min(_get_temperature(model), 1.0),  # Anthropic caps at 1.0
         "stream": True
     }
     if system_instruction:
