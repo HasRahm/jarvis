@@ -2,22 +2,32 @@ import ctypes
 import logging
 import os
 
-pyautogui = None
-if os.environ.get("JARVIS_CI") != "true":
-    try:
-        import pyautogui
-    except (ImportError, KeyError, Exception):
-        pass
-
-gw = None
-if os.environ.get("JARVIS_CI") != "true":
-    try:
-        import pygetwindow as gw
-    except (ImportError, NotImplementedError, Exception):
-        pass
-
-
 logger = logging.getLogger(__name__)
+
+# Lazy-loaded GUI libraries — importing pygetwindow/pyautogui at module level
+# can deadlock due to Win32 COM initialization in subprocess contexts.
+_pyautogui = None
+_gw = None
+
+def _get_pyautogui():
+    global _pyautogui
+    if _pyautogui is None and os.environ.get("JARVIS_CI") != "true":
+        try:
+            import pyautogui
+            _pyautogui = pyautogui
+        except (ImportError, KeyError, Exception):
+            pass
+    return _pyautogui
+
+def _get_gw():
+    global _gw
+    if _gw is None and os.environ.get("JARVIS_CI") != "true":
+        try:
+            import pygetwindow as gw
+            _gw = gw
+        except (ImportError, NotImplementedError, Exception):
+            pass
+    return _gw
 
 class RECT(ctypes.Structure):
     _fields_ = [
@@ -37,6 +47,11 @@ def get_window_stack() -> list:
         
         while hwnd:
             if user32.IsWindowVisible(hwnd) and not user32.IsIconic(hwnd):
+                # Skip hung windows to prevent GetWindowTextW deadlocks
+                if hasattr(user32, 'IsHungAppWindow') and user32.IsHungAppWindow(hwnd):
+                    hwnd = user32.GetWindow(hwnd, 2)
+                    continue
+                    
                 # Fetch window title length
                 length = user32.GetWindowTextLengthW(hwnd)
                 if length > 0:
@@ -71,17 +86,19 @@ def get_window_stack() -> list:
         # Fallback to pygetwindow if ctypes fails
         fallback_stack = []
         try:
-            for idx, w in enumerate(gw.getAllWindows()):
-                if w.title and w.width > 120 and w.height > 120 and not w.isMinimized:
-                    clean_title = w.title.encode('ascii', errors='replace').decode('ascii')
-                    fallback_stack.append({
-                        "title": clean_title,
-                        "x": w.left,
-                        "y": w.top,
-                        "w": w.width,
-                        "h": w.height,
-                        "depth": idx
-                    })
+            gw = _get_gw()
+            if gw:
+                for idx, w in enumerate(gw.getAllWindows()):
+                    if w.title and w.width > 120 and w.height > 120 and not w.isMinimized:
+                        clean_title = w.title.encode('ascii', errors='replace').decode('ascii')
+                        fallback_stack.append({
+                            "title": clean_title,
+                            "x": w.left,
+                            "y": w.top,
+                            "w": w.width,
+                            "h": w.height,
+                            "depth": idx
+                        })
             return fallback_stack
         except Exception as e2:
             logger.error(f"Fallback window query also failed: {e2}")
@@ -120,9 +137,10 @@ def get_3d_window_graph() -> dict:
     """Returns the full window stack as a structured 3D graph representing spatial depth layers."""
     try:
         stack = get_window_stack()
-        try:
-            cx, cy = pyautogui.position()
-        except Exception:
+        pag = _get_pyautogui()
+        if pag:
+            cx, cy = pag.position()
+        else:
             cx, cy = 0, 0
             
         agent_pos = {"x": cx, "y": cy, "z": 0}

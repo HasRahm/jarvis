@@ -423,7 +423,10 @@ def run_dag(user_task: str, dry_run: bool = False, task_id: str = None, user_id:
         }
 
     # Import destroy here so it's in scope for the finally-style cleanup below
-    from tools.sandbox import destroy_sandbox
+    if os.environ.get("JARVIS_SANDBOX_MODE") == "mxc":
+        from core.system.mxc_adapter import destroy_sandbox
+    else:
+        from tools.sandbox import destroy_sandbox
 
     # Step 3: Execute
     print("[3/3] Executing agents...\n")
@@ -433,8 +436,11 @@ def run_dag(user_task: str, dry_run: bool = False, task_id: str = None, user_id:
     if not is_recovered:
         _reset_agents_md(task_id, user_task)
 
-    # Phase 13: provision E2B cloud sandbox (no-op when JARVIS_SANDBOX_MODE != "e2b")
-    from tools.sandbox import create_sandbox
+    # Phase 13: provision E2B cloud or MXC sandbox
+    if os.environ.get("JARVIS_SANDBOX_MODE") == "mxc":
+        from core.system.mxc_adapter import create_sandbox
+    else:
+        from tools.sandbox import create_sandbox
     orchestrator.reset()
     orchestrator.sandbox = create_sandbox(task_id)
     orchestrator.user_task = user_task
@@ -668,12 +674,18 @@ def run_dag(user_task: str, dry_run: bool = False, task_id: str = None, user_id:
                 if not _wsl_project:
                     print("    [INFO] JARVIS_WSL_PROJECT_ROOT not set — skipping WSL container restart.")
                 else:
-                    cmd = ["wsl", "-d", _wsl_distro, "--cd", _wsl_project, "docker", "compose", "restart", "backend"]
+                    if os.environ.get("JARVIS_SANDBOX_MODE") == "mxc":
+                        cmd = ["mxc", "exec", "backend", "restart"]
+                        restart_msg = "Automatic backend container restart succeeded via `mxc exec backend restart`."
+                    else:
+                        cmd = ["wsl", "-d", _wsl_distro, "--cd", _wsl_project, "docker", "compose", "restart", "backend"]
+                        restart_msg = "Automatic backend container restart succeeded via `docker compose restart backend` inside WSL."
+                        
                     from core.system.safety_monitor import SafetyMonitor
                     res = SafetyMonitor.run_monitored(cmd)
                     if res.returncode == 0:
-                        print("    [PASS] Backend container restarted successfully inside WSL.")
-                        log_to_agents_md("orchestrator: Automatic backend container restart succeeded via `docker compose restart backend` inside WSL.")
+                        print("    [PASS] Backend container restarted successfully.")
+                        log_to_agents_md(f"orchestrator: {restart_msg}")
                     else:
                         print(f"    [WARNING] Failed to restart backend container inside WSL: {res.stderr or res.stdout}")
             except Exception as e:

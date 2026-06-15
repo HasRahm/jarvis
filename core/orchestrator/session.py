@@ -5,6 +5,7 @@ import subprocess
 from brain.write import brain_write
 from brain.query import brain_query
 from brain.get import brain_get
+from brain.supabase_store import mem_upsert
 
 class SessionManager:
     def checkpoint(self, session_id: str, state: dict):
@@ -16,7 +17,9 @@ class SessionManager:
             "dag_position": state.get("current_index", 0),
             "status": "incomplete" if state.get("status") != "completed" else "completed"
         }
-        brain_write(f"sessions/{session_id}/checkpoint", json.dumps(data, indent=2))
+        # Synchronous: checkpoints are recovery-critical — a dropped write
+        # defeats the purpose, so commit before returning.
+        mem_upsert(f"sessions/{session_id}/checkpoint", json.dumps(data, indent=2))
         
     def mark_completed(self, session_id: str, state: dict):
         """Mark session as completed."""
@@ -27,7 +30,9 @@ class SessionManager:
             "dag_position": state.get("current_index", 0),
             "status": "completed"
         }
-        brain_write(f"sessions/{session_id}/checkpoint", json.dumps(data, indent=2))
+        # Synchronous: checkpoints are recovery-critical — a dropped write
+        # defeats the purpose, so commit before returning.
+        mem_upsert(f"sessions/{session_id}/checkpoint", json.dumps(data, indent=2))
 
     def recover(self) -> dict | None:
         """On startup, check for incomplete sessions."""

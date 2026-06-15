@@ -3,8 +3,10 @@ import json
 from unittest.mock import MagicMock, patch
 from core.orchestrator.session import SessionManager
 
-@patch("core.orchestrator.session.brain_write")
-def test_checkpoint(mock_write):
+# Phase 25: checkpoints are recovery-critical and now go through the
+# SYNCHRONOUS Supabase upsert (mem_upsert), not the fire-and-forget brain_write.
+@patch("core.orchestrator.session.mem_upsert")
+def test_checkpoint(mock_upsert):
     sm = SessionManager()
     state = {
         "current_index": 1,
@@ -14,19 +16,19 @@ def test_checkpoint(mock_write):
         "results": [],
         "all_files": []
     }
-    
+
     sm.checkpoint("test_session_1", state)
-    
-    mock_write.assert_called_once()
-    args = mock_write.call_args[0]
+
+    mock_upsert.assert_called_once()
+    args = mock_upsert.call_args[0]
     assert args[0] == "sessions/test_session_1/checkpoint"
     data = json.loads(args[1])
     assert data["session_id"] == "test_session_1"
     assert data["status"] == "incomplete"
     assert data["dag_position"] == 1
 
-@patch("core.orchestrator.session.brain_write")
-def test_mark_completed(mock_write):
+@patch("core.orchestrator.session.mem_upsert")
+def test_mark_completed(mock_upsert):
     sm = SessionManager()
     state = {
         "current_index": 2,
@@ -36,11 +38,11 @@ def test_mark_completed(mock_write):
         "results": [],
         "all_files": []
     }
-    
+
     sm.mark_completed("test_session_1", state)
-    
-    mock_write.assert_called_once()
-    args = mock_write.call_args[0]
+
+    mock_upsert.assert_called_once()
+    args = mock_upsert.call_args[0]
     assert args[0] == "sessions/test_session_1/checkpoint"
     data = json.loads(args[1])
     assert data["status"] == "completed"

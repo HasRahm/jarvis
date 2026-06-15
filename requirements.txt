@@ -30,6 +30,9 @@ aiohttp>=3.9.0
 # Auth (Phase 13: Supabase JWT validation)
 PyJWT>=2.8.0
 
+# Memory store (Phase 25: Supabase-backed async brain)
+supabase>=2.31.0
+
 # Cloud sandboxes (Phase 13: E2B — only needed when JARVIS_SANDBOX_MODE=e2b)
 e2b-code-interpreter>=0.0.10
 
@@ -41,3 +44,6 @@ mcp>=1.0.0,<2.0.0
 rich>=13.0.0
 textual>=0.47.0
 prompt_toolkit>=3.0.0
+
+# Remote control pairing
+qrcode>=7.4.2

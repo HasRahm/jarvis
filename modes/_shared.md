@@ -13,7 +13,6 @@ These rules apply to EVERY Jarvis mode. Read these before executing any task.
 
 ### Browser
 - Do NOT use google.com for searches (blocks with CAPTCHA)
-- Do NOT use linkedin.com (requires login)
 - Visit target sites directly instead
 - Always `browser_navigate` before `browser_extract_text`
 

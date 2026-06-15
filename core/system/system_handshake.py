@@ -101,6 +101,7 @@ class EnvironmentHandshake:
                 "binaries": {},
                 "services": {
                     "docker_running": self._check_docker(),
+                    "mxc_available": shutil.which("mxc") is not None,
                 }
             }
 
@@ -108,7 +109,8 @@ class EnvironmentHandshake:
             target_binaries = [
                 "git", "docker", "docker-compose", "npm", "node", 
                 "python", "python3", "pip", "pip3", "poetry", 
-                "make", "gcc", "g++", "curl", "wget", "sqlite3", "psql"
+                "make", "gcc", "g++", "curl", "wget", "sqlite3", "psql",
+                "mxc", "openclaw"
             ]
 
             # Optimize shutil.which path search by filtering out slow mounted paths (e.g. /mnt/c)
@@ -179,6 +181,7 @@ class EnvironmentHandshake:
                 f"| Running Inside WSL2 | `{os_info['is_wsl']}` |",
                 f"| Execution Sandboxed | `{os_info['sandboxed']}` |",
                 f"| Docker Socket Online | `{services['docker_running']}` |",
+                f"| MXC Sandbox Available | `{services['mxc_available']}` |",
             ]
 
             # Append binary presence matrix

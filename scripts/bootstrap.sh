@@ -61,12 +61,14 @@ fi
 echo "[4/5] Installing Python dependencies..."
 pip install --upgrade pip --quiet
 pip install --quiet -r requirements.txt
+pip install --quiet pytesseract mss playwright
 
 # ---------------------------------------------------------------------------
-# 5. Install Playwright Chromium browser
+# 5. Install Playwright Chromium browser & verify Tesseract
 # ---------------------------------------------------------------------------
-echo "[5/5] Installing Playwright Chromium..."
+echo "[5/5] Installing Playwright Chromium and verifying Tesseract..."
 playwright install chromium
+python -c "import pytesseract; print('Tesseract Version:', pytesseract.get_tesseract_version())"
 
 echo ""
 echo "=== Bootstrap complete ==="

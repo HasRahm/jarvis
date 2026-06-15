@@ -88,9 +88,12 @@ Return ONLY a JSON object as specified in your system prompt."""
                         _md = self.read_agents_md()
                         _m = _re.search(r'\| Task ID \| ([^|]+) \|', _md)
                         _slug_suffix = _m.group(1).strip()[-20:] if _m else "unknown"
-                        from brain.write import brain_write
-                        brain_write(f"contract/{_slug_suffix}", contract_str)
-                        logger.info(f"[backend] Contract stored to GBrain: contract/{_slug_suffix}")
+                        # Synchronous upsert: the frontend agent reads this
+                        # contract via brain_query shortly after, so it must be
+                        # committed before we return (fire-and-forget would race).
+                        from brain.supabase_store import mem_upsert
+                        mem_upsert(f"contract/{_slug_suffix}", contract_str)
+                        logger.info(f"[backend] Contract stored to memory: contract/{_slug_suffix}")
                     except Exception as _be:
                         logger.warning(f"[backend] GBrain contract write failed: {_be}")
 
