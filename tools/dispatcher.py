@@ -147,6 +147,114 @@ TOOL_DEFINITIONS = [
   {
     "type": "function",
     "function": {
+      "name": "run_backend_agent",
+      "description": """<agent>backend</agent>
+<model>claude-sonnet-4-6 (fallback: gemini-3.1-pro-preview)</model>
+<capabilities>FastAPI routes, SQL migrations, PostgreSQL schemas, REST endpoints, JWT authentication, Python 3.11+</capabilities>
+<input>task: natural language description — be specific about tables, endpoints, auth requirements, and expected payload shapes</input>
+<output>JSON string: {"status", "output" (summary), "files" (list of created paths), "contract" (tables + endpoints)}</output>
+<coordination>Publishes contract to AGENTS.md — ALWAYS run BEFORE run_frontend_agent or run_qa_agent so they can read the endpoint shapes</coordination>
+<when_to_use>Any task requiring server-side logic, database schema changes, or REST API development</when_to_use>""",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task": {"type": "string", "description": "The backend coding task — include table names, endpoint paths, and auth requirements"},
+          "user_id": {"type": "string", "description": "Optional user ID for workspace isolation"}
+        },
+        "required": ["task"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "run_frontend_agent",
+      "description": """<agent>frontend</agent>
+<model>gemini-3.1-pro-preview (fallback: claude-sonnet-4-6)</model>
+<capabilities>HTML5, CSS3, JavaScript ES2024, React, responsive design, REST API wiring, accessibility (WCAG 2.1)</capabilities>
+<input>task: natural language — describe the UI to build; the agent reads backend contract from AGENTS.md automatically</input>
+<output>JSON string: {"status", "output" (summary), "files" (list of created paths)}</output>
+<coordination>Reads backend contract from AGENTS.md — ALWAYS run run_backend_agent first so endpoint paths are available</coordination>
+<when_to_use>Any task requiring UI components, web pages, or frontend wiring to backend APIs</when_to_use>""",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task": {"type": "string", "description": "The frontend UI task — describe the page, components, and user interactions needed"},
+          "user_id": {"type": "string", "description": "Optional user ID for workspace isolation"}
+        },
+        "required": ["task"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "run_qa_agent",
+      "description": """<agent>qa</agent>
+<model>nvidia/nemotron-3-ultra-550b-a55b (fallback: claude-sonnet-4-6)</model>
+<capabilities>Code review, security auditing, pytest/unittest generation, contract verification, API endpoint testing, hallucination detection</capabilities>
+<input>task: natural language — describe what to review or test; the agent reads all agent outputs from AGENTS.md</input>
+<output>JSON string: {"status", "output" (summary), "files" (list of test files created), "review" (passed + issues list)}</output>
+<coordination>Reads all agent outputs from AGENTS.md — run AFTER run_backend_agent and run_frontend_agent complete</coordination>
+<when_to_use>After backend/frontend agents have run — to review code quality, security, and generate test suites</when_to_use>""",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task": {"type": "string", "description": "The QA task — describe what to review, what security concerns to check, or what test scenarios to generate"},
+          "user_id": {"type": "string", "description": "Optional user ID for workspace isolation"}
+        },
+        "required": ["task"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "run_iac_agent",
+      "description": """<agent>iac</agent>
+<model>claude-sonnet-4-6</model>
+<capabilities>Terraform HCL, Docker, local system provisioning, database schema deployment, container networking, workspace directory setup</capabilities>
+<input>task: natural language — describe the infrastructure to provision; scoped to the project workspace directory</input>
+<output>JSON string: {"status", "output" (plan summary), "files" (list of created Terraform files), "plan" (to_add/to_change/to_destroy counts)}</output>
+<coordination>Can read backend agent output from AGENTS.md to provision matching database/service infrastructure</coordination>
+<when_to_use>Any task requiring Terraform configs, Docker setup, local system provisioning, or infrastructure-as-code</when_to_use>""",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task": {"type": "string", "description": "The infrastructure task — describe what needs to be provisioned, configured, or deployed"}
+        },
+        "required": ["task"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "run_skill",
+      "description": """<tool>skill_runner</tool>
+<purpose>Invoke any of the 80+ expert skill personas. Each skill is a specialized system prompt that transforms the chosen model into a domain expert.</purpose>
+<model_routing>Engineering/code skills → claude-sonnet-4-6; advisor/CTO/financial skills → nvidia/nemotron; product/marketing/research skills → gemini-3.1-pro-preview. Override with the model parameter.</model_routing>
+<input>skill_name: exact skill folder name; task: the work for that persona to perform; model: optional model override</input>
+<output>Raw response from the skill persona (markdown, JSON, or prose depending on the skill)</output>
+<available_skills>cs-backend-engineer, cs-frontend-engineer, cs-senior-engineer, cs-fullstack-engineer,
+  cs-product-manager, cs-cto-advisor, cs-ceo-advisor, tdd, seo-auditor, devops-engineer,
+  cs-financial-analyst, prd, user-story, sprint-plan, growth-marketer, karpathy-check,
+  tech-debt, cs-ux-researcher</available_skills>
+<when_to_use>When you need expert-level reasoning from a specific persona — architecture review, product strategy, TDD planning, SEO audit, financial analysis</when_to_use>""",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "skill_name": {"type": "string", "description": "Exact skill name matching the folder in skills/skills/ (e.g. 'cs-senior-engineer', 'cs-cto-advisor', 'tdd')"},
+          "task": {"type": "string", "description": "The task or question for the skill persona to address"},
+          "model": {"type": "string", "description": "Optional model override — if not set, model is auto-selected based on skill type"}
+        },
+        "required": ["skill_name", "task"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "vocab_learn",
       "description": "Record a newly discovered UI pattern, icon location, or app-specific behavior to grow the visual vocabulary dataset. Call this after successfully automating something to help future sessions. Example: after clicking Figma's Community search bar, record its approximate location and what worked.",
       "parameters": {
@@ -590,6 +698,7 @@ def dispatch(fn_name: str, args: dict, orch_agent=None):
     _CORTEX_EXEMPT = {
         "brain_query", "brain_write", "vocab_learn", "vocab_lookup", "read_file", "list_dir", "run_command",
         "smart_fill", "agent_view", "agent_cursor",
+        "run_backend_agent", "run_frontend_agent", "run_qa_agent", "run_iac_agent", "run_skill",
         # GUI tools — these ARE the context switching, exempting them is intentional:
         "desktop_smooth_click", "desktop_type_text", "desktop_press_keys", "desktop_scroll",
         "desktop_focus_window", "desktop_get_active_window", "desktop_batch_actions",
@@ -800,6 +909,21 @@ def _dispatch_raw(fn_name: str, args: dict):
         # Replaced with existing sync ctypes implementation in tools/windows.py.
         from tools.windows import get_window_stack as _gws
         return json.dumps(_gws(), indent=2)
+    elif fn_name == "run_backend_agent":                               # Phase 26
+        from agents.agent_tools import run_backend_agent
+        return run_backend_agent(args.get("task", ""), args.get("user_id"))
+    elif fn_name == "run_frontend_agent":                              # Phase 26
+        from agents.agent_tools import run_frontend_agent
+        return run_frontend_agent(args.get("task", ""), args.get("user_id"))
+    elif fn_name == "run_qa_agent":                                    # Phase 26
+        from agents.agent_tools import run_qa_agent
+        return run_qa_agent(args.get("task", ""), args.get("user_id"))
+    elif fn_name == "run_iac_agent":                                   # Phase 26
+        from agents.agent_tools import run_iac_agent
+        return run_iac_agent(args.get("task", ""))
+    elif fn_name == "run_skill":                                       # Phase 26
+        from agents.agent_tools import run_skill
+        return run_skill(args.get("skill_name", ""), args.get("task", ""), args.get("model"))
     elif fn_name.startswith("mcp__"):
         parts = fn_name.split("__", 2)
         if len(parts) == 3 and _mcp_bridge is not None:

@@ -133,29 +133,47 @@ async def call_with_retry(prompt: str, max_retries: int = 3) -> dict:
                     pass
             await asyncio.sleep(wait)
 
-SYSTEM_PROMPT = """You are an expert frontend developer specializing in modern web UI.
-You write clean, production-ready HTML, CSS, and JavaScript.
-You use best practices: semantic HTML, responsive design, accessible markup.
+SYSTEM_PROMPT = """<agent_role>
+  <title>Expert Frontend Developer</title>
+  <expertise>HTML5, CSS3, JavaScript ES2024, React, responsive design, accessibility (WCAG 2.1), REST API integration</expertise>
+</agent_role>
 
-When given a task:
-1. Check the AGENTS.md context for any API contracts from the backend agent
-2. Build the UI that integrates with those endpoints
-3. Return your work as a JSON object with this exact structure:
+<what_to_expect>
+  You will receive a structured request containing:
+  - <task> — the specific UI to build
+  - <context><agents_md> — current shared state including backend contracts and endpoint signatures
+  - <context><historical_contracts> — API contracts from prior sessions (when available)
+</what_to_expect>
 
-{
-  "files": {
-    "index.html": "file contents...",
-    "styles.css": "CSS contents...",
-    "app.js": "JavaScript contents..."
-  },
-  "summary": "Brief description of what was built"
-}
+<output_requirements>
+  Return EXACTLY this JSON structure — no markdown fences, no prose outside the JSON:
+  <output_schema>
+  {
+    "files": {
+      "index.html": "complete HTML with proper DOCTYPE, head, and body",
+      "styles.css": "complete CSS — responsive and accessible",
+      "app.js": "complete JavaScript — wired to backend endpoints from the contract"
+    },
+    "summary": "One sentence: what UI was built and how it connects to the backend"
+  }
+  </output_schema>
+</output_requirements>
 
-If the AGENTS.md contains a backend contract with endpoint details,
-wire your frontend to call those endpoints correctly.
+<rules>
+  <rule id="1">Check agents_md for the backend contract FIRST — use the exact endpoint paths, methods, and payload shapes defined there. Do not invent endpoint signatures.</rule>
+  <rule id="2">Write complete, functional code — not stubs or TODO placeholders.</rule>
+  <rule id="3">Keep generated code concise — include at most 2-3 sample items in any mock dataset to prevent token truncation.</rule>
+  <rule id="4">Return ONLY the JSON object. No ```json fences. No preamble. No explanation outside the JSON.</rule>
+</rules>
 
-IMPORTANT: Return ONLY the JSON object. No markdown, no explanation, no code fences.
-To prevent token truncation, keep the generated code concise. Do not generate large lists of mock stocks; include exactly 2 'Buy' stocks and 2 'Avoid' stocks in your mock database array."""
+<self_evaluation>
+  Before returning your response, verify:
+  1. Are all API calls in the JavaScript using the exact paths and HTTP methods from the backend contract?
+  2. Is every form field wired to the correct endpoint body field name?
+  3. Does the UI handle both success and error responses from the API?
+  4. Is the HTML valid, semantic, and complete (with DOCTYPE, head, body)?
+  If any check fails — fix it before returning.
+</self_evaluation>"""
 
 
 class FrontendAgent(BaseAgent):
@@ -185,13 +203,18 @@ class FrontendAgent(BaseAgent):
                 except Exception as _qe:
                     logger.warning(f"[frontend] GBrain query failed: {_qe}")
 
-            full_prompt = f"""Task: {task}
-{_gbrain_ctx}
-Current AGENTS.md state (check for backend contracts/endpoints):
-{agents_md}
+            full_prompt = f"""<task>{task}</task>
 
-Generate the frontend code for this task.
-Return ONLY a JSON object as specified in your system prompt."""
+<context>
+  <agents_md>
+{agents_md}
+  </agents_md>{f"""
+  <historical_contracts>
+{_gbrain_ctx.strip()}
+  </historical_contracts>""" if _gbrain_ctx else ""}
+</context>
+
+<instruction>Generate the frontend UI code. Return ONLY the JSON object defined in your output_schema.</instruction>"""
 
             self.update_status("WORKING", "Generating UI code")
             

@@ -14,47 +14,75 @@ from agents.frontend_agent import safe_parse_response
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are an expert QA engineer and code reviewer.
-You review code for correctness, security, and best practices.
-You write test cases and verify that implementations match their contracts.
+SYSTEM_PROMPT = """<agent_role>
+  <title>Expert QA Engineer and Code Reviewer</title>
+  <expertise>Code review, security auditing, test writing (pytest, unittest), contract verification, API testing</expertise>
+</agent_role>
 
-When given a task:
-1. Read all files produced by other agents from the AGENTS.md context
-2. Review the code for bugs, security issues, and contract violations
-3. Write test cases if applicable
-4. Return your work as a JSON object with this exact structure:
+<what_to_expect>
+  You will receive a structured request containing:
+  - <task> — the QA work to perform
+  - <context><agents_md> — current shared state with all code files, contracts, and agent outputs
+</what_to_expect>
 
+<output_requirements>
+  Return EXACTLY this JSON structure — no markdown fences, no prose outside the JSON:
+  <output_schema>
+  {
+    "review": {
+      "passed": true,
+      "issues": [
+        {"severity": "critical|warning|info", "file": "path/to/file.py", "line": null, "message": "Description of real issue"}
+      ]
+    },
+    "tests": {
+      "tests/test_feature.py": "complete test file contents"
+    },
+    "summary": "One sentence QA summary"
+  }
+  </output_schema>
+</output_requirements>
+
+<rules>
+  <rule id="1">Only flag issues that actually exist in the provided code — read the code before claiming an issue exists at a specific location.</rule>
+  <rule id="2">Test assertions must reference functions, endpoints, and field names that actually exist in the code. Do not hallucinate function names.</rule>
+  <rule id="3">Be practical — flag real bugs and security issues, not style preferences or theoretical concerns.</rule>
+  <rule id="4">Return ONLY the JSON object. No ```json fences. No preamble.</rule>
+</rules>
+
+<self_evaluation>
+  Before returning your response, verify:
+  1. Does every issue in "review.issues" reference code that actually exists in agents_md?
+  2. Does every test import and call functions/endpoints that are actually defined in the code?
+  3. Are all test assertions testing the actual behavior described in the task, not guessed behavior?
+  If any check fails — fix it before returning.
+</self_evaluation>"""
+
+VERIFIER_PROMPT = """<agent_role>
+  <title>Fact-Checker for Code Review Outputs</title>
+</agent_role>
+
+<what_to_expect>
+  You will receive:
+  - <qa_review> — the QA review JSON to verify
+  - <source_context> — the actual source code and AGENTS.md state
+</what_to_expect>
+
+<verification_checklist>
+  <check id="1">Every cited issue actually exists in the provided source at the stated location</check>
+  <check id="2">Every test assertion references a function, endpoint, or field name that actually exists in the code</check>
+  <check id="3">No hallucinated function names, table names, or endpoint paths</check>
+</verification_checklist>
+
+<output_schema>
 {
-  "review": {
-    "passed": true/false,
-    "issues": [
-      {"severity": "critical|warning|info", "file": "...", "line": null, "message": "..."}
-    ]
-  },
-  "tests": {
-    "path/to/test_file.py": "test file contents..."
-  },
-  "summary": "Brief QA summary"
+  "verified": true,
+  "removed_issues": ["exact message of any hallucinated issue removed"],
+  "notes": "brief explanation of any removals, or empty string"
 }
+</output_schema>
 
-Be thorough but practical. Flag real issues, not style preferences.
-
-IMPORTANT: Return ONLY the JSON object. No markdown, no explanation, no code fences."""
-
-VERIFIER_PROMPT = """You are a fact-checker for code review outputs.
-Given a QA review and the original source code, verify that:
-1. Every issue cited actually exists in the code
-2. Test assertions match the actual API contracts
-3. No hallucinated function names or endpoints
-
-Return a JSON object:
-{
-  "verified": true/false,
-  "removed_issues": ["description of any hallucinated issues"],
-  "notes": "optional clarification"
-}
-
-Return ONLY the JSON object."""
+<rule>Return ONLY the JSON object. No markdown fences. No preamble.</rule>"""
 
 
 class QAAgent(BaseAgent):
@@ -66,13 +94,15 @@ class QAAgent(BaseAgent):
     def _verify_with_flash_lite(self, review_json: str, source_context: str) -> dict:
         """Run a hallucination verification pass with gemini-3.5-flash."""
         try:
-            prompt = f"""QA Review to verify:
+            prompt = f"""<qa_review>
 {review_json}
+</qa_review>
 
-Source code context:
+<source_context>
 {source_context}
+</source_context>
 
-Check for hallucinated issues or test assertions."""
+<instruction>Check for hallucinated issues or test assertions. Return ONLY the JSON object defined in your output_schema.</instruction>"""
 
             response = self._raw_call(
                 "google", "gemini-3.5-flash",
@@ -192,13 +222,15 @@ Source HTML context for structure:
         try:
             agents_md = self.read_agents_md()
 
-            full_prompt = f"""Task: {task}
+            full_prompt = f"""<task>{task}</task>
 
-Current AGENTS.md state (includes code contracts and file lists):
+<context>
+  <agents_md>
 {agents_md}
+  </agents_md>
+</context>
 
-Review the work done by other agents and generate test cases.
-Return ONLY a JSON object as specified in your system prompt."""
+<instruction>Review the work done by other agents and generate test cases. Return ONLY the JSON object defined in your output_schema.</instruction>"""
 
             self.update_status("WORKING", "Generating review")
             response = self._call_model(SYSTEM_PROMPT, full_prompt)

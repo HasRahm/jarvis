@@ -92,6 +92,46 @@ def get_api_key(provider: str) -> str | None:
     return os.getenv(var)
 
 
+_SKILL_MODEL_HINTS = {
+    "engineer":  "claude-sonnet-4-6",
+    "backend":   "claude-sonnet-4-6",
+    "senior":    "claude-sonnet-4-6",
+    "fullstack": "claude-sonnet-4-6",
+    "review":    "claude-sonnet-4-6",
+    "tdd":       "claude-sonnet-4-6",
+    "tech-debt": "claude-sonnet-4-6",
+    "karpathy":  "claude-sonnet-4-6",
+    "devops":    "claude-sonnet-4-6",
+    "advisor":   "nvidia/nemotron-3-ultra-550b-a55b",
+    "financial": "nvidia/nemotron-3-ultra-550b-a55b",
+    "ceo":       "nvidia/nemotron-3-ultra-550b-a55b",
+    "cto":       "nvidia/nemotron-3-ultra-550b-a55b",
+    "product":   "gemini-3.1-pro-preview",
+    "marketing": "gemini-3.1-pro-preview",
+    "research":  "gemini-3.1-pro-preview",
+    "frontend":  "gemini-3.1-pro-preview",
+    "ux":        "gemini-3.1-pro-preview",
+    "growth":    "gemini-3.1-pro-preview",
+    "seo":       "gemini-3.1-pro-preview",
+}
+
+
+def get_skill_model(skill_name: str) -> str:
+    """Choose the model for a skill persona.
+
+    Priority: env var override → keyword hint → orchestrator default.
+    Set SKILL_MODEL_CS_SENIOR_ENGINEER=gemma4:31b-cloud to override a specific skill.
+    """
+    env_key = f"SKILL_MODEL_{skill_name.upper().replace('-', '_')}"
+    override = os.getenv(env_key)
+    if override:
+        return override
+    for keyword, model in _SKILL_MODEL_HINTS.items():
+        if keyword in skill_name:
+            return model
+    return get_model("orchestrator")
+
+
 def get_all_roles() -> dict[str, str]:
     """Return a dict of all role → model assignments (with overrides applied)."""
     return {role: get_model(role) for role in _DEFAULTS}

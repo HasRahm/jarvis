@@ -150,6 +150,21 @@ class SkillsEngine:
             logger.info(f"SkillsEngine: Matched {len(relevant)} skill(s) for task: '{task[:50]}...'")
         return relevant
 
+    def load_skill_prompt(self, skill_name: str) -> str:
+        """Return the raw SKILL.md body content for a named skill (for use in run_skill)."""
+        candidates = [
+            os.path.join(self.skills_dir, "skills", skill_name, "SKILL.md"),
+            os.path.join(self.skills_dir, skill_name, "SKILL.md"),
+        ]
+        for path in candidates:
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    return f.read()
+        raise FileNotFoundError(
+            f"Skill '{skill_name}' not found. Tried: {candidates}. "
+            f"Available skills can be listed from the skills/skills/ directory."
+        )
+
     def get_skills_prompt_addition(self, task: str) -> str:
         """Generate a formatted markdown addition to append to the system prompt containing relevant skill rules."""
         relevant = self.get_relevant_skills(task)
