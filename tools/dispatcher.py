@@ -190,6 +190,45 @@ TOOL_DEFINITIONS = [
   {
     "type": "function",
     "function": {
+      "name": "verify_outcome",
+      "description": """<tool>verify_outcome</tool>
+<purpose>Confirm your LAST action actually changed the screen — so you never declare success blindly.</purpose>
+<how>Polls the screen density matrix for a visible change, then (if expected_text given) confirms that text is visible via OCR.</how>
+<input>expected_text (optional): text you expect to see after the action succeeded. timeout (optional, default 3.0s).</input>
+<output>JSON: {"success": bool, "message": str}. If success is false, the action did NOT take effect — try again or call get_unstuck.</output>
+<when_to_use>After any consequential action (click, type+enter, navigate, open_app) before moving to the next step.</when_to_use>""",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expected_text": {"type": "string", "description": "Text expected on screen after the action (optional)"},
+          "timeout": {"type": "number", "description": "Max seconds to wait for a screen change (default 3.0)"}
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "get_unstuck",
+      "description": """<tool>get_unstuck</tool>
+<purpose>Map a recovery path when you are blocked — instead of giving up or faking success.</purpose>
+<how>Diagnoses the failure type (unexpected dialog, wrong window, element not found, page not loaded, context switch) and returns known escape routes; for novel situations it reasons out a fresh recovery plan.</how>
+<input>goal: what you were trying to achieve. what_failed: a short description of what went wrong (e.g. "a dialog appeared", "element not found", "wrong window focused").</input>
+<output>An ordered, numbered list of recovery steps. Follow them, then call verify_outcome.</output>
+<when_to_use>Whenever a step fails, an unexpected dialog appears, or you cannot find/reach an element. NEVER claim success you have not verified.</when_to_use>""",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "goal": {"type": "string", "description": "What you were trying to achieve"},
+          "what_failed": {"type": "string", "description": "Short description of what went wrong"}
+        },
+        "required": ["goal", "what_failed"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "run_backend_agent",
       "description": """<agent>backend</agent>
 <model>claude-sonnet-4-6 (fallback: gemini-3.1-pro-preview)</model>
@@ -742,7 +781,7 @@ def dispatch(fn_name: str, args: dict, orch_agent=None):
         "brain_query", "brain_write", "vocab_learn", "vocab_lookup", "read_file", "list_dir", "run_command",
         "smart_fill", "agent_view", "agent_cursor",
         "run_backend_agent", "run_frontend_agent", "run_qa_agent", "run_iac_agent", "run_skill",
-        "open_app", "web_search",
+        "open_app", "web_search", "verify_outcome", "get_unstuck",
         # GUI tools — these ARE the context switching, exempting them is intentional:
         "desktop_smooth_click", "desktop_type_text", "desktop_press_keys", "desktop_scroll",
         "desktop_focus_window", "desktop_get_active_window", "desktop_batch_actions",
@@ -956,6 +995,12 @@ def _dispatch_raw(fn_name: str, args: dict):
     elif fn_name == "open_app":                                        # Phase 27
         from tools.open_app import open_app
         return open_app(args.get("app_name", ""), args.get("prefer", "auto"))
+    elif fn_name == "verify_outcome":                                  # Phase 28a
+        from core.orchestrator.verification_loop import verify_outcome
+        return json.dumps(verify_outcome(args.get("expected_text"), float(args.get("timeout", 3.0))))
+    elif fn_name == "get_unstuck":                                     # Phase 28a
+        from core.orchestrator.recovery_navigator import get_unstuck
+        return get_unstuck(args.get("goal", ""), args.get("what_failed", ""))
     elif fn_name == "web_search":                                      # Phase 27
         from tools.web_search import web_search
         return web_search(args.get("query", ""), int(args.get("max_results", 5)))

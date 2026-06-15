@@ -14,7 +14,8 @@ These rules apply to EVERY Jarvis mode. Read these before executing any task.
 - **Map 2-3 ways the task could succeed before acting.** Pick the fastest/most reliable path first.
 - **Fall back, don't give up.** Preferred order for opening/using an app: existing window → native Windows app → web app in the browser. Use the `open_app` tool — it runs this exact decision tree for you instead of guessing.
 - **A path that fails is a signal, not the end.** If an approach fails or you can't verify it worked, DO NOT stop and DO NOT claim success — try the next path on your map.
-- **Verify before declaring done.** Confirm each step actually worked (window present via `desktop_get_active_window`, expected text on screen via `visual_inspect` / `verify_text`) before reporting completion.
+- **Verify before declaring done.** After any consequential action (click, type+enter, navigate, open_app), call `verify_outcome` (optionally with the text you expect to appear) to confirm the screen actually changed before moving on. Never report completion you haven't verified.
+- **When blocked, call `get_unstuck(goal, what_failed)`.** If a step fails, an unexpected dialog appears, or you can't find an element, get a recovery plan and follow it — don't give up and don't fake success.
 
 ## Live Knowledge (don't rely on stale memory)
 

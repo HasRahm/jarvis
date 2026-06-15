@@ -132,6 +132,41 @@ def main():
         {"role": "user", "content": prompt_content}
     ]
 
+    # Phase 28a: Clarify -> Plan gate before execution.
+    # Clarifier blocks ONLY on critical ambiguity (fails open otherwise).
+    try:
+        from core.orchestrator.clarifier import check_ambiguity
+        amb = check_ambiguity(prompt_content)
+        if not amb.get("proceed", True):
+            questions = amb.get("questions", [])
+            emit_osc_777("needs_input", session_id, questions=questions)
+            try:
+                scratch_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+                    os.path.abspath(__file__)))), "scratch")
+                os.makedirs(scratch_dir, exist_ok=True)
+                with open(os.path.join(scratch_dir, "needs_input.json"), "w", encoding="utf-8") as f:
+                    json.dump({"session_id": session_id, "questions": questions}, f, indent=2)
+            except Exception:
+                pass
+            print(Fore.YELLOW + "[NEEDS_INPUT] Critical ambiguity — need clarification before proceeding:" + Style.RESET_ALL)
+            print(Fore.YELLOW + json.dumps(questions, indent=2) + Style.RESET_ALL)
+            sys.stdout.flush()
+            emit_osc_777("stop", session_id, response="NEEDS_INPUT: awaiting clarification")
+            return
+    except Exception as _ce:
+        print(Fore.YELLOW + f"[Clarifier] skipped: {_ce}" + Style.RESET_ALL)
+
+    # Complexity-gated Chain-of-Thought planning (trivial tasks skip it).
+    try:
+        from core.orchestrator.planner import plan_task
+        _plan = plan_task(prompt_content)
+        if _plan:
+            messages[0]["content"] += f"\n\n<task_plan>\n{_plan}\n</task_plan>\n"
+            print(Fore.CYAN + "[Planner] Plan generated and injected into context." + Style.RESET_ALL)
+            sys.stdout.flush()
+    except Exception as _pe:
+        print(Fore.YELLOW + f"[Planner] skipped: {_pe}" + Style.RESET_ALL)
+
     try:
         while True:
             msg = call_llm(
