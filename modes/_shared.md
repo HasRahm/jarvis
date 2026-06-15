@@ -17,6 +17,12 @@ These rules apply to EVERY Jarvis mode. Read these before executing any task.
 - **Verify before declaring done.** After any consequential action (click, type+enter, navigate, open_app), call `verify_outcome` (optionally with the text you expect to appear) to confirm the screen actually changed before moving on. Never report completion you haven't verified.
 - **When blocked, call `get_unstuck(goal, what_failed)`.** If a step fails, an unexpected dialog appears, or you can't find an element, get a recovery plan and follow it — don't give up and don't fake success.
 
+## Perception (read cheap, locate precisely, learn each app)
+
+- **Read text the cheap way.** To read text on screen, prefer `read_screen_text` (clipboard, ~20× faster than OCR). If it returns a `[clipboard] ...` marker (unsafe app / no capture), fall back to `screen_ocr` or `desktop_get_ui_tree`.
+- **Locate by graph, not by guessing.** To find where to click on native/HTML/Electron UIs, call `element_graph` with a description (e.g. 'Save button') — it returns exact `(cx, cy)` coordinates. Use `visual_click` only for canvas/WebGL surfaces.
+- **Learn unfamiliar apps once.** Before working in an app you don't know, call `app_guide(app_name)` to orient — Jarvis builds the guide the first time and remembers it forever.
+
 ## Live Knowledge (don't rely on stale memory)
 
 - For anything that may have changed since your training — new technology, library/model versions, prices, releases, news, current events — call `web_search` FIRST, then read full pages with `browser_navigate` + `browser_extract_text`.

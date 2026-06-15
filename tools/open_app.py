@@ -185,6 +185,34 @@ def open_app(app_name: str, prefer: str = "auto") -> str:
     if prefer == "native":
         return f"[open_app] could not open '{app_name}' natively and web fallback disabled. ({' | '.join(trace)})"
 
-    # Step 3 — web fallback
+    # Step 2b — resolve a smarter fallback (alternative app / API / specific web URL)
+    try:
+        from core.system.app_resolver import resolve
+        res = resolve(app_name, action="open")
+        method = res.get("method")
+        if method == "alternative_app":
+            alt = res.get("app")
+            attempted2, detail2 = _launch_native(alt)
+            trace.append(f"alternative '{alt}': {detail2}")
+            if attempted2:
+                return f"[open_app] {res.get('note')} ({' | '.join(trace)})"
+        elif method == "api":
+            trace.append(f"api: {res.get('client')}")
+            return f"[open_app] {res.get('note')} — use the API client/MCP rather than a window. ({' | '.join(trace)})"
+        elif method == "browser" and res.get("url"):
+            try:
+                if sys.platform == "win32":
+                    os.startfile(res["url"])
+                else:
+                    import webbrowser
+                    webbrowser.open(res["url"])
+                trace.append(f"browser: {res['url']}")
+                return f"[open_app] {res.get('note')} ({' | '.join(trace)})"
+            except Exception as e:
+                trace.append(f"browser open failed: {e}")
+    except Exception as e:
+        trace.append(f"resolver skipped: {e}")
+
+    # Step 3 — generic web fallback (known web app URL or DuckDuckGo search)
     web_result = _open_in_browser(app_name)
     return f"{web_result} ({' | '.join(trace)})"

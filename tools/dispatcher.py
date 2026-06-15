@@ -229,6 +229,59 @@ TOOL_DEFINITIONS = [
   {
     "type": "function",
     "function": {
+      "name": "read_screen_text",
+      "description": """<tool>read_screen_text</tool>
+<purpose>Read on-screen text via the clipboard (Ctrl+A, Ctrl+C) — ~20x faster and cheaper than screen_ocr, and works on dark themes.</purpose>
+<input>mode: 'all' (select-all then copy, default) | 'selection' (copy current selection only).</input>
+<output>The captured text. If it returns a "[clipboard] ..." marker, the focused app is not a safe text app (or capture failed) — fall back to screen_ocr or desktop_get_ui_tree.</output>
+<when_to_use>Reading text from browsers, editors, terminals, docs. NOT for File Explorer or canvas/WebGL apps (it auto-refuses those). Prefer this over screen_ocr for text content.</when_to_use>""",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "mode": {"type": "string", "enum": ["all", "selection"], "description": "'all' selects everything then copies; 'selection' copies the current selection. Default 'all'."}
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "element_graph",
+      "description": """<tool>element_graph</tool>
+<purpose>Get a spatial map of every interactive element in the active window with exact click coordinates — locate targets precisely instead of guessing pixels.</purpose>
+<input>description (optional): natural-language element to find, e.g. 'search box', 'Save button'. refresh (optional, default true): re-scan the window first.</input>
+<output>With a description: JSON {"found": bool, "element": {role, name, cx, cy, ...}} — click (cx, cy). Without: a JSON list of all interactive elements + coordinates.</output>
+<when_to_use>Native/HTML/Electron UIs where the accessibility tree works. For canvas/WebGL (Figma canvas, Blender) use visual_click instead.</when_to_use>""",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "description": {"type": "string", "description": "Element to locate (optional). Omit to list all interactive elements."},
+          "refresh": {"type": "boolean", "description": "Re-scan the active window before building the graph (default true)."}
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "app_guide",
+      "description": """<tool>app_guide</tool>
+<purpose>Get a concise usage guide for an app. Jarvis builds the guide itself the first time it sees an app (by reading the UI structure) and remembers it forever in memory — so unfamiliar apps become familiar after one encounter.</purpose>
+<input>app_name: the app you are about to use, e.g. 'Figma', 'Blender', 'Obsidian'.</input>
+<output>A short guide: how to navigate, common actions, what to do if lost. Recalled instantly on later encounters.</output>
+<when_to_use>Before working in an app you haven't used before, or when you feel lost in an app's UI. Orient first, then act.</when_to_use>""",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "app_name": {"type": "string", "description": "Name of the app to get a guide for"}
+        },
+        "required": ["app_name"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "run_backend_agent",
       "description": """<agent>backend</agent>
 <model>claude-sonnet-4-6 (fallback: gemini-3.1-pro-preview)</model>
@@ -782,6 +835,7 @@ def dispatch(fn_name: str, args: dict, orch_agent=None):
         "smart_fill", "agent_view", "agent_cursor",
         "run_backend_agent", "run_frontend_agent", "run_qa_agent", "run_iac_agent", "run_skill",
         "open_app", "web_search", "verify_outcome", "get_unstuck",
+        "read_screen_text", "element_graph", "app_guide",
         # GUI tools — these ARE the context switching, exempting them is intentional:
         "desktop_smooth_click", "desktop_type_text", "desktop_press_keys", "desktop_scroll",
         "desktop_focus_window", "desktop_get_active_window", "desktop_batch_actions",
@@ -1001,6 +1055,15 @@ def _dispatch_raw(fn_name: str, args: dict):
     elif fn_name == "get_unstuck":                                     # Phase 28a
         from core.orchestrator.recovery_navigator import get_unstuck
         return get_unstuck(args.get("goal", ""), args.get("what_failed", ""))
+    elif fn_name == "read_screen_text":                               # Phase 28b
+        from tools.clipboard_reader import read_screen_text
+        return read_screen_text(args.get("mode", "all"))
+    elif fn_name == "element_graph":                                  # Phase 28b
+        from core.system.element_graph import element_graph_tool
+        return element_graph_tool(args.get("description"), bool(args.get("refresh", True)))
+    elif fn_name == "app_guide":                                      # Phase 28b
+        from core.system.app_intelligence import get_app_guide
+        return get_app_guide(args.get("app_name", ""))
     elif fn_name == "web_search":                                      # Phase 27
         from tools.web_search import web_search
         return web_search(args.get("query", ""), int(args.get("max_results", 5)))
