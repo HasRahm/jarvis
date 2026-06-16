@@ -18,7 +18,7 @@ import brain.write as bw
 
 
 @pytest.fixture(autouse=True)
-def isolate(monkeypatch):
+def isolate(monkeypatch, tmp_path):
     # Never run the real gbrain subprocess in tests.
     monkeypatch.setenv("JARVIS_GBRAIN_QUERY", "0")
     monkeypatch.setenv("JARVIS_CI", "true")
@@ -27,6 +27,11 @@ def isolate(monkeypatch):
     monkeypatch.setattr(store, "_client_tried", False)
     monkeypatch.setattr(store, "_worker", None)
     monkeypatch.setattr(store, "_worker_broken", False)
+    # Phase 29: isolate the local fallback store to an empty per-test DB so
+    # cloud-None tests don't pick up real on-disk memory.
+    import brain.local_store as ls
+    monkeypatch.setattr(ls, "_DB_PATH", str(tmp_path / "mem.db"))
+    monkeypatch.setattr(ls, "_initialized", False)
     yield
 
 
@@ -177,9 +182,12 @@ class TestStore:
         assert store.mem_upsert("contract/x", "body") is True
         assert client.upserts == [{"slug": "contract/x", "content": "body"}]
 
-    def test_mem_upsert_none_client_false(self, monkeypatch):
+    def test_mem_upsert_none_client_local_fallback(self, monkeypatch):
+        # Phase 29: with the cloud down, the write still succeeds via the local
+        # store (memory is always there) and is retrievable.
         monkeypatch.setattr(store, "_get_client", lambda: None)
-        assert store.mem_upsert("x", "y") is False
+        assert store.mem_upsert("x", "y") is True
+        assert store.mem_get("x") == "y"
 
     def test_mem_search_none_client_empty(self, monkeypatch):
         monkeypatch.setattr(store, "_get_client", lambda: None)

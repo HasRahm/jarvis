@@ -136,8 +136,13 @@ class TestScoreElement:
 
 
 class TestEnvGate:
-    def test_default_on(self, monkeypatch):
+    def test_default_off_physical_cursor(self, monkeypatch):
+        # Phase 29: physical cursor is the default; virtual UIA input is opt-in.
         monkeypatch.delenv("JARVIS_VIRTUAL_INPUT", raising=False)
+        assert not virtual_input_enabled()
+
+    def test_enabled_with_one(self, monkeypatch):
+        monkeypatch.setenv("JARVIS_VIRTUAL_INPUT", "1")
         assert virtual_input_enabled()
 
     def test_disabled_with_zero(self, monkeypatch):

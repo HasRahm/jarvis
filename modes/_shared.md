@@ -9,6 +9,15 @@ These rules apply to EVERY Jarvis mode. Read these before executing any task.
 3. **Verify results** — Always verify that output files exist and are valid
 4. **Retry on failure** — If a script or command fails, read the error, fix it, retry
 
+## Execution Loop (Thought → Action → Observe → Finish)
+
+Work like UI-TARS: one careful step at a time, grounded in what's actually on screen.
+
+1. **Thought** — in one sentence, state the next action and its exact target before acting.
+2. **Action** — perform ONE action. The physical cursor moves and types (you'll see the ring); locate targets with `element_graph`/`find_element` (native UIs) or `visual_click` (canvas/WebGL).
+3. **Observe** — after every consequential action the harness feeds back a fresh `[observe]` screen reading. READ IT. If it says the screen did not change, the action did NOT work — retry or call `get_unstuck`.
+4. **Finish** — declare completion ONLY after `verify_outcome` confirms the goal is visible. The harness REJECTS "done/success" claims that aren't verified — claiming success you didn't verify wastes a turn and gets challenged. If the task is infeasible or needs the user, say so plainly (don't fake it).
+
 ## Problem-Solving Doctrine (map paths, keep thinking)
 
 - **Map 2-3 ways the task could succeed before acting.** Pick the fastest/most reliable path first.

@@ -100,6 +100,9 @@ def main():
     print(Fore.BLUE + f"[Prompt] {clean_prompt}\n" + Style.RESET_ALL)
     sys.stdout.flush()
 
+    # Phase 29: physical cursor + visible ring by default so the user sees the agent act.
+    os.environ.setdefault("JARVIS_AGENT_CURSOR", "1")
+
     from datetime import datetime as _dt
     _today = _dt.now().strftime("%Y-%m-%d")
 
@@ -167,6 +170,12 @@ def main():
     except Exception as _pe:
         print(Fore.YELLOW + f"[Planner] skipped: {_pe}" + Style.RESET_ALL)
 
+    # Phase 29: harness-enforced verification (UI-TARS observe-after-act).
+    from core.orchestrator import exec_guard
+    pending_unverified = False
+    challenges = 0
+    MAX_CHALLENGES = 2
+
     try:
         while True:
             msg = call_llm(
@@ -178,20 +187,40 @@ def main():
             messages.append(msg)
 
             if not msg.get("tool_calls"):
-                # Final response from model
+                # Final response from model — gate against unverified success claims.
                 final_content = msg.get("content", "")
+                if exec_guard.should_challenge(final_content, pending_unverified) and challenges < MAX_CHALLENGES:
+                    challenges += 1
+                    print(Fore.YELLOW + f"[Verify Gate] Unverified success claim — challenging ({challenges}/{MAX_CHALLENGES})." + Style.RESET_ALL)
+                    sys.stdout.flush()
+                    messages.append({
+                        "role": "user",
+                        "content": ("You claim completion, but the last action has NOT been verified. "
+                                    "Call verify_outcome (optionally with the text you expect to see), "
+                                    "or get_unstuck if it failed. Do not claim success until verified."),
+                    })
+                    continue
+
                 clean_final = final_content.encode(sys.stdout.encoding or 'ascii', errors='replace').decode(sys.stdout.encoding or 'ascii')
+                if pending_unverified and exec_guard.should_challenge(final_content, pending_unverified):
+                    clean_final = "⚠ UNVERIFIED: the agent could not confirm the last action succeeded.\n\n" + clean_final
                 print(Fore.MAGENTA + f"\n{clean_final}\n" + Style.RESET_ALL)
-                
+
                 # Emit Stop event
                 emit_osc_777("stop", session_id, response=final_content)
                 break
+
+            # Capture a screen baseline before consequential actions (observe-after-act).
+            turn_has_consequential = any(
+                exec_guard.is_consequential(c["function"]["name"]) for c in msg["tool_calls"]
+            )
+            baseline = exec_guard.capture_baseline() if turn_has_consequential else None
 
             # Execute tool calls
             for call in msg["tool_calls"]:
                 fn = call["function"]["name"]
                 fn_args = call["function"]["arguments"]
-                
+
                 clean_fn_args = str(fn_args).encode(sys.stdout.encoding or 'ascii', errors='replace').decode(sys.stdout.encoding or 'ascii')
                 print(Fore.YELLOW + f"  [Hermes Tool Call] {fn}({clean_fn_args})" + Style.RESET_ALL)
                 sys.stdout.flush()
@@ -209,16 +238,22 @@ def main():
                 except Exception as e:
                     result = f"ERROR: {e}"
 
+                # Track verification state.
+                if exec_guard.is_consequential(fn):
+                    pending_unverified = True
+                elif exec_guard.is_verify(fn):
+                    pending_unverified = False
+
                 result_preview = str(result)[:200]
                 print(Fore.GREEN + f"  [Hermes Tool Result] {fn} -> {result_preview}" + Style.RESET_ALL)
                 sys.stdout.flush()
 
                 # Emit Tool Complete event
                 emit_osc_777(
-                    "tool_complete", 
-                    session_id, 
-                    tool_name=fn, 
-                    tool_input=tool_input, 
+                    "tool_complete",
+                    session_id,
+                    tool_name=fn,
+                    tool_input=tool_input,
                     response=str(result)
                 )
 
@@ -226,7 +261,19 @@ def main():
                     "role": "tool",
                     "content": str(result)
                 })
-            
+
+            # Observe-after-act: feed the fresh screen state back so the model
+            # reasons over ground truth instead of assuming the action worked.
+            if turn_has_consequential and baseline is not None:
+                changed, observation = exec_guard.observe_change(baseline)
+                if observation:
+                    print(Fore.CYAN + f"  {observation[:160]}" + Style.RESET_ALL)
+                    sys.stdout.flush()
+                    messages.append({"role": "user", "content": observation})
+                    if changed:
+                        # A real, observed change discharges the unverified flag.
+                        pending_unverified = False
+
             print(Fore.CYAN + f"  [Hermes] All tool calls processed. Calling LLM again..." + Style.RESET_ALL)
             sys.stdout.flush()
 

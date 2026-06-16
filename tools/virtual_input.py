@@ -12,7 +12,9 @@ Also home to smart_fill — the graph-first showcase tool:
   GRAPH locates (UI-tree element scoring) and ACTS (virtual input);
   VISION reads/verifies (visual_click fallback + OCR check).
 
-Disable virtual input with JARVIS_VIRTUAL_INPUT=0 (default is on).
+Phase 29: the PHYSICAL cursor is the default — clicks/typing visibly move the real
+mouse so the user can see (and trust) what the agent does. Virtual UIA input (no
+mouse movement) is opt-in via JARVIS_VIRTUAL_INPUT=1 for headless/no-move scenarios.
 """
 
 import os
@@ -24,7 +26,8 @@ logger = logging.getLogger(__name__)
 
 
 def virtual_input_enabled() -> bool:
-    return os.environ.get("JARVIS_VIRTUAL_INPUT", "1") != "0"
+    # Default OFF (physical cursor). Opt in to virtual UIA input with =1.
+    return os.environ.get("JARVIS_VIRTUAL_INPUT", "0") == "1"
 
 
 # ---------------------------------------------------------------------------

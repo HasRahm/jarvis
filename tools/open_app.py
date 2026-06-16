@@ -87,28 +87,129 @@ def _window_open(app_name: str) -> bool:
     return False
 
 
-def _launch_native(app_name: str) -> tuple[bool, str]:
-    """Attempt to launch the native app. Returns (attempted, detail)."""
+# Cache the Start-panel app list for this process run (Get-StartApps ~300ms).
+_start_apps_cache = None
+
+
+def _get_start_apps() -> list[dict]:
+    """Enumerate every Start-panel entry (Win32 + UWP) via PowerShell Get-StartApps.
+
+    Returns a list of {"name", "appid"}. Cached per process. [] on failure.
+    """
+    global _start_apps_cache
+    if _start_apps_cache is not None:
+        return _start_apps_cache
+    _start_apps_cache = []
+    if sys.platform != "win32":
+        return _start_apps_cache
+    try:
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-Command",
+             "Get-StartApps | ConvertTo-Json -Compress"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            import json as _json
+            data = _json.loads(proc.stdout)
+            if isinstance(data, dict):
+                data = [data]
+            _start_apps_cache = [
+                {"name": (d.get("Name") or "").strip(), "appid": (d.get("AppID") or "").strip()}
+                for d in data if d.get("Name") and d.get("AppID")
+            ]
+    except Exception as e:
+        logger.warning(f"[open_app] Get-StartApps failed: {e}")
+    return _start_apps_cache
+
+
+def _find_in_start_panel(app_name: str) -> str | None:
+    """Return an AppsFolder launch AppID for the best Start-panel name match, or None."""
     key = _norm(app_name)
+    apps = _get_start_apps()
+    # Exact, then startswith, then substring.
+    for pred in (lambda n: n == key,
+                 lambda n: n.startswith(key),
+                 lambda n: key in n):
+        for app in apps:
+            if pred(app["name"].lower()):
+                return app["appid"]
+    return None
+
+
+def _find_shortcut(app_name: str) -> str | None:
+    """Search taskbar-pinned and Start-Menu .lnk shortcuts for a name match."""
+    key = _norm(app_name)
+    if sys.platform != "win32":
+        return None
+    appdata = os.environ.get("APPDATA", "")
+    programdata = os.environ.get("ProgramData", r"C:\ProgramData")
+    search_dirs = [
+        os.path.join(appdata, r"Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"),
+        os.path.join(appdata, r"Microsoft\Windows\Start Menu\Programs"),
+        os.path.join(programdata, r"Microsoft\Windows\Start Menu\Programs"),
+    ]
+    import glob
+    for base in search_dirs:
+        if not base or not os.path.isdir(base):
+            continue
+        for lnk in glob.glob(os.path.join(base, "**", "*.lnk"), recursive=True):
+            if key in os.path.splitext(os.path.basename(lnk))[0].lower():
+                return lnk
+    return None
+
+
+def find_app_launch(app_name: str) -> dict | None:
+    """Discover how to launch an app (no side effects — pure discovery).
+
+    Order: PATH/known map -> Start panel (Get-StartApps) -> taskbar/Start-Menu .lnk.
+    Returns {"method", "argv"|"appid"|"lnk"} or None if nothing found.
+    """
+    key = _norm(app_name)
+
+    # 1. Known map / PATH
     argv = _NATIVE_LAUNCH.get(key)
+    if argv is None and shutil.which(key):
+        argv = [key]
+    if argv is not None:
+        if argv[0] in ("cmd", "powershell") or shutil.which(argv[0]):
+            return {"method": "path", "argv": argv}
 
-    if argv is None:
-        # Not in the map — try the bare name on PATH (e.g. "code", "obs").
-        if shutil.which(key):
-            argv = [key]
-        else:
-            return False, f"no native launcher known for '{app_name}'"
+    # 2. Start panel (covers Win32 + UWP store apps)
+    appid = _find_in_start_panel(app_name)
+    if appid:
+        return {"method": "start_panel", "appid": appid}
 
-    # For plain (non-shell) launchers, confirm the binary exists first.
-    if argv[0] not in ("cmd", "powershell") and not shutil.which(argv[0]):
-        return False, f"'{argv[0]}' not found on PATH"
+    # 3. Taskbar-pinned / Start-Menu shortcuts
+    lnk = _find_shortcut(app_name)
+    if lnk:
+        return {"method": "shortcut", "lnk": lnk}
+
+    return None
+
+
+def _launch_native(app_name: str) -> tuple[bool, str]:
+    """Attempt to launch the app via the full discovery chain. Returns (attempted, detail)."""
+    found = find_app_launch(app_name)
+    if not found:
+        return False, f"'{app_name}' not found on PATH, Start panel, taskbar, or Start Menu"
 
     try:
-        subprocess.Popen(argv, shell=False,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return True, f"launched via {' '.join(argv)}"
+        method = found["method"]
+        if method == "path":
+            subprocess.Popen(found["argv"], shell=False,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True, f"launched via {' '.join(found['argv'])}"
+        if method == "start_panel":
+            # Launch by AppsFolder AppID — works for Win32 and UWP.
+            subprocess.Popen(["explorer.exe", f"shell:AppsFolder\\{found['appid']}"],
+                             shell=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True, f"launched from Start panel (AppID={found['appid']})"
+        if method == "shortcut":
+            os.startfile(found["lnk"])
+            return True, f"launched via shortcut {os.path.basename(found['lnk'])}"
     except Exception as e:
         return False, f"launch failed: {e}"
+    return False, f"no launch method for '{app_name}'"
 
 
 def _open_in_browser(app_name: str) -> str:

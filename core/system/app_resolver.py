@@ -119,6 +119,14 @@ def is_installed(app_name: str) -> bool:
         except Exception:
             continue
 
+    # 5. Start panel (Get-StartApps) — matches what open_app can actually launch.
+    try:
+        from tools.open_app import _find_in_start_panel
+        if _find_in_start_panel(app_name):
+            return True
+    except Exception:
+        pass
+
     return False
 
 

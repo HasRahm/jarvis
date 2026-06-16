@@ -105,7 +105,8 @@ def _run_with_timeout(fn, timeout, default):
 # ── Sync operations ──────────────────────────────────────────────────────────
 
 def mem_get(slug: str) -> str:
-    """Exact-slug fetch. Returns content string, or '' if absent/unavailable."""
+    """Exact-slug fetch. Supabase first; falls back to the local store when the
+    cloud is unavailable/empty. Returns content string, or '' if absent."""
     if not slug:
         return ""
 
@@ -114,7 +115,21 @@ def mem_get(slug: str) -> str:
         data = getattr(res, "data", None) or []
         return (data[0].get("content") or "") if data else ""
 
-    return _run_with_timeout(_op, GET_TIMEOUT, "")
+    val = _run_with_timeout(_op, GET_TIMEOUT, "")
+    if val:
+        # Cache the cloud hit locally so reads work next time even if paused.
+        try:
+            from brain.local_store import local_upsert
+            local_upsert(slug, val)
+        except Exception:
+            pass
+        return val
+    # Supabase missing/unavailable/empty -> local fallback.
+    try:
+        from brain.local_store import local_get
+        return local_get(slug)
+    except Exception:
+        return ""
 
 
 def mem_search(query: str, limit: int = _SEARCH_LIMIT) -> list:
@@ -144,16 +159,34 @@ def mem_search(query: str, limit: int = _SEARCH_LIMIT) -> list:
                .limit(limit).execute())
         return getattr(res, "data", None) or []
 
-    return _run_with_timeout(_op, SEARCH_TIMEOUT, [])
+    rows = _run_with_timeout(_op, SEARCH_TIMEOUT, [])
+    if rows:
+        return rows
+    # Supabase missing/unavailable/empty -> local fallback.
+    try:
+        from brain.local_store import local_search
+        return local_search(query, limit)
+    except Exception:
+        return []
 
 
 def mem_upsert(slug: str, content: str) -> bool:
     """SYNCHRONOUS upsert — for ordering-critical callers (contract handoff,
-    session checkpoints) that must commit before continuing. Returns True on
-    success, False on timeout/failure. Never raises."""
+    session checkpoints) that must commit before continuing. Always writes to the
+    local store (durable offline); also attempts Supabase when reachable. Returns
+    True if either store accepted the write. Never raises."""
     if not slug:
         return False
 
+    # 1. Always persist locally so memory survives a paused/unreachable cloud.
+    local_ok = False
+    try:
+        from brain.local_store import local_upsert
+        local_ok = local_upsert(slug, content)
+    except Exception:
+        local_ok = False
+
+    # 2. Best-effort cloud write (skips instantly if client is None).
     def _op(cl):
         # namespace + search_vector are GENERATED columns — send only these two.
         cl.table(_TABLE).upsert(
@@ -162,7 +195,8 @@ def mem_upsert(slug: str, content: str) -> bool:
         ).execute()
         return True
 
-    return bool(_run_with_timeout(_op, UPSERT_TIMEOUT, False))
+    cloud_ok = bool(_run_with_timeout(_op, UPSERT_TIMEOUT, False))
+    return local_ok or cloud_ok
 
 
 # ── Fire-and-forget write queue ──────────────────────────────────────────────
