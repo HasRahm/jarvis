@@ -148,12 +148,17 @@ def load_mode_instructions(mode: str) -> str:
             print(f"⚠️  Mode file not found: {mode_path}, falling back to auto mode")
             mode_content = "Execute the task completely and autonomously using your available tools."
 
-    return f"{shared_content}\n\n---\n\n{mode_content}"
+    composed = f"{shared_content}\n\n---\n\n{mode_content}"
+    # Cluster 1: the mode files use {{OUTPUT_DIR}} where they previously hardcoded the install-dir
+    # scratch path. Substitute the resolved output root so the model writes into the user's project.
+    output_root = os.environ.get("JARVIS_OUTPUT_ROOT") or os.getcwd()
+    return composed.replace("{{OUTPUT_DIR}}", output_root)
 
 
 def build_prompt(mode: str, task: str) -> str:
     """Build the full prompt for Jarvis."""
     instructions = load_mode_instructions(mode)
+    output_root = os.environ.get("JARVIS_OUTPUT_ROOT") or os.getcwd()
     return f"""{instructions}
 
 ---
@@ -161,6 +166,11 @@ def build_prompt(mode: str, task: str) -> str:
 ## YOUR TASK
 
 {task}
+
+## OUTPUT LOCATION
+Write all generated files into the working directory: {output_root}
+Use paths relative to it (e.g. `app/main.py`) or absolute paths under it. Do NOT write into the
+Jarvis install directory.
 
 IMPORTANT: Execute each step in order. Do NOT stop early. Do NOT ask for help. Complete the task fully.
 """
@@ -179,9 +189,13 @@ def run_jarvis(mode: str, task: str, model: str = DEFAULT_MODEL):
     with open(prompt_path, "w", encoding="utf-8") as f:
         f.write(prompt_content)
 
+    # Cluster 1: generated files must land in the user's working dir, not the install dir.
+    # write_file resolves relative paths against the PROCESS cwd, so run the subprocess there.
+    output_root = os.environ.get("JARVIS_OUTPUT_ROOT") or os.getcwd()
+
     print(f"🤖 Jarvis [{mode}] — Starting task...")
     print(f"   Model: {model}")
-    print(f"   Prompt: {prompt_path}")
+    print(f"   Output dir: {output_root}")
     print(f"   Task: {task[:100]}{'...' if len(task) > 100 else ''}")
     print("-" * 60)
     sys.stdout.flush()
@@ -190,7 +204,7 @@ def run_jarvis(mode: str, task: str, model: str = DEFAULT_MODEL):
     import subprocess
     result = subprocess.run(
         [VENV_PYTHON, "-u", HERMES_RUNNER, "-p", prompt_path, "-m", model],
-        cwd=PROJECT_ROOT,
+        cwd=output_root,
         text=True,
         # Stream output directly to stdout
     )
@@ -201,11 +215,13 @@ def run_jarvis(mode: str, task: str, model: str = DEFAULT_MODEL):
     except Exception:
         pass
 
+    # Honest outcome (Phase 46): don't claim "completed successfully" — the runner above printed the
+    # real result (incl. any model fallbacks / rate-limit retries). Just reflect the exit status.
     if result.returncode != 0:
         print(f"\n❌ Jarvis exited with code {result.returncode}")
         sys.exit(result.returncode)
     else:
-        print(f"\n✅ Jarvis completed successfully")
+        print(f"\n■ Jarvis run finished (exit 0). See the run summary above for what was done.")
 
 
 def run_screen_dashboard(model: str = DEFAULT_MODEL):
@@ -221,7 +237,9 @@ def run_screen_dashboard(model: str = DEFAULT_MODEL):
         reader = JarvisScreenReader()
         imprinter = ScreenImprintGraph()
         screen_data = await reader.read_screen()
-        imprint_data = await imprinter.imprint()
+        # ScreenImprintGraph.imprint() is synchronous — awaiting it raised
+        # "object dict can't be used in 'await' expression" (smoke-test #3).
+        imprint_data = imprinter.imprint()
         return screen_data, imprint_data
         
     try:
@@ -234,7 +252,15 @@ def run_screen_dashboard(model: str = DEFAULT_MODEL):
     summary = screen.get("summary", "No summary generated.")
     controls = screen.get("native_ui", [])
     ascii_map = imprint.get("imprint", {}).get("ascii_map", "")
-    
+
+    # Honest label (Phase 46): name the model that ACTUALLY generated the summary, not a hardcoded
+    # "Gemma4" — the summary call falls back through the chain (often Kimi/etc.).
+    try:
+        from core.system.llm_adapter import get_last_run
+        _vm = get_last_run().get("model_used") or "unknown model"
+    except Exception:
+        _vm = "unknown model"
+
     print("┌──────────────────────────────────────────────────────────┐")
     print("│                     JARVIS VISUAL BLOCK                  │")
     print("└──────────────────────────────────────────────────────────┘")
@@ -242,7 +268,7 @@ def run_screen_dashboard(model: str = DEFAULT_MODEL):
     print(f"⚙️  PROCESS:       {active.get('process_name', 'Unknown')} (PID: {active.get('pid', 'N/A')})")
     print(f"📏 COORDINATES:   {active.get('rect', {})}")
     print("-" * 60)
-    print("📄 COGNITIVE SUMMARY (Gemma4 Visual Cortex):")
+    print(f"📄 COGNITIVE SUMMARY (via {_vm}):")
     print(summary)
     print("-" * 60)
     print("🧩 TOP 10 VISIBLE ACTION CONTROLS:")
@@ -345,7 +371,13 @@ def show_qr_code(hermes_secret: str = None):
     if secret:
         pair_url = f"{phone_app}/#u={quote(ws_url, safe='')}&t={quote(secret, safe='')}"
         print_qr_code(pair_url)
-        print(f"\n🔑 Token (for manual entry): {secret}")
+        # The token is a credential — don't splash it in plaintext by default (smoke-test #10).
+        # The QR already carries it; scan it. Reveal the raw token only on explicit --show-token.
+        if "--show-token" in sys.argv:
+            print(f"\n🔑 Token (sensitive — for manual entry): {secret}")
+        else:
+            masked = (secret[:3] + "…" + secret[-2:]) if len(secret) > 6 else "•••"
+            print(f"\n🔑 Token: {masked}  (scan the QR, or pass --show-token to reveal)")
         print(f"   WS URL: {ws_url}\n")
     else:
         # No secret available locally — fall back to URL-only QR; phone must have
@@ -353,13 +385,143 @@ def show_qr_code(hermes_secret: str = None):
         print_qr_code(ws_url)
         print("\n⚠️ HERMES_SECRET not set locally — phone must use a stored/manual token.\n")
 
+def _run_json_stream():
+    """Non-interactive JSON stream mode — emit each event as newline-delimited JSON.
+
+    Usage:
+        echo "what is 2+2" | python jarvis-cli.py --output json
+        python jarvis-cli.py --output json --task "list files in C:/Users"
+
+    Each stdout line is a JSON object with a 'type' field:
+        {"type": "token",    "text": "..."         }  — streaming text chunk
+        {"type": "tool",     "name": "...", "args": {...}  }  — tool call
+        {"type": "result",   "name": "...", "output": "..." }  — tool result
+        {"type": "done",     "text": "..."         }  — final full response
+        {"type": "error",    "message": "..."      }  — error
+    """
+    import json as _json
+    import io as _io
+    import contextlib as _ctx
+    from tools.dispatcher import dispatch, TOOL_DEFINITIONS
+    from core.system import llm_adapter
+    from core.system.llm_adapter import call_llm, set_stream_hook
+
+    # NDJSON purity (smoke-test #2): stdout must contain ONLY JSON. Pin the real stdout for JSON
+    # events, silence the adapter's banner, and redirect every other print to a sink.
+    global _JSON_OUT
+    _JSON_OUT = sys.stdout
+    llm_adapter.QUIET_MODE = True
+    _sink = _io.StringIO()
+
+    model = os.environ.get("JARVIS_PRIMARY_MODEL", DEFAULT_MODEL)
+
+    # Read task from --task flag or stdin
+    task = None
+    if "--task" in sys.argv:
+        idx = sys.argv.index("--task")
+        if idx + 1 < len(sys.argv):
+            task = sys.argv[idx + 1]
+    if not task:
+        if not sys.stdin.isatty():
+            task = sys.stdin.read().strip()
+    if not task:
+        _emit_json({"type": "error", "message": "--task or stdin required in --output json mode"})
+        return
+
+    instructions = load_mode_instructions("auto")
+    system_msg = (
+        "You are Jarvis. Complete the user task using tools as needed. "
+        "Reply only with the final answer.\n\n" + instructions
+    )
+    messages = [
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": task},
+    ]
+
+    buf = {"text": ""}
+
+    def hook(token, kind):
+        if kind == "content":
+            buf["text"] += token
+            _emit_json({"type": "token", "text": token})
+
+    while True:
+        set_stream_hook(hook)
+        try:
+            # Redirect adapter stdout (routing lines, etc.) to the sink; JSON tokens still go to
+            # the pinned _JSON_OUT via _emit_json, keeping stdout valid NDJSON.
+            with _ctx.redirect_stdout(_sink):
+                msg = call_llm(messages=messages, model=model, tools=TOOL_DEFINITIONS)
+        except Exception as e:
+            _emit_json({"type": "error", "message": str(e)})
+            return
+        finally:
+            set_stream_hook(None)
+
+        messages.append(msg)
+
+        if not msg.get("tool_calls"):
+            _emit_json({"type": "done", "text": msg.get("content", buf["text"])})
+            return
+
+        for call in msg["tool_calls"]:
+            fn = call["function"]["name"]
+            args = call["function"]["arguments"]
+            _emit_json({"type": "tool", "name": fn, "args": args})
+            try:
+                with _ctx.redirect_stdout(_sink):
+                    result = dispatch(fn, args)
+            except Exception as e:
+                result = f"ERROR: {e}"
+            _emit_json({"type": "result", "name": fn, "output": str(result)[:2000]})
+            _tcid = call.get("id")
+            _tm = {"role": "tool", "content": str(result)}
+            if _tcid:
+                _tm["tool_call_id"] = _tcid
+            messages.append(_tm)
+
+
+_JSON_OUT = None   # pinned real stdout for NDJSON, so adapter chatter can be redirected away
+
+
+def _emit_json(obj: dict):
+    """Write a JSON event line to the pinned JSON stdout (never the redirected sink)."""
+    import json as _json
+    out = _JSON_OUT or sys.stdout
+    out.write(_json.dumps(obj, ensure_ascii=False) + "\n")
+    out.flush()
+
+
 def main():
+    # Hard offline / no-cloud switch (smoke-test #1). Set BEFORE the early --output/--tui branches
+    # so every path — including JSON and --screen — refuses cloud calls and can't spend credits.
+    if "--offline" in sys.argv or "--no-cloud" in sys.argv:
+        os.environ["JARVIS_OFFLINE"] = "1"
+
+    # Output root (Phase 46 cluster 1): generated code lands in the USER's working dir (or
+    # --output-dir), NOT the install dir. Resolve + export BEFORE the early branches so the
+    # subprocess, agent workspaces, and prompt instructions all agree.
+    _out_dir = None
+    for _flag in ("--output-dir", "-o"):
+        if _flag in sys.argv:
+            _i = sys.argv.index(_flag)
+            if _i + 1 < len(sys.argv):
+                _out_dir = sys.argv[_i + 1]
+            break
+    os.environ.setdefault("JARVIS_OUTPUT_ROOT", os.path.abspath(_out_dir) if _out_dir else os.getcwd())
+
     # No arguments → launch the inline streaming REPL (Claude Code / Gemini CLI style).
     # --tui explicitly launches the full-screen Textual dashboard instead.
     if len(sys.argv) == 1:
         from core.cli.repl import JarvisRepl
         JarvisRepl().run()
         sys.exit(0)
+    # --output json → non-interactive JSON stream mode (for piping / scripting)
+    if "--output" in sys.argv:
+        idx = sys.argv.index("--output")
+        if idx + 1 < len(sys.argv) and sys.argv[idx + 1] == "json":
+            _run_json_stream()
+            sys.exit(0)
     if "--tui" in sys.argv:
         from core.cli.app import JarvisTuiApp
         app = JarvisTuiApp()
@@ -386,13 +548,37 @@ Examples:
     parser.add_argument("--screen", action="store_true", help="Dump visual screen block dashboard")
     parser.add_argument("--remote", action="store_true", help="Start Hermes server and show QR code")
     parser.add_argument("--pair", action="store_true", help="Show QR code for existing Hermes session")
+    parser.add_argument("--show-token", action="store_true", help="With --pair, print the raw auth token (sensitive; masked by default)")
     parser.add_argument("--mode", "-m", choices=AVAILABLE_MODES, default="auto",
                         help="Jarvis mode (default: auto)")
     parser.add_argument("--task", "-t", type=str, help="Task description")
     parser.add_argument("--model", default=DEFAULT_MODEL,
-                        help=f"Ollama model to use (default: {DEFAULT_MODEL})")
+                        help=f"Chat/orchestrator primary model (default: {DEFAULT_MODEL}). "
+                             "Does NOT control vision or document-generation, which route separately.")
+    parser.add_argument("--output", choices=["json"], default=None,
+                        help="Output format: 'json' emits newline-delimited JSON events (for scripting)")
+    parser.add_argument("--offline", "--no-cloud", dest="offline", action="store_true",
+                        help="Hard offline mode: only local Ollama, never call paid/cloud models")
+    parser.add_argument("--output-dir", "-o", dest="output_dir", default=None,
+                        help="Directory to write generated files into (default: current directory)")
 
     args = parser.parse_args()
+
+    if args.offline:
+        os.environ["JARVIS_OFFLINE"] = "1"
+    if args.output_dir:
+        os.environ["JARVIS_OUTPUT_ROOT"] = os.path.abspath(args.output_dir)
+
+    # Validate --model loudly (Phase 46): a bogus model must error, not silently fall through the
+    # fallback chain and answer as if nothing happened.
+    try:
+        from agents.model_router import validate_model
+        _ok, _why = validate_model(args.model)
+        if not _ok:
+            print(f"❌ --model: {_why}")
+            sys.exit(2)
+    except ImportError:
+        pass
 
     if args.tui:
         from core.cli.app import JarvisTuiApp

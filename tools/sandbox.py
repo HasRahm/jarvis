@@ -81,3 +81,23 @@ def run_in_sandbox(sandbox: object | None, command: str, cwd: str = "/home/user"
     except Exception as e:
         logger.warning(f"[sandbox] E2B command failed: {e}")
         return f"E2B error: {e}"
+
+
+def write_files_to_sandbox(sandbox: object | None, files: dict, base: str = "/home/user/workspace") -> bool:
+    """
+    Write a {relative_path: content} mapping into an E2B sandbox under *base*.
+
+    Used by the self-correction spine to push an agent's generated files into the
+    sandbox before executing them. Returns True on success, False on any failure
+    (including sandbox=None, so the caller can fall back to local checks).
+    """
+    if sandbox is None or not files:
+        return False
+    try:
+        for rel_path, content in files.items():
+            dest = f"{base.rstrip('/')}/{rel_path.lstrip('/')}"
+            sandbox.files.write(dest, content if isinstance(content, str) else str(content))
+        return True
+    except Exception as e:
+        logger.warning(f"[sandbox] E2B file write failed: {e}")
+        return False

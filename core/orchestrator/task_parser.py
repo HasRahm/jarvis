@@ -37,17 +37,43 @@ Example output:
 IMPORTANT: Return ONLY the JSON array. No markdown, no explanation."""
 
 
-def parse_task(user_task: str) -> list[dict]:
+def parse_task(user_task: str, spec: dict | None = None) -> list[dict]:
     """
     Decompose a user task into structured subtasks using the configured orchestrator model.
 
     Args:
         user_task: Natural language description of what to build
+        spec: Optional SPEC dict from the architect step (Phase 36C). When provided, the
+              decomposition is grounded in the spec's data model, API contract, and file plan so
+              subtasks align with one coherent blueprint.
 
     Returns:
         List of subtask dicts with id, agent, task, depends_on
     """
     import os
+
+    # Phase 41: when the architect produced an office brief with assignments, derive the subtask
+    # DAG DETERMINISTICALLY from it — no second LLM call. One office meeting, one brief, executed.
+    if spec and isinstance(spec.get("assignments"), list) and spec["assignments"]:
+        derived = []
+        for a in spec["assignments"]:
+            agent = str(a.get("agent", "")).lower().strip()
+            if agent not in ("backend", "frontend", "qa", "database", "research"):
+                continue
+            task_text = a.get("scope") or user_task
+            if a.get("acceptance"):
+                task_text = f"{task_text}\nAcceptance: {a['acceptance']}"
+            derived.append({
+                "id": a.get("id") or f"sub_{len(derived) + 1}",
+                "agent": agent,
+                "task": task_text,
+                "depends_on": a.get("depends_on") or [],
+            })
+        if derived:
+            logger.info(f"[task_parser] Derived {len(derived)} subtasks from architect assignments "
+                        "(no decomposition LLM call).")
+            return derived
+
     if os.environ.get("JARVIS_CI") == "true":
         logger.info("[CI MODE] Returning mock subtask decomposition for offline testing")
         return [
@@ -112,7 +138,22 @@ def parse_task(user_task: str) -> list[dict]:
     else:
         final_prompt = DECOMPOSITION_PROMPT
 
-    raw = agent._call_model(final_prompt, user_task)
+    # Phase 36C: ground decomposition in the architect SPEC so subtasks align with the
+    # canonical data model, API contract, and file plan instead of improvising.
+    decomposition_input = user_task
+    if spec:
+        try:
+            decomposition_input = (
+                f"{user_task}\n\n--- IMPLEMENTATION SPEC (decompose to build exactly this) ---\n"
+                f"{json.dumps(spec, indent=2)}\n"
+                "Create subtasks that implement the data_model, api_contract, and files above. "
+                "Backend subtasks build the contract; frontend subtasks consume it; QA verifies the "
+                "acceptance_criteria."
+            )
+        except Exception:
+            decomposition_input = user_task
+
+    raw = agent._call_model(final_prompt, decomposition_input)
 
 
     import re
@@ -132,7 +173,7 @@ def parse_task(user_task: str) -> list[dict]:
     for st in subtasks:
         assert "id" in st, f"Subtask missing 'id': {st}"
         assert "agent" in st, f"Subtask missing 'agent': {st}"
-        assert st["agent"] in ("backend", "frontend", "qa"), f"Invalid agent: {st['agent']}"
+        assert st["agent"] in ("backend", "frontend", "qa", "database", "research"), f"Invalid agent: {st['agent']}"
         assert "task" in st, f"Subtask missing 'task': {st}"
         assert "depends_on" in st, f"Subtask missing 'depends_on': {st}"
 

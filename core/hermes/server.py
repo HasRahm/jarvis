@@ -294,6 +294,53 @@ class HermesEventManager:
 hermes_event_manager = HermesEventManager()
 
 
+# ---------------------------------------------------------------------------
+# DAG dispatch backpressure (review finding #7)
+# ---------------------------------------------------------------------------
+# Without a cap, each `run_task` WebSocket message spawns an unbounded daemon thread, so a client
+# (or a reconnect storm) can launch overlapping orchestrations that exhaust CPU/memory and corrupt
+# each other's state. We enforce a per-user concurrency cap and a global ceiling; over-limit
+# dispatches are rejected with a clear status instead of silently piling up.
+class _DagDispatchLimiter:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._per_user: dict = {}     # user_id (or conn id) -> active count
+        self._total = 0
+
+    @property
+    def per_user_cap(self) -> int:
+        return max(1, int(os.getenv("JARVIS_MAX_CONCURRENT_DAGS_PER_USER", "1")))
+
+    @property
+    def global_cap(self) -> int:
+        return max(1, int(os.getenv("JARVIS_MAX_CONCURRENT_DAGS", "8")))
+
+    def try_acquire(self, key: str) -> tuple[bool, str]:
+        """Reserve a slot for `key` (a user_id or connection id). Returns (ok, reason)."""
+        with self._lock:
+            if self._total >= self.global_cap:
+                return False, f"server at capacity ({self._total}/{self.global_cap} tasks running)"
+            cur = self._per_user.get(key, 0)
+            if cur >= self.per_user_cap:
+                return False, (f"you already have {cur} task(s) running "
+                               f"(limit {self.per_user_cap}); wait for it to finish")
+            self._per_user[key] = cur + 1
+            self._total += 1
+            return True, ""
+
+    def release(self, key: str) -> None:
+        with self._lock:
+            if self._per_user.get(key, 0) > 0:
+                self._per_user[key] -= 1
+                if self._per_user[key] == 0:
+                    self._per_user.pop(key, None)
+            if self._total > 0:
+                self._total -= 1
+
+
+_dag_limiter = _DagDispatchLimiter()
+
+
 def get_visual_context_history() -> list:
     """Returns the most-recently-authenticated client's visual tap history (or [] if none)."""
     with hermes_event_manager._lock:
@@ -494,10 +541,23 @@ async def hermes_endpoint(websocket: WebSocket):
                     import uuid as _uuid
                     from core.orchestrator.dag import run_dag
                     _task_id = _uuid.uuid4().hex
-                    state.active_task_id = _task_id
                     _user_id_capture = state.user_id
+                    # Backpressure: cap concurrent orchestrations per user (and globally) so a
+                    # client can't spawn overlapping run_dag threads. Key by user_id in SaaS mode,
+                    # else by connection id for self-hosted.
+                    _limit_key = _user_id_capture or conn_id
+                    _ok, _reason = _dag_limiter.try_acquire(_limit_key)
+                    if not _ok:
+                        logger.warning(f"[{conn_id}] DAG dispatch rejected (backpressure): {_reason}")
+                        await websocket.send_text(json.dumps({
+                            "type": "task_status",
+                            "status": "REJECTED",
+                            "reason": _reason,
+                        }))
+                        continue
+                    state.active_task_id = _task_id
 
-                    def _run_dag_thread(_text=user_text, _tid=_task_id, _uid=_user_id_capture):
+                    def _run_dag_thread(_text=user_text, _tid=_task_id, _uid=_user_id_capture, _key=_limit_key):
                         try:
                             run_dag(_text, task_id=_tid, user_id=_uid)
                         except Exception as _exc:
@@ -507,6 +567,8 @@ async def hermes_endpoint(websocket: WebSocket):
                                 "status": "FAILED",
                                 "error": str(_exc),
                             })
+                        finally:
+                            _dag_limiter.release(_key)
 
                     threading.Thread(target=_run_dag_thread, daemon=True, name=f"dag-{_task_id[:8]}").start()
 

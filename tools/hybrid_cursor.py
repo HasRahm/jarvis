@@ -198,7 +198,7 @@ def _layer2_mouse_braille(target: str, window_node: dict, view_session=None) -> 
                                         f"at ({cx},{cy}) probe=({px},{py}) -> {v_msg} (virtual)"
                                     )
 
-                        click_result = desktop_smooth_click(cx, cy, duration=0.5)
+                        click_result = desktop_smooth_click(cx, cy, duration=0.5, window_bounds=window_node)
                         return True, (
                             f"mouse-braille: '{ctrl_name}' [{ctrl.ControlTypeName}] "
                             f"at ({cx},{cy}) probe=({px},{py}) -> {click_result} (physical)"
@@ -227,7 +227,7 @@ def _layer2_mouse_braille(target: str, window_node: dict, view_session=None) -> 
 # Layer 3 — Screenshot OCR fallback
 # ---------------------------------------------------------------------------
 
-def _layer3_ocr(target: str, view_session=None) -> tuple:
+def _layer3_ocr(target: str, view_session=None, window_bounds=None) -> tuple:
     """
     Capture the current screen with mss and use pytesseract to locate *target*
     text by bounding box, then smooth-click the center.
@@ -271,7 +271,7 @@ def _layer3_ocr(target: str, view_session=None) -> tuple:
                 if tok.strip().lower() == target_lower and int(data["conf"][i]) > 50:
                     cx = data["left"][i] + data["width"][i] // 2
                     cy = data["top"][i] + data["height"][i] // 2
-                    click_result = desktop_smooth_click(cx, cy, duration=0.8)
+                    click_result = desktop_smooth_click(cx, cy, duration=0.8, window_bounds=window_bounds)
                     return True, (
                         f"exact match '{tok}' at ({cx},{cy}) "
                         f"conf={data['conf'][i]}% -> {click_result}"
@@ -281,7 +281,7 @@ def _layer3_ocr(target: str, view_session=None) -> tuple:
                 if target_lower in tok.strip().lower() and int(data["conf"][i]) > 30:
                     cx = data["left"][i] + data["width"][i] // 2
                     cy = data["top"][i] + data["height"][i] // 2
-                    click_result = desktop_smooth_click(cx, cy, duration=0.8)
+                    click_result = desktop_smooth_click(cx, cy, duration=0.8, window_bounds=window_bounds)
                     return True, (
                         f"partial match '{tok}' (contains '{target}') at ({cx},{cy}) "
                         f"conf={data['conf'][i]}% -> {click_result}"
@@ -313,7 +313,7 @@ def _layer3_ocr(target: str, view_session=None) -> tuple:
             cx = (min(lefts) + max(rights))  // 2
             cy = (min(tops)  + max(bottoms)) // 2
             matched_str = " ".join(texts[i : i + nw])
-            click_result = desktop_smooth_click(cx, cy, duration=0.8)
+            click_result = desktop_smooth_click(cx, cy, duration=0.8, window_bounds=window_bounds)
             return True, (
                 f"multi-word match '{matched_str}' at ({cx},{cy}) "
                 f"min_conf={min(confs)}% -> {click_result}"
@@ -506,7 +506,7 @@ def hybrid_locate_click(
             if not l1_ok:
                 # Focus failed — jump straight to OCR
                 logger.warning("[HybridCursor] Layer 1 failed. Jumping to Layer 3.")
-                l3_ok, l3_msg = _layer3_ocr(target, view_session)
+                l3_ok, l3_msg = _layer3_ocr(target, view_session, window_bounds=window_node)
                 trace.append("Layer 2b (MouseBraille): SKIPPED — Layer 1 focus failed")
                 trace.append(f"Layer 3 (OCR): {'OK' if l3_ok else 'FAILED'} — {l3_msg}")
                 click_ok = l3_ok
@@ -524,14 +524,14 @@ def hybrid_locate_click(
                     # Layer 3 — OCR fallback                                 #
                     # ---------------------------------------------------- #
                     logger.warning("[HybridCursor] Layer 2b failed. Falling back to Layer 3.")
-                    l3_ok, l3_msg = _layer3_ocr(target, view_session)
+                    l3_ok, l3_msg = _layer3_ocr(target, view_session, window_bounds=window_node)
                     trace.append(f"Layer 3 (OCR): {'OK' if l3_ok else 'FAILED'} — {l3_msg}")
                     click_ok = l3_ok
         else:
             trace.append("Layer 1 (Graph): SKIPPED — no window_hint provided")
             trace.append("Layer 2b (MouseBraille): SKIPPED — no window bounds")
             # Jump straight to OCR
-            l3_ok, l3_msg = _layer3_ocr(target, view_session)
+            l3_ok, l3_msg = _layer3_ocr(target, view_session, window_bounds=window_node)
             trace.append(f"Layer 3 (OCR): {'OK' if l3_ok else 'FAILED'} — {l3_msg}")
             click_ok = l3_ok
 

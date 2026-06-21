@@ -19,14 +19,27 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agents.model_router import get_model, get_provider, get_api_key, get_fallbacks
+from agents.model_router import get_model, get_provider, get_api_key, get_fallbacks, openrouter_mirror
 from core.orchestrator.distributed_sync import agents_md_lock
+from core.cli import run_events as ev
 
 logger = logging.getLogger(__name__)
 
 # Project root
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AGENTS_MD_PATH = os.path.join(PROJECT_ROOT, "AGENTS.md")
+
+
+def _is_permanent_error(e) -> bool:
+    """True for failures that won't resolve on retry (billing, auth, quota, missing SDK,
+    unmapped provider). These should fail over to the next model immediately instead of
+    burning exponential-backoff time retrying the same dead model."""
+    s = str(e).lower()
+    return any(k in s for k in (
+        "credit balance", "billing", "insufficient", "quota",
+        "invalid_api_key", "invalid api key", "authentication", "permission",
+        "402", "401", "unknown provider", "cannot import name",
+    ))
 
 PRICING_LAST_UPDATED = "2026-06-05"
 PRICING = {
@@ -137,7 +150,9 @@ class BaseAgent(ABC):
         if self.role == "backend":
             return json.dumps({
                 "files": {
-                    "migrations/001_create_users_table.sql": "CREATE TABLE users (id SERIAL PRIMARY KEY, email VARCHAR(255) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);",
+                    # SQLite-compatible DDL (AUTOINCREMENT, not Postgres SERIAL) so the
+                    # self-correction spine's `sqlite3 :memory:` validation actually passes.
+                    "migrations/001_create_users_table.sql": "CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, email VARCHAR(255) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);",
                     "app/routers/users.py": "from fastapi import APIRouter\nrouter = APIRouter()\n@router.post('/api/users')\ndef create_user(user: dict):\n    return {'id': 1, 'email': user['email'], 'created_at': '2026-05-18'}\n"
                 },
                 "summary": "Created users table migration and POST /api/users endpoint",
@@ -162,7 +177,15 @@ class BaseAgent(ABC):
                     "issues": []
                 },
                 "tests": {
-                    "tests/test_users.py": "def test_create_user():\n    assert True\n"
+                    # A test that actually exercises the backend mock's contract (the create_user
+                    # endpoint returns the posted email + an id), instead of a vacuous `assert True`.
+                    "tests/test_users.py": (
+                        "from app.routers.users import create_user\n\n"
+                        "def test_create_user_returns_contract():\n"
+                        "    result = create_user({'email': 'a@b.com'})\n"
+                        "    assert result['email'] == 'a@b.com'\n"
+                        "    assert 'id' in result and 'created_at' in result\n"
+                    )
                 },
                 "summary": "All backend migrations, endpoints, and frontend components verified successfully. Assertions match contracts perfectly."
             })
@@ -212,12 +235,32 @@ class BaseAgent(ABC):
 
         models_to_try = [self.model] + get_fallbacks(self.role)
 
+        # When a direct provider is billing-blocked, retry the SAME model via OpenRouter
+        # (separate credit pool) before degrading to the next/local model. Each cloud model
+        # gets its OpenRouter mirror inserted right after the direct attempt. Skipped
+        # entirely when no OPENROUTER_API_KEY is configured, so it adds zero overhead until
+        # a key is present.
+        if get_api_key("openrouter"):
+            expanded = []
+            for m in models_to_try:
+                expanded.append(m)
+                mirror = openrouter_mirror(m)
+                if mirror and mirror not in models_to_try and mirror not in expanded:
+                    expanded.append(mirror)
+            models_to_try = expanded
+
         for model_str in models_to_try:
             provider = get_provider(model_str)
             for attempt in range(self.max_retries):
                 try:
                     return self._raw_call(provider, model_str, system_prompt, user_prompt)
                 except Exception as e:
+                    if _is_permanent_error(e):
+                        logger.warning(
+                            f"[{self.role}] {model_str} failed permanently: {e}. "
+                            "Skipping retries, failing over to next model..."
+                        )
+                        break
                     wait = 2 ** attempt
                     logger.warning(
                         f"[{self.role}] {model_str} attempt {attempt+1}/{self.max_retries} "
@@ -339,6 +382,60 @@ class BaseAgent(ABC):
                 except Exception:
                     output_tokens = len(response_text) // 4
 
+            elif provider == "nvidia":
+                # NVIDIA Build is OpenAI-compatible (mirrors agent_tools._call_skill_llm).
+                import openai
+                client = openai.OpenAI(
+                    api_key=get_api_key("nvidia"),
+                    base_url="https://integrate.api.nvidia.com/v1",
+                    timeout=90.0,
+                )
+                response = client.chat.completions.create(
+                    model=model,
+                    max_tokens=8192,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                )
+                response_text = response.choices[0].message.content
+                try:
+                    usage = getattr(response, "usage", None)
+                    input_tokens = getattr(usage, "prompt_tokens", input_tokens) if usage else input_tokens
+                    output_tokens = getattr(usage, "completion_tokens", 0) if usage else len(response_text) // 4
+                except Exception:
+                    output_tokens = len(response_text) // 4
+
+            elif provider == "openrouter":
+                # OpenRouter is OpenAI-compatible; proxies the same model via its own
+                # credit pool. Strip the "openrouter/" prefix to get the vendor/model slug.
+                import openai
+                or_model = model[len("openrouter/"):] if model.startswith("openrouter/") else model
+                client = openai.OpenAI(
+                    api_key=get_api_key("openrouter"),
+                    base_url="https://openrouter.ai/api/v1",
+                    timeout=90.0,
+                    default_headers={
+                        "X-Title": "Jarvis",
+                        "HTTP-Referer": "https://github.com/HasRahm/jarvis",
+                    },
+                )
+                response = client.chat.completions.create(
+                    model=or_model,
+                    max_tokens=8192,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                )
+                response_text = response.choices[0].message.content
+                try:
+                    usage = getattr(response, "usage", None)
+                    input_tokens = getattr(usage, "prompt_tokens", input_tokens) if usage else input_tokens
+                    output_tokens = getattr(usage, "completion_tokens", 0) if usage else len(response_text) // 4
+                except Exception:
+                    output_tokens = len(response_text) // 4
+
             elif provider == "ollama":
                 import ollama
                 ol_client = ollama.Client(timeout=90)
@@ -357,6 +454,7 @@ class BaseAgent(ABC):
 
             latency = time.time() - start_time
             record_api_telemetry(self.role, model, latency, input_tokens, output_tokens, status)
+            ev.emit("tokens", agent=self.role, tokens=input_tokens + output_tokens)
             # 10b: Record success for adaptive learning
             if os.environ.get("JARVIS_CI") != "true":
                 try:

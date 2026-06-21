@@ -104,56 +104,93 @@ class SafetyMonitor:
                 except Exception:
                     pass
 
-        t_out = Thread(target=reader_thread, args=(process.stdout, stdout_queue), daemon=True)
-        t_err = Thread(target=reader_thread, args=(process.stderr, stderr_queue), daemon=True)
-        
-        t_out.start()
-        t_err.start()
+        def _attach_readers(proc):
+            """Start fresh reader threads bound to a (possibly retried) process."""
+            t_out = Thread(target=reader_thread, args=(proc.stdout, stdout_queue), daemon=True)
+            t_err = Thread(target=reader_thread, args=(proc.stderr, stderr_queue), daemon=True)
+            t_out.start()
+            t_err.start()
+            return t_out, t_err
+
+        _attach_readers(process)
+
+        start = time.monotonic()
+        timed_out = False
 
         # Poll outputs in real time
         try:
             while process.poll() is None or not stdout_queue.empty() or not stderr_queue.empty():
+                # Enforce the wall-clock timeout — a silently-hung process must not run forever.
+                if timeout and (time.monotonic() - start) > timeout:
+                    timed_out = True
+                    break
+
                 has_data = False
-                
+
                 # Drain stdout
                 while True:
                     try:
                         line = stdout_queue.get_nowait()
                         stdout_accum.append(line)
                         has_data = True
-                        
+
                         sys.stdout.write(f"    [cmd stdout] {line}")
                         sys.stdout.flush()
-                        
+
                         action, error_type = cls.scan_stream(line)
                         if action:
-                            cls._handle_action(action, error_type, line, process, cmd, cwd, env, shell)
+                            retry = cls._handle_action(action, error_type, line, process, cmd, cwd, env, shell)
+                            if retry is not None:
+                                # Swap the retried process back into the loop and re-attach
+                                # readers, so its output is monitored and its result returned —
+                                # instead of being abandoned in the background.
+                                process = retry
+                                _attach_readers(process)
+                                start = time.monotonic()   # reset the clock for the retry
                     except queue.Empty:
                         break
-                        
+
                 # Drain stderr
                 while True:
                     try:
                         line = stderr_queue.get_nowait()
                         stderr_accum.append(line)
                         has_data = True
-                        
+
                         sys.stderr.write(f"    [cmd stderr] {line}")
                         sys.stderr.flush()
-                        
+
                         action, error_type = cls.scan_stream(line)
                         if action:
-                            cls._handle_action(action, error_type, line, process, cmd, cwd, env, shell)
+                            retry = cls._handle_action(action, error_type, line, process, cmd, cwd, env, shell)
+                            if retry is not None:
+                                process = retry
+                                _attach_readers(process)
+                                start = time.monotonic()
                     except queue.Empty:
                         break
-                        
+
                 if not has_data:
                     time.sleep(0.01)
 
         except Exception as e:
             process.terminate()
-            process.wait()
+            try:
+                process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                process.kill()
             raise e
+
+        if timed_out:
+            # Kill the hung process and surface a clear timeout instead of hanging forever.
+            process.terminate()
+            try:
+                process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                process.kill()
+            raise subprocess.TimeoutExpired(cmd, timeout,
+                                            output="".join(stdout_accum),
+                                            stderr="".join(stderr_accum))
 
         ret = process.poll()
         return subprocess.CompletedProcess(
@@ -175,9 +212,13 @@ class SafetyMonitor:
         env: Optional[dict],
         shell: bool
     ):
-        """Processes a matched action tier by either resolving locally or raising Escalation."""
+        """Processes a matched action tier by either resolving locally or raising Escalation.
+
+        Returns the new retry `subprocess.Popen` when the command was re-launched (so the caller's
+        monitoring loop can adopt it), or `None` when there is no retry. Escalations raise.
+        """
         print(f"\n[SAFETY GUARD] Detected matched pattern {error_type} in stream! Action tier: {action.upper()}")
-        
+
         # Gracefully terminate the blocked process first
         process.terminate()
         try:
@@ -199,10 +240,10 @@ class SafetyMonitor:
                     cls._resolve_port_conflict(port)
                     # Re-run the command once after resolving
                     print(f"[SAFETY GUARD] Port {port} freed. Retrying command...")
-                    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env, shell=shell, text=True)
+                    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env, shell=shell, text=True)
                 else:
                     raise HarnessRuntimeError("Port conflict detected, but could not parse port number.", error_type)
-            
+
             elif error_type == "cache_corruption":
                 print("[SAFETY GUARD] Clearing package manager caches...")
                 if "npm" in cmd_str:
@@ -211,12 +252,14 @@ class SafetyMonitor:
                     subprocess.run(["pip", "cache", "purge"], capture_output=True)
                 # Re-run the command once
                 print("[SAFETY GUARD] Cache cleared. Retrying command...")
-                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env, shell=shell, text=True)
+                return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env, shell=shell, text=True)
 
             elif error_type == "playwright_crash":
                 print("[SAFETY GUARD] Restarting Playwright browser instance...")
                 # Playwright resolves dynamically by restarting context/browser. We re-run command.
-                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env, shell=shell, text=True)
+                return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, env=env, shell=shell, text=True)
+
+        return None
 
     @classmethod
     def _resolve_port_conflict(cls, port: int):

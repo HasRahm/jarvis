@@ -17,7 +17,7 @@ class SpatialContextCortex:
     The blind person's integrated spatial awareness.
     """
     
-    def __init__(self, check_interval_sec: float = 0.1):
+    def __init__(self, check_interval_sec: float = 0.5):
         self.check_interval = check_interval_sec
         self.braille = BrailleLayer()
         self.sound = SoundLayer()

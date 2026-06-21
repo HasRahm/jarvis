@@ -209,6 +209,26 @@ TOOL_DEFINITIONS = [
   {
     "type": "function",
     "function": {
+      "name": "verify_location",
+      "description": """<tool>verify_location</tool>
+<purpose>Confirm you are AT THE RIGHT PLACE by scrolling up and down while reading the screen — use this to verify a navigation/search landed on the expected content (e.g. the right job results, the right app view).</purpose>
+<how>Reads the current screen for expected_text; if absent, scrolls up and reads, then scrolls down and reads, then restores position.</how>
+<input>expected_text: a distinctive string you expect to see at the correct location (e.g. a job title, a heading, the app name).</input>
+<output>JSON: {"found": bool, "where": "current|above|below|none", "snippet": str}. If found is false you are NOT at the right place — recover with get_unstuck.</output>
+<when_to_use>After navigating/searching, to confirm the page/app shows what the task needs before extracting or proceeding.</when_to_use>""",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "expected_text": {"type": "string", "description": "Distinctive text expected at the correct location"},
+          "scroll_amount": {"type": "integer", "description": "Wheel units to scroll each direction (default 400)"}
+        },
+        "required": ["expected_text"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "get_unstuck",
       "description": """<tool>get_unstuck</tool>
 <purpose>Map a recovery path when you are blocked — instead of giving up or faking success.</purpose>
@@ -390,6 +410,43 @@ TOOL_DEFINITIONS = [
   {
     "type": "function",
     "function": {
+      "name": "run_skill_agent",
+      "description": """<tool>skill_agent</tool>
+<purpose>Run a named skill as a FULL autonomous agent — scoped workspace, file output, skill-aware model routing, and the self-correction loop (runs/compiles produced code and fixes errors). Unlike run_skill (one-shot text), this WRITES files and verifies them.</purpose>
+<input>skill_name: exact skill name (from the 345+ engineering skills); task: the work to perform</input>
+<output>JSON: {status, output, files: [...], notes, verification}</output>
+<when_to_use>When a specialized skill should actually BUILD or AUDIT something with file output — e.g. a security-auditor producing a report file, a migration skill writing SQL, a scaffolder emitting code.</when_to_use>""",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "skill_name": {"type": "string", "description": "Exact skill name (e.g. 'security-auditor', 'rag-architect', 'universal-scraping-architect')"},
+          "task": {"type": "string", "description": "The task for this skill-agent to perform"}
+        },
+        "required": ["skill_name", "task"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "run_engineering_agent",
+      "description": """<tool>engineering_agent</tool>
+<purpose>Auto-select the single best-matching expert skill for a specialized engineering task and run it as a full agent (workspace + file output + self-correction). Falls back to the backend agent when no skill matches.</purpose>
+<input>task: the engineering work to perform</input>
+<output>JSON: {status, output, files: [...], notes, verification}</output>
+<when_to_use>PREFER this for specialized engineering work (security audit, RAG pipeline, kubernetes/helm, DB migration, performance tuning, observability) — it picks the right expert from the 345+ skill roster automatically.</when_to_use>""",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task": {"type": "string", "description": "The specialized engineering task to perform"}
+        },
+        "required": ["task"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
       "name": "vocab_learn",
       "description": "Record a newly discovered UI pattern, icon location, or app-specific behavior to grow the visual vocabulary dataset. Call this after successfully automating something to help future sessions. Example: after clicking Figma's Community search bar, record its approximate location and what worked.",
       "parameters": {
@@ -474,7 +531,7 @@ TOOL_DEFINITIONS = [
     "type": "function",
     "function": {
       "name": "delegate_task",
-      "description": "Delegate a complex build task to the multi-agent IDE. Use this for tasks that involve creating full features with database, API, and UI components. The orchestrator will decompose the task and route subtasks to specialized agents (backend, frontend, QA).",
+      "description": "Use this for ANY task that requires BUILDING or CREATING software: games, apps, websites, scripts, APIs, tools, bots, dashboards, CLIs, or any multi-file project. The orchestrator decomposes the task into backend + frontend + QA subtasks and runs specialized agents (claude-sonnet-4-6, gemini, gpt) in dependency order. When unsure which single agent to call, use this.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -834,7 +891,8 @@ def dispatch(fn_name: str, args: dict, orch_agent=None):
         "brain_query", "brain_write", "vocab_learn", "vocab_lookup", "read_file", "list_dir", "run_command",
         "smart_fill", "agent_view", "agent_cursor",
         "run_backend_agent", "run_frontend_agent", "run_qa_agent", "run_iac_agent", "run_skill",
-        "open_app", "web_search", "verify_outcome", "get_unstuck",
+        "run_skill_agent", "run_engineering_agent",
+        "open_app", "web_search", "verify_outcome", "verify_location", "get_unstuck",
         "read_screen_text", "element_graph", "app_guide",
         # GUI tools — these ARE the context switching, exempting them is intentional:
         "desktop_smooth_click", "desktop_type_text", "desktop_press_keys", "desktop_scroll",
@@ -869,13 +927,14 @@ def dispatch(fn_name: str, args: dict, orch_agent=None):
                         except Exception as status_err:
                             logger.error(f"[Cortex] Failed to write SUSPENDED status: {status_err}")
                     
-                    # Block execution and poll context
+                    # Block execution and poll context (SHORT timeout — don't freeze the agent)
                     start_time = time.time()
-                    timeout = 300  # 5 minutes
+                    timeout = 10  # 10 seconds — warn and proceed, don't freeze for 5 minutes
                     while not cortex.is_home_context(orch.task_id):
                         if time.time() - start_time > timeout:
-                            raise TimeoutError(f"Context switch timeout: Original home context never returned for task '{orch.task_id}'")
-                        time.sleep(0.5)
+                            logger.warning(f"[Cortex] Context switch timeout ({timeout}s) for task '{orch.task_id}'. Proceeding anyway.")
+                            break
+                        time.sleep(1.0)
                         
                     logger.info(f"[Cortex] Home context restored for task '{orch.task_id}'. Resuming execution.")
                     
@@ -1052,6 +1111,9 @@ def _dispatch_raw(fn_name: str, args: dict):
     elif fn_name == "verify_outcome":                                  # Phase 28a
         from core.orchestrator.verification_loop import verify_outcome
         return json.dumps(verify_outcome(args.get("expected_text"), float(args.get("timeout", 3.0))))
+    elif fn_name == "verify_location":                                 # Phase 39
+        from tools.verify_location import verify_location
+        return json.dumps(verify_location(args.get("expected_text", ""), int(args.get("scroll_amount", 400))))
     elif fn_name == "get_unstuck":                                     # Phase 28a
         from core.orchestrator.recovery_navigator import get_unstuck
         return get_unstuck(args.get("goal", ""), args.get("what_failed", ""))
@@ -1082,6 +1144,12 @@ def _dispatch_raw(fn_name: str, args: dict):
     elif fn_name == "run_skill":                                       # Phase 26
         from agents.agent_tools import run_skill
         return run_skill(args.get("skill_name", ""), args.get("task", ""), args.get("model"))
+    elif fn_name == "run_skill_agent":                                 # Phase 37
+        from agents.agent_tools import run_skill_agent
+        return run_skill_agent(args.get("skill_name", ""), args.get("task", ""), args.get("user_id"))
+    elif fn_name == "run_engineering_agent":                           # Phase 37
+        from agents.agent_tools import run_engineering_agent
+        return run_engineering_agent(args.get("task", ""), args.get("user_id"))
     elif fn_name.startswith("mcp__"):
         parts = fn_name.split("__", 2)
         if len(parts) == 3 and _mcp_bridge is not None:

@@ -141,17 +141,21 @@ class QAAgent(BaseAgent):
                 "data": img_data
             }
 
-            system_prompt = """You are an expert senior UI designer and visual auditor.
-Review the layout screenshot alongside its source HTML context. Identify visual defects:
-1. Spacing, alignment, layout padding, or margin misalignments.
-2. Element overlaps, word wraps, or visual component truncation.
-3. Contrast, sizing, and design system alignment.
+            system_prompt = """You are an expert senior UI designer and visual auditor holding the
+output to the polish bar of Linear, Vercel, and Stripe. Review the layout screenshot alongside its
+source HTML/CSS and identify defects against a real design system:
+1. Spacing rhythm — does everything snap to a consistent 4/8px scale? Flag ad-hoc margins/padding.
+2. Typography — consistent type scale and weights, readable line length, clear hierarchy.
+3. Color/tokens — restrained palette used consistently (no stray hard-coded colors), AA contrast.
+4. Components — buttons/cards/inputs have proper radius, borders, hover/focus states, alignment.
+5. Layout — centered container, balanced whitespace, no overlaps/word-wrap/truncation, responsive.
+6. Overall: does it look intentionally designed, or default-browser plain?
 
 Provide your response in JSON:
 {
   "passed": true/false,
   "issues": [
-    {"message": "description of alignment/rendering/style defect"}
+    {"message": "specific design-system defect and how to fix it"}
   ],
   "confidence": float (between 0.0 and 1.0 representing your certainty of this evaluation)
 }

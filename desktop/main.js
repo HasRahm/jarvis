@@ -14,7 +14,12 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false,
+      // webSecurity stays ON (the secure default). The phone UI loads from file:// and reaches
+      // the Hermes server over WebSocket (not subject to same-origin) and via fetch with the
+      // server's CORS allow-list — so disabling same-origin protection is unnecessary and a
+      // serious footgun for a desktop wrapper. Escape hatch for local debugging only:
+      // set JARVIS_DESKTOP_INSECURE=1 before launch.
+      webSecurity: process.env.JARVIS_DESKTOP_INSECURE !== '1',
     }
   });
 

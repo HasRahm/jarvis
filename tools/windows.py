@@ -1,8 +1,26 @@
 import ctypes
 import logging
 import os
+import sys
 
 logger = logging.getLogger(__name__)
+
+def _setup_dpi_awareness():
+    if sys.platform == "win32":
+        try:
+            # Try SetProcessDpiAwareness (Windows 8.1+)
+            # 2 = PROCESS_PER_MONITOR_DPI_AWARE
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+            logger.info("[WINDOWS] Per-Monitor DPI awareness set successfully.")
+        except Exception:
+            try:
+                # Fallback to SetProcessDPIAware (Windows Vista+)
+                ctypes.windll.user32.SetProcessDPIAware()
+                logger.info("[WINDOWS] Standard DPI awareness set successfully.")
+            except Exception as e:
+                logger.warning(f"[WINDOWS] Failed to set DPI awareness: {e}")
+
+_setup_dpi_awareness()
 
 # Lazy-loaded GUI libraries — importing pygetwindow/pyautogui at module level
 # can deadlock due to Win32 COM initialization in subprocess contexts.
@@ -103,6 +121,40 @@ def get_window_stack() -> list:
         except Exception as e2:
             logger.error(f"Fallback window query also failed: {e2}")
             return []
+
+def get_foreground_window() -> dict | None:
+    """Return the foreground (active) app window as {title,x,y,w,h}, or None (Phase 42).
+
+    Used to auto-scope visual clicks to where the user is working, so the taskbar and other
+    windows are never click candidates. Excludes the shell/taskbar. CI-safe (returns None)."""
+    if os.environ.get("JARVIS_CI") == "true":
+        return None
+    _SHELL = {"Program Manager", "Start", "Taskbar", "Task View", ""}
+    try:
+        user32 = ctypes.windll.user32
+        hwnd = user32.GetForegroundWindow()
+        if hwnd:
+            length = user32.GetWindowTextLengthW(hwnd)
+            title = ""
+            if length > 0:
+                buf = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, buf, length + 1)
+                title = (buf.value or "").encode("ascii", errors="replace").decode("ascii")
+            rect = RECT()
+            user32.GetWindowRect(hwnd, ctypes.byref(rect))
+            w = rect.right - rect.left
+            h = rect.bottom - rect.top
+            if title and title not in _SHELL and w > 120 and h > 120:
+                return {"title": title, "x": rect.left, "y": rect.top, "w": w, "h": h}
+    except Exception as e:
+        logger.warning(f"[WINDOWS] get_foreground_window failed: {e}")
+    # Fallback: topmost non-taskbar window from the stack.
+    try:
+        stack = get_window_stack()
+        return stack[0] if stack else None
+    except Exception:
+        return None
+
 
 def find_occlusions(stack: list) -> list:
     """Calculates rectangular intersections between overlapping windows to find occlusions."""

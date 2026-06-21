@@ -80,4 +80,15 @@ def compile_converged_context() -> str:
         except Exception:
             pass
 
+    # 6. SPEC.md Artifact (Phase 36C) — the blueprint every agent builds against.
+    spec_md_path = "SPEC.md"
+    if os.path.exists(spec_md_path):
+        try:
+            with open(spec_md_path, "r", encoding="utf-8") as f:
+                spec_content = f.read()
+                context_sections.append(
+                    f"### Implementation SPEC (build to this blueprint)\n```markdown\n{spec_content[:2500]}\n```")
+        except Exception:
+            pass
+
     return "\n\n".join(context_sections)

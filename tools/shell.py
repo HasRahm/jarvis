@@ -4,6 +4,17 @@ import os
 _SANDBOX_MODE = os.environ.get("JARVIS_SANDBOX_MODE", "local")
 
 
+def _jailed_local_exec_blocked() -> bool:
+    """SaaS / untrusted deployments can forbid raw local shell entirely (review finding #3).
+
+    When JARVIS_WORKSPACE_JAIL is set AND the sandbox mode is the unconfined 'local', refuse
+    host shell execution — such deployments must run commands inside the e2b/docker sandbox
+    instead. Self-hosted desktop (no jail) is unaffected: arbitrary local execution is the
+    intended capability.
+    """
+    return bool(os.environ.get("JARVIS_WORKSPACE_JAIL", "").strip()) and _SANDBOX_MODE == "local"
+
+
 def run_command(command: str, cwd: str = None, sandbox=None) -> str:
     """Run a shell command and return stdout and stderr.
 
@@ -12,6 +23,11 @@ def run_command(command: str, cwd: str = None, sandbox=None) -> str:
              cloud sandbox instead of locally.  Existing callers that omit
              sandbox= are completely unaffected.
     """
+    # Fail closed for jailed deployments that haven't wired a real sandbox.
+    if _jailed_local_exec_blocked() and not (sandbox and _SANDBOX_MODE == "e2b"):
+        return ("ERROR: raw local shell execution is disabled in this deployment "
+                "(JARVIS_WORKSPACE_JAIL is set). Configure JARVIS_SANDBOX_MODE=e2b or =docker "
+                "to run commands inside a sandbox.")
     try:
         # Phase 13: E2B cloud sandbox execution path
         if _SANDBOX_MODE == "e2b" and sandbox is not None:

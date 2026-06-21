@@ -76,15 +76,30 @@ def _norm(name: str) -> str:
 
 def _window_open(app_name: str) -> bool:
     """True if any visible window title contains the app name."""
+    return _find_open_window(app_name) is not None
+
+
+def _find_open_window(app_name: str) -> dict | None:
+    """Return the first visible window dict whose title contains the app name, else None."""
     try:
         from tools.windows import get_window_stack
         needle = _norm(app_name)
         for w in get_window_stack():
             if needle in (w.get("title", "") or "").lower():
-                return True
+                return w
     except Exception as e:
         logger.warning(f"[open_app] window scan failed: {e}")
-    return False
+    return None
+
+
+def _has_unsaved_marker(title: str) -> bool:
+    """Windows convention: a leading '*' (or '●'/'•') in the title means UNSAVED changes.
+
+    Typing into such a window risks destroying the user's unsaved work, so open_app must not
+    silently reuse it. (e.g. Notepad shows '*Untitled - Notepad'.)
+    """
+    t = (title or "").strip()
+    return t.startswith("*") or t.startswith("●") or t.startswith("•")
 
 
 # Cache the Start-panel app list for this process run (Get-StartApps ~300ms).
@@ -256,20 +271,34 @@ def open_app(app_name: str, prefer: str = "auto") -> str:
         return _open_in_browser(app_name)
 
     # Step 1 — already open?
-    if _window_open(app_name):
-        try:
-            from tools.desktop_automation import desktop_focus_window
-            res = desktop_focus_window(app_name)
-            return f"[open_app] '{app_name}' was already open — focused existing window. ({res})"
-        except Exception as e:
-            return f"[open_app] '{app_name}' already open but focus failed: {e}"
-    trace.append("not currently open")
+    unsaved_avoided = False
+    existing = _find_open_window(app_name)
+    if existing:
+        title = existing.get("title", "") or ""
+        if _has_unsaved_marker(title):
+            # Data-loss guard (Phase 46): the matching window has UNSAVED changes. Do NOT focus it
+            # (the next type/click could overwrite the user's work). Fall through to launch a FRESH
+            # instance, and warn loudly so the model verifies it's on the new (untitled) window.
+            unsaved_avoided = True
+            trace.append(f"existing window '{title[:48]}' has UNSAVED changes — refusing to reuse it")
+        else:
+            try:
+                from tools.desktop_automation import desktop_focus_window
+                res = desktop_focus_window(app_name)
+                return f"[open_app] '{app_name}' was already open — focused existing window. ({res})"
+            except Exception as e:
+                return f"[open_app] '{app_name}' already open but focus failed: {e}"
+    else:
+        trace.append("not currently open")
 
     # Step 2 — native launch + confirm the window appears
     attempted, detail = _launch_native(app_name)
     trace.append(f"native: {detail}")
     if attempted:
         deadline = time.time() + 5.0
+        _warn = (" ⚠ An UNSAVED window of this app was left untouched — before typing, VERIFY you are "
+                 "on the NEW (untitled, no '*') window, not the user's unsaved document."
+                 if unsaved_avoided else "")
         while time.time() < deadline:
             if _window_open(app_name):
                 try:
@@ -277,7 +306,7 @@ def open_app(app_name: str, prefer: str = "auto") -> str:
                     desktop_focus_window(app_name)
                 except Exception:
                     pass
-                return f"[open_app] launched native '{app_name}' and confirmed its window. ({' | '.join(trace)})"
+                return f"[open_app] launched native '{app_name}' and confirmed its window.{_warn} ({' | '.join(trace)})"
             time.sleep(0.4)
         # Launched but window not confirmed yet — let the model verify visually.
         return (f"[open_app] launched native '{app_name}', but its window was not confirmed "

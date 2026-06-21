@@ -127,20 +127,25 @@ vocab_learn(
 ```
 This builds the vocabulary dataset for future sessions — the more you record, the better future automations become.
 
-## Workflow
+## Workflow & Verification Loop (Verify → Execute → Verify)
 
-1. **Observe** — Use `desktop_get_active_window` and `get_3d_window_graph` to understand current state
-2. **Focus** — Use `desktop_focus_window` to bring target app to foreground
-3. **Act** — Use clicks, typing, and key presses to perform the task
-4. **Verify** — Take a screenshot to confirm the action was successful
-5. **Report** — Describe what was done
+For every step of the task:
+1. **Verify Window Context**: Check which window is active using `desktop_get_active_window` or `get_window_stack`. If the correct app is not active, focus it with `desktop_focus_window` or open it with `open_app`.
+2. **Verify Target Placeholder / Input Box**: Before executing any click or type, verify the target placeholder/input box coordinates and context. Ensure it belongs to the intended app (e.g., Spotify search bar, NOT Windows search bar). Avoid collision with unrelated input boxes.
+3. **Execute Task**: Perform the action (e.g., click, type, press keys).
+4. **Verify Execution**:
+   - Use `verify_outcome`, `visual_inspect`, or `screen_ocr` to check if the action succeeded.
+   - If not properly executed, repeat the setup and execution process.
+   - If properly executed, scroll down and up (`desktop_scroll` with positive and negative amounts) to refresh the screen and visually confirm the layout/content, then proceed to the next step.
 
 ## Best Practices
 
-- **CRITICAL**: Always check which window is active before clicking or typing.
-- **CRITICAL**: If `desktop_focus_window` fails, DO NOT proceed with keystrokes. You will be typing into the wrong app!
-- For web tasks in Desktop mode, physically drive the user's open browser (e.g., Google Chrome). Do NOT fall back to `browser_navigate` or `browser_extract_text` to read the screen. Use physical GUI controls and screenshots instead.
-- Use `desktop_batch_actions` for multi-step sequences (reduces latency).
+- **CRITICAL**: Do NOT recommend next steps or hand back a to-do list — execute every step directly with your tools. If you need permission for a risky/irreversible action, ask explicitly: "Do you want to proceed with [Action]? (yes/no)" and wait for their input.
+- **CRITICAL**: Always check which window is active before clicking or typing. If `desktop_focus_window` fails, DO NOT proceed with keystrokes.
+- **CRITICAL**: Check target placeholders (e.g., verify it is Spotify search, not Windows search) to avoid typing or searching in the wrong place.
+- **CRITICAL**: Scroll down and up to verify content/refresh after success.
+- For web tasks in Desktop mode, physically drive the user's open browser (e.g., Google Chrome). Use physical GUI controls and screenshots instead of headless browser tools.
+- Use `desktop_batch_actions` for multi-step sequences to reduce latency.
 - Add `wait` actions between steps for UI to respond.
 - Use realistic mouse movement durations (1-2 seconds).
 - Take screenshots before and after critical actions.

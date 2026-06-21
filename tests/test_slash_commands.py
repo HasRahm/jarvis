@@ -41,10 +41,13 @@ class TestCommandRegistry:
             assert required in names, f"Core command '{required}' missing"
 
     def test_new_unique_commands_present(self):
-        """Jarvis-specific commands not in vanilla Gemini CLI."""
+        """Jarvis-specific commands not in vanilla Gemini CLI.
+
+        Phase 45 removed the unimplemented /memory, /recall, /batch, /pipeline commands (they were
+        advertised in help/autocomplete but had no handler in either the REPL or the TUI)."""
         names = {cmd for cmd, _, _ in SLASH_COMMANDS}
-        for unique in ("/memory", "/vocab", "/model", "/models",
-                       "/tools", "/export", "/batch", "/theme", "/help"):
+        for unique in ("/vocab", "/model", "/models",
+                       "/tools", "/export", "/theme", "/help"):
             assert unique in names, f"Unique command '{unique}' missing"
 
 

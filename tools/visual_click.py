@@ -97,8 +97,14 @@ def visual_click(
     crop_offset_y = 0
     crop_w = screen_w   # dimensions of the region sent to vision
     crop_h = screen_h
-    graph_note = "full screen (no window_hint)"
+    graph_note = "full screen"
+    match = None        # the window we cropped to (passed to the click for clamping)
 
+    # ── Resolve the target window: explicit window_hint, else the FOREGROUND window (Phase 42) ──
+    # Auto-scoping to the active window means the taskbar / other apps are NEVER in the vision
+    # image, so the model can't mis-click the Windows taskbar search instead of the app's own
+    # search box — and this works for EVERY model, not just gemma4 (which was tuned to pass the hint).
+    target_win = None
     if window_hint:
         try:
             from tools.windows import get_3d_window_graph
@@ -106,27 +112,45 @@ def visual_click(
             view_session.add_window_graph(graph)
             nodes = graph.get("nodes", [])
             hint_lower = window_hint.lower()
-            match = next((n for n in nodes if hint_lower in n.get("title", "").lower()), None)
-
-            if match:
-                wx  = max(0, match["x"])
-                wy  = max(0, match["y"])
-                ww  = min(match["w"], screen_w - wx)
-                wh  = min(match["h"], screen_h - wy)
-
-                if ww > 50 and wh > 50:   # sanity check — ignore zero-size windows
-                    img = img.crop((wx, wy, wx + ww, wy + wh))
-                    crop_offset_x = wx
-                    crop_offset_y = wy
-                    crop_w, crop_h = ww, wh
-                    graph_note = f"cropped to '{match['title']}' @ ({wx},{wy}) {ww}x{wh}"
-                else:
-                    graph_note = f"window '{match['title']}' bounds too small ({ww}x{wh}), using full screen"
-            else:
+            target_win = next((n for n in nodes if hint_lower in n.get("title", "").lower()), None)
+            if not target_win:
                 titles = [n.get("title", "") for n in nodes[:5]]
-                graph_note = f"window_hint '{window_hint}' not found in graph {titles}, using full screen"
+                graph_note = f"window_hint '{window_hint}' not in graph {titles}; trying foreground"
         except Exception as exc:
-            graph_note = f"graph lookup failed ({exc}), using full screen"
+            graph_note = f"graph lookup failed ({exc}); trying foreground"
+
+    if target_win is None:
+        try:
+            from tools.windows import get_foreground_window
+            target_win = get_foreground_window()
+            if target_win:
+                graph_note = f"auto-scoped to foreground '{target_win.get('title', '?')}'"
+        except Exception as exc:
+            graph_note = f"foreground lookup failed ({exc}); using full screen minus taskbar"
+
+    if target_win:
+        wx = max(0, target_win["x"])
+        wy = max(0, target_win["y"])
+        ww = min(target_win["w"], screen_w - wx)
+        wh = min(target_win["h"], screen_h - wy)
+        if ww > 50 and wh > 50:   # sanity check — ignore zero-size windows
+            img = img.crop((wx, wy, wx + ww, wy + wh))
+            crop_offset_x, crop_offset_y = wx, wy
+            crop_w, crop_h = ww, wh
+            match = target_win
+            if "auto-scoped" not in graph_note:
+                graph_note = f"cropped to '{target_win['title']}' @ ({wx},{wy}) {ww}x{wh}"
+        else:
+            graph_note = f"window '{target_win.get('title')}' too small ({ww}x{wh}); full screen minus taskbar"
+            target_win = None
+
+    # If no window resolved, still EXCLUDE the taskbar strip so it can't be a click target.
+    if target_win is None and crop_h == screen_h:
+        TASKBAR_H = 48
+        if screen_h > TASKBAR_H + 100:
+            img = img.crop((0, 0, screen_w, screen_h - TASKBAR_H))
+            crop_h = screen_h - TASKBAR_H
+            graph_note = (graph_note + " | excluded taskbar strip").strip(" |")
 
     # ------------------------------------------------------------------ #
     # 2. Resize proportionally (applied to cropped region)                 #
@@ -265,7 +289,7 @@ def visual_click(
     # ------------------------------------------------------------------ #
     try:
         from tools.desktop_automation import desktop_smooth_click
-        click_result = desktop_smooth_click(actual_x, actual_y, duration=duration)
+        click_result = desktop_smooth_click(actual_x, actual_y, duration=duration, window_bounds=match)
     except Exception as exc:
         return (
             f"[VisualClick] FAILED: smooth_click error at ({actual_x},{actual_y}): {exc}\n"

@@ -40,8 +40,8 @@ COLOR_FOOTER_FG = (230, 233, 239)
 
 
 def view_enabled() -> bool:
-    """Whether agent-view recording is on (env JARVIS_AGENT_VIEW=1)."""
-    return os.environ.get("JARVIS_AGENT_VIEW", "0") == "1"
+    """Whether agent-view recording is on (defaults to ON, disabled with JARVIS_AGENT_VIEW=0)."""
+    return os.environ.get("JARVIS_AGENT_VIEW", "1") != "0"
 
 
 def _capture_screen():
@@ -216,6 +216,10 @@ class AgentViewSession:
             ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
             path = os.path.join(AGENT_VIEW_DIR, f"{ts}_{self.op_name}.png")
             self.img.save(path, format="PNG")
+            
+            # Save a copy to the main scratch directory for instant user viewing
+            main_scratch_path = os.path.join(_PROJECT_ROOT, "scratch", "last_action_annotated.png")
+            self.img.save(main_scratch_path, format="PNG")
 
             with open(LATEST_FILE, "w", encoding="utf-8") as f:
                 f.write(path)

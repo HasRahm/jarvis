@@ -93,7 +93,9 @@ def test_open_app_web_unknown_app_uses_search(monkeypatch):
 
 def test_open_app_focuses_existing_window(monkeypatch):
     import tools.open_app as oa
-    monkeypatch.setattr(oa, "_window_open", lambda name: True)
+    # Phase 46: Step 1 resolves the matching window via _find_open_window (returns the window dict)
+    # so it can check the title for an UNSAVED ('*') marker. A clean title → reuse + focus.
+    monkeypatch.setattr(oa, "_find_open_window", lambda name: {"title": "Chrome"})
     import tools.desktop_automation as da
     monkeypatch.setattr(da, "desktop_focus_window", lambda q: f"focused {q}")
     result = oa.open_app("chrome")

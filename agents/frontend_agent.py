@@ -217,14 +217,23 @@ class FrontendAgent(BaseAgent):
 <instruction>Generate the frontend UI code. Return ONLY the JSON object defined in your output_schema.</instruction>"""
 
             self.update_status("WORKING", "Generating UI code")
-            
+
+            # Phase 36B: ground the model in a concrete design system (tokens, type scale,
+            # component patterns) so the UI is intentionally designed, not browser-default.
+            try:
+                from agents.design_system import get_design_brief
+                system_prompt = SYSTEM_PROMPT + "\n" + get_design_brief(task)
+            except Exception as _de:
+                logger.warning(f"[frontend] design brief unavailable: {_de}")
+                system_prompt = SYSTEM_PROMPT
+
             result = None
             last_err = None
             max_attempts = 3
-            
+
             for attempt in range(max_attempts):
                 try:
-                    response = self._call_model(SYSTEM_PROMPT, full_prompt)
+                    response = self._call_model(system_prompt, full_prompt)
                     result = safe_parse_response(response)
                     break
                 except JSONRepairError as e:

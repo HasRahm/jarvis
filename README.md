@@ -18,7 +18,7 @@
   through the Win32 accessibility tree — no screenshots, no cloud sandbox, no API costs.<br/>
   Runs Gemma4 locally via Ollama, routes coding tasks to specialized AI agents,<br/>
   and lets you control your entire PC from your phone.<br/><br/>
-  🕹️ <strong>25 phases shipped. 323 tests green. Your PC is the controller.</strong>
+  🕹️ <strong>44 phases shipped. 500 tests. Your PC is the controller.</strong>
 </p>
 
 <p align="center">

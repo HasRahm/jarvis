@@ -1,9 +1,28 @@
 import os
+import sys
 import time
 import random
 import logging
 
 logger = logging.getLogger(__name__)
+
+def _setup_dpi_awareness():
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            # Try SetProcessDpiAwareness (Windows 8.1+)
+            # 2 = PROCESS_PER_MONITOR_DPI_AWARE
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+            logger.info("[DESKTOP] Per-Monitor DPI awareness set successfully.")
+        except Exception:
+            try:
+                # Fallback to SetProcessDPIAware (Windows Vista+)
+                ctypes.windll.user32.SetProcessDPIAware()
+                logger.info("[DESKTOP] Standard DPI awareness set successfully.")
+            except Exception as e:
+                logger.warning(f"[DESKTOP] Failed to set DPI awareness: {e}")
+
+_setup_dpi_awareness()
 
 # Fast UI mode (default on): trims the conservative Win32 focus/click sleeps that
 # dominate per-action wall-clock time. Set JARVIS_FAST_UI=0 to restore the slow,
@@ -39,10 +58,91 @@ def _get_gw():
     return _gw
 
 
-def desktop_smooth_click(x: int, y: int, duration: float = 0.4) -> str:
+def desktop_smooth_click(x: int, y: int, duration: float = 0.4, window_bounds: dict = None) -> str:
     """Moves mouse smoothly from current position to (x, y) and performs a click."""
     pyautogui = _get_pyautogui()
     if not pyautogui: return "ERROR: pyautogui not installed"
+
+    # Window tracker: check active window, translation vectors, and occlusions
+    if window_bounds and "title" in window_bounds:
+        target_title = window_bounds["title"]
+        try:
+            gw = _get_gw()
+            if gw:
+                active_win = gw.getActiveWindow()
+                # If target window is not active, focus it first
+                if not active_win or target_title.lower() not in (active_win.title or "").lower():
+                    print(f"  <focus_shift_detected>\n"
+                          f"    <active_window>{active_win.title if active_win else 'None'}</active_window>\n"
+                          f"    <target_window>{target_title}</target_window>\n"
+                          f"    <action>Re-focusing target window</action>\n"
+                          f"  </focus_shift_detected>")
+                    desktop_focus_window(target_title)
+                    time.sleep(0.2)
+                
+                # Check for bounds shift (translation vector) and occlusions
+                from tools.windows import get_window_stack, find_occlusions
+                stack = get_window_stack()
+                current_node = next((w for w in stack if target_title.lower() in w["title"].lower()), None)
+                if current_node:
+                    old_x = window_bounds.get("x", 0)
+                    old_y = window_bounds.get("y", 0)
+                    new_x = current_node.get("x", 0)
+                    new_y = current_node.get("y", 0)
+                    
+                    if old_x != new_x or old_y != new_y:
+                        dx = new_x - old_x
+                        dy = new_y - old_y
+                        print(f"  <window_translation_vector>\n"
+                              f"    <target_window>{target_title}</target_window>\n"
+                              f"    <vector_dx>{dx}</vector_dx>\n"
+                              f"    <vector_dy>{dy}</vector_dy>\n"
+                              f"    <original_coordinate>({x}, {y})</original_coordinate>\n"
+                              f"    <translated_coordinate>({x + dx}, {y + dy})</translated_coordinate>\n"
+                              f"  </window_translation_vector>")
+                        x += dx
+                        y += dy
+                        # Update bounds in-place
+                        window_bounds.update(current_node)
+                    
+                    # Occlusion check
+                    occlusions = find_occlusions(stack)
+                    blocking = [occ for occ in occlusions if occ["blocked_window"] == current_node["title"]]
+                    if blocking:
+                        blocking_title = blocking[0]["blocking_window"]
+                        print(f"  <occlusion_warning>\n"
+                              f"    <blocked_window>{current_node['title']}</blocked_window>\n"
+                              f"    <blocking_window>{blocking_title}</blocking_window>\n"
+                              f"    <action>Bringing target window to front</action>\n"
+                              f"  </occlusion_warning>")
+                        desktop_focus_window(target_title)
+                        time.sleep(0.2)
+        except Exception as err:
+            logger.debug(f"[TRACKER] Window tracking exception: {err}")
+
+    # Clamp coordinates to the target window bounds if provided
+    if window_bounds:
+        try:
+            wx = window_bounds.get("x", 0)
+            wy = window_bounds.get("y", 0)
+            ww = window_bounds.get("w", 1920)
+            wh = window_bounds.get("h", 1080)
+            
+            # Apply a margin so it doesn't click the exact border
+            margin = 8
+            clamped_x = max(wx + margin, min(x, wx + ww - margin))
+            clamped_y = max(wy + margin, min(y, wy + wh - margin))
+            
+            if clamped_x != x or clamped_y != y:
+                print(f"  <coordinate_clamping>\n"
+                      f"    <original_coordinate>({x}, {y})</original_coordinate>\n"
+                      f"    <clamped_coordinate>({clamped_x}, {clamped_y})</clamped_coordinate>\n"
+                      f"    <window_bounds>x={wx}, y={wy}, w={ww}, h={wh}</window_bounds>\n"
+                      f"  </coordinate_clamping>")
+                x, y = clamped_x, clamped_y
+        except Exception as e:
+            logger.debug(f"Could not clamp to target window bounds: {e}")
+
     try:
         # Agent-cursor overlay follows every physical click (no-op when off)
         from tools import agent_cursor
@@ -52,6 +152,18 @@ def desktop_smooth_click(x: int, y: int, duration: float = 0.4) -> str:
         pass
     try:
         start_x, start_y = pyautogui.position()
+        move_dx = x - start_x
+        move_dy = y - start_y
+        distance = (move_dx**2 + move_dy**2) ** 0.5
+        
+        print(f"  <mouse_glide_vector>\n"
+              f"    <start_coordinate>({start_x}, {start_y})</start_coordinate>\n"
+              f"    <target_coordinate>({x}, {y})</target_coordinate>\n"
+              f"    <delta_x>{move_dx}</delta_x>\n"
+              f"    <delta_y>{move_dy}</delta_y>\n"
+              f"    <distance_px>{distance:.1f}</distance_px>\n"
+              f"  </mouse_glide_vector>")
+        
         print(f"  [DESKTOP] Gliding mouse from ({start_x}, {start_y}) to ({x}, {y}) over {duration}s...")
         pyautogui.moveTo(x, y, duration=duration, tween=pyautogui.easeInOutQuad)
         time.sleep(0.1)

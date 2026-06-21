@@ -23,12 +23,44 @@ ENV/
 *.env
 !.env.example
 
+# ── Vendored external skills (cloned, not committed) ───────────────────────
+skills/external/
+
 # ── Auto-generated runtime state (not source code) ─────────────────────────
 AGENTS.md
+SPEC.md
+config/agent_models.json
+config/openrouter_models_cache.json
+config/nvidia_models_cache.json
+skills/.skills_cache.json
+visual-vocab/learned/
 workspaces/
 logs/
 tunnel_err.log
 *.log
+
+# ── Generated/test apps & smoke-test output (NOT Jarvis source) ────────────
+/todo-app/
+/3d-todo-app/
+/pokemon_game/
+/nexus_saas/
+/saas_api/
+/job_pipeline/
+/health/
+job_search_results.json
+fizzbuzz.py
+claude-diagnosis-report.md
+@AutomationLog.txt
+
+# ── Backups / extracted archives ───────────────────────────────────────────
+*.zip
+jarvis_v2_extracted/
+
+# ── Test / CLI run artifacts ───────────────────────────────────────────────
+.pytest_full*.txt
+.pytest_p46.txt
+.pytest_pm.txt
+.pytest_tmp/
 
 # ── Local databases ─────────────────────────────────────────────────────────
 *.db

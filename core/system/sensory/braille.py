@@ -52,13 +52,11 @@ class BrailleLayer:
             tree_shape = self._hash_accessibility_tree(hwnd)
             page_url = ""
             
-            # If active process is browser, fetch Playwright browser URL
-            if process.lower() in ["chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe", "python.exe"]:
-                try:
-                    from tools.browser import browser_get_url
-                    page_url = browser_get_url()
-                except Exception:
-                    pass
+            # NOTE: browser_get_url() was previously called here on every poll tick
+            # (~50-200ms overhead per call, hitting Playwright/CDP). Removed because:
+            # 1. The cortex polls at 2fps — this added ~100-400ms/sec of overhead
+            # 2. Window title already contains the page title for context detection
+            # 3. The model can call browser_get_url explicitly when it needs the URL
                     
             dom_hash = hashlib.md5(page_url.encode()).hexdigest()[:8] if page_url else ""
             

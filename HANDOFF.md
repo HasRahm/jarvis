@@ -280,6 +280,79 @@ The project is currently being developed on a **Windows** environment, meaning s
 - **`get_window_stack` bug fixed** (`tools/dispatcher.py`): Was calling async `JarvisScreenReader().read_window_stack()`. Replaced with `tools.windows.get_window_stack()` (existing sync ctypes Win32 implementation).
 - **Tool registered**: `hybrid_locate_click` added to `TOOL_DEFINITIONS`, `_CORTEX_EXEMPT`, and `_dispatch_raw()` in `dispatcher.py`.
 
+### Phase 26: Agent-as-Tool Pattern — Coding Agents + Skills Callable by Orchestrator (COMPLETED)
+- **Agent Tools** (`agents/agent_tools.py` NEW): Thin callable wrappers exposing `run_backend_agent`, `run_frontend_agent`, `run_qa_agent`, `run_iac_agent`, and `run_skill` as first-class orchestrator tools. Lazy imports prevent circular chains; CI-mocked under `JARVIS_CI=true`.
+- **Dispatcher registration**: All 5 agent tools added to `TOOL_DEFINITIONS` and `_CORTEX_EXEMPT` with XML-tagged descriptions so gemma4 can select them by role and capability.
+- **XML Prompt Overhaul**: All four agent `SYSTEM_PROMPT` strings rewritten with `<agent_role>`, `<what_to_expect>`, `<output_requirements>`, `<rules>`, and `<self_evaluation>` blocks. Self-evaluation block is the highest-leverage change — agents check their own output before returning.
+- **`get_skill_model()`** (`agents/model_router.py`): Routes skills to models by keyword (`engineer`/`tdd`/`karpathy` → claude-sonnet-4-6, `advisor`/`financial` → nvidia/nemotron, `product`/`marketing` → gemini). Per-skill env override via `SKILL_MODEL_<NAME>`.
+- **`load_skill_prompt()`** (`core/system/skills.py`): Loads a skill's `SKILL.md` by name from `skills/skills/{name}/SKILL.md`.
+- **GitHub Topics set** (via Jarvis CLI): 10 topics added to repo — `computer-use`, `windows-automation`, `open-source`, `local-ai`, `multi-agent`, `ai-agent`, `win32`, `gemma`, `claude-code`, `ollama`.
+- **Tests**: `tests/test_phase26_agent_tools.py` — 19 CI-safe tests.
+- **Commit**: `1187f59`
+
+### Phase 27: Adaptive Reasoning, Configurable Temperature & Live Web Knowledge (COMPLETED)
+- **`open_app` tool** (`tools/open_app.py` NEW): Decision tree — check existing window → launch native (PATH + `_NATIVE_LAUNCH` map) → open in real desktop browser via `os.startfile`. Returns a trace of which path was taken. Never raises.
+- **`web_search` tool** (`tools/web_search.py` NEW): DuckDuckGo HTML parser (no API key needed); auto-upgrades to Tavily or Brave if a key is set. Used for anything after the model's knowledge cutoff.
+- **Configurable temperature** (`core/system/llm_adapter.py`): `_get_temperature(model)` helper — default 0.6 (raised from hardcoded 0.3 for more exploratory reasoning); env `JARVIS_TEMPERATURE` override; nemotron/moonshot → 1.0.
+- **Date injection**: Today's date injected into Hermes system prompt so current-events reasoning is grounded.
+- **Problem-Solving Doctrine + Live Knowledge** added to `modes/_shared.md`: map 2-3 paths before acting; fall back window → native → web; call `web_search` first for stale-knowledge topics.
+- **Tests**: `tests/test_phase27_adaptive.py` — 17 CI-safe tests.
+- **Commit**: `d0921e7`
+
+### Phase 28a: Cognitive Layer — Plan, Clarify, Verify, Recover (COMPLETED)
+- **`Clarifier`** (`core/orchestrator/clarifier.py` NEW): Blocks execution ONLY on critical ambiguity (data loss / irreversible / wrong target). Everything else proceeds autonomously with a logged note. Fails open on any LLM/parse error.
+- **`TaskPlanner`** (`core/orchestrator/planner.py` NEW): `is_complex()` heuristic gates whether a 5-question CoT plan is generated. Trivial tasks skip the round-trip. Plan injected as `<task_plan>` into the system message.
+- **`VerificationLoop`** (`core/orchestrator/verification_loop.py` NEW): Wraps existing `hybrid_cursor._verify_outcome`. Exposed as a `verify_outcome` tool the model can call mid-task to confirm an action worked before declaring done.
+- **`RecoveryNavigator`** (`core/orchestrator/recovery_navigator.py` NEW): `KNOWN_ESCAPE_ROUTES` table for common failure types (unexpected dialog, wrong window, element not found). Unknown failures fall through to `call_llm` recovery reasoning. Exposed as `get_unstuck` tool.
+- **Hermes loop wired**: Clarify → Plan gate runs before the main execution loop. Critical ambiguity emits `NEEDS_INPUT` via OSC 777 and writes `scratch/needs_input.json`, then exits.
+- **Dispatcher**: `verify_outcome` and `get_unstuck` registered in `TOOL_DEFINITIONS` and `_CORTEX_EXEMPT`.
+- **Tests**: `tests/test_phase28a_cognition.py` — 18 CI-safe tests.
+- **Commit**: `e020d2f`
+
+### Phase 28b: Perception Layer — Clipboard Read, Element Graph, App Intelligence, App Resolver (COMPLETED)
+- **`ClipboardReader`** (`tools/clipboard_reader.py` NEW): `read_screen_text()` — Ctrl+A/C clipboard capture, ~20× faster than OCR. Safe-app gated via `SAFE_TEXT_PROCESSES` allowlist (browsers/editors/terminals only). Always restores prior clipboard in `finally`. Unsafe apps return a marker prompting fallback to `screen_ocr`.
+- **`ElementGraph`** (`core/system/element_graph.py` NEW): `build_graph()` reads `scratch/desktop_ui_cache.json` (written by `desktop_get_ui_tree`). `find_element(description)` uses `score_element` (token-overlap + role bonus from `tools/virtual_input.py`) — no embeddings needed. Returns exact `(cx, cy)` coordinates.
+- **`AppIntelligence`** (`core/system/app_intelligence.py` NEW): `get_app_guide(app_name)` — GBrain recall first; if not found, passively explores the app (accessibility tree + screen imprint), synthesizes a <300-word guide via LLM, persists to GBrain. Second encounter is a millisecond read. `explore_active=False` by default (no side effects).
+- **`AppResolver`** (`core/system/app_resolver.py` NEW): `APP_ALTERNATIVES` map (excel → libreoffice → sheets.google.com, etc.). `is_installed()` checks PATH, registry, running processes, common dirs, and Start panel. `resolve()` returns `{method, note, confidence}`.
+- **`open_app` extended**: Uses `app_resolver.resolve()` before the generic web fallback — picks the right alternative or API client instead of guessing.
+- **Dispatcher**: `read_screen_text`, `element_graph`, `app_guide` registered; all `_CORTEX_EXEMPT`.
+- **`modes/_shared.md`**: Perception section added — prefer `read_screen_text` over OCR; use `element_graph` to locate; call `app_guide` in unfamiliar apps.
+- **Tests**: `tests/test_phase28b_perception.py` — 15 CI-safe tests.
+- **Commit**: `3d66f97`
+
+### Phase 31: Coding Intent Router — Auto-Detect Build Tasks, Activate Coding Agents (COMPLETED)
+- **Root cause fixed**: Jarvis answered "create a pokemon-like game" with a markdown guide instead of building it. The system prompt only triggered coding agents for "complex build tasks with database + API + UI" — too narrow for games, scripts, and single-component apps.
+- **`core/orchestrator/intent_router.py`** (NEW): Zero-LLM keyword classifier (<1 ms). `classify(text)` detects build verb + buildable noun pairs and returns `{"mode": "coding"|"general", "agents": [...], "mandate": str}`. Routes: frontend-only → `run_frontend_agent` → `run_qa_agent`; backend-only → `run_backend_agent`; full-stack (both signals present) → `delegate_task`. Tested with 9 prompts, 100% accuracy.
+- **Coding mandate injection** (`core/cli/repl.py`): `_agent_turn()` now calls `classify()` on every plain-text turn. If coding mode detected, a `<CODING_MANDATE>` block is prepended to the system message — highest priority in-context position — explicitly forbidding conversational answers and requiring immediate tool calls.
+- **`/build` and `/code` slash commands**: Bypass the classifier entirely and force coding mode. Usage: `/build a snake game in pygame`. Registered in SLASH_COMMANDS, `_INLINE`, and `_AGENT_MODES`; have handler methods `_cmd_build`/`_cmd_code`.
+- **`delegate_task` description broadened** (`tools/dispatcher.py`): Was "for complex build tasks with database + API + UI". Now: "for ANY task requiring BUILDING or CREATING software: games, apps, websites, scripts, APIs, tools, bots…"
+- **System prompts updated** (`core/hermes/hermes_cli_runner.py`, `core/cli/repl.py`): Both now list all coding tools with explicit examples (games → `run_frontend_agent`, APIs → `run_backend_agent`, full-stack → `delegate_task`) and include "Start immediately. Do not ask for confirmation."
+- **Tests**: 421 passed, 4 pre-existing failures, 0 regressions.
+
+### Phase 30: CLI Excellence — Claude Code + Gemini CLI + Warp Parity (COMPLETED)
+- **Model Fix**: Changed `JARVIS_PRIMARY_MODEL` in `.env` from `gpt-oss:120b` (NVIDIA, refused creative tasks) back to `gemma4:31b-cloud` (local Ollama, free, no content restrictions).
+- **JARVIS.md Project Context** (`core/cli/repl.py`): On startup, Jarvis walks up from `os.getcwd()` looking for `JARVIS.md` (same pattern as `CLAUDE.md` in Claude Code and `GEMINI.md` in Gemini CLI). If found, its content is injected as `<project_context>` into every agent turn's system prompt. Path is shown in the banner (`context: JARVIS.md`). `/context` command shows or hot-reloads it. A root-level `JARVIS.md` is provided as a template.
+- **Session Persistence** (`core/session_store.py` NEW): Save/load conversation history to `~/.jarvis/sessions/<timestamp>.jsonl`. `save()` strips system messages. `load_last()` returns the most-recent file. `list_sessions()` returns filename + mtime + turn count. Sessions auto-save silently on `/exit` and Ctrl-D.
+- **New Slash Commands** (in `core/cli/repl.py`): `/save [name]` — explicit save with optional name; `/load [path]` — restore last or named session; `/context [path]` — show/hot-reload JARVIS.md.
+- **`--output json` Mode** (`jarvis-cli.py`): `python jarvis-cli.py --output json --task "..."` (or pipe via stdin). Emits newline-delimited JSON events per Gemini CLI's stream-json pattern: `{"type":"token"}`, `{"type":"tool"}`, `{"type":"result"}`, `{"type":"done"}`. Clean separation: JSON to stdout, adapter logs to stderr.
+- **SLASH_COMMANDS registry updated** (`core/cli/app.py`): `/save`, `/load`, `/context` added to the autocomplete registry and `_INLINE_COMMANDS` set.
+- **Tests**: 421 passed, 4 pre-existing failures (same as Phase 29), 0 regressions.
+- **Key files changed**: `.env`, `core/cli/repl.py`, `core/cli/app.py`, `jarvis-cli.py`, `core/session_store.py` (new), `JARVIS.md` (new).
+
+### Phase 29: Grounded Execution — Real Brain, Real Cursor, Enforced Verification, Real App Launch (COMPLETED)
+- **Root cause 1 — Hallucinated success fixed**: Harness-enforced UI-TARS observe-after-act loop in `core/hermes/hermes_cli_runner.py`. After every turn containing a consequential action (`desktop_smooth_click`, `open_app`, etc.), a fresh screen observation is auto-injected so the model reads ground truth, not assumptions. Termination gate blocks "done/success" claims until `verify_outcome` runs or an observed change clears `pending_unverified`. Capped at 2 challenges; unverified answers stamped `⚠ UNVERIFIED:`.
+- **`core/orchestrator/exec_guard.py`** (NEW): Pure-logic module — `CONSEQUENTIAL_TOOLS` set, `VERIFY_TOOLS` set, `should_challenge(final_text, pending_unverified)`, `observe_change(baseline)`, `capture_baseline()`. Unit-testable with no screen required.
+- **Root cause 2 — Brain always fails fixed**: Supabase projects were INACTIVE (paused). Fixed with local SQLite fallback (`brain/local_store.py` NEW) at `scratch/jarvis_memory.db`. `mem_upsert` always writes locally first; Supabase syncs when available. `mem_get`/`mem_search` fall back to local when cloud is down. Brain now works fully offline. Supabase `jarvis_memory` table restored via MCP `apply_migration`.
+- **Root cause 3 — App detection weak fixed**: `find_app_launch()` in `tools/open_app.py` — ordered discovery chain: PATH + `_NATIVE_LAUNCH` map → `Get-StartApps` (PowerShell, enumerates all Win32 + UWP Start panel entries) → taskbar `.lnk` files → Start Menu `.lnk` files. UWP apps launch via `explorer.exe shell:AppsFolder\<AppID>`. `Get-StartApps` output cached per process run (~300ms). `app_resolver.is_installed()` extended to consult Start panel.
+- **Root cause 4 — Cursor never moved fixed**: `tools/virtual_input.py` default flipped from `JARVIS_VIRTUAL_INPUT="1"` (virtual UIA, no mouse movement) to `"0"` (physical cursor by default). Opt in to virtual mode with `JARVIS_VIRTUAL_INPUT=1`. Cursor ring overlay defaulted on via `os.environ.setdefault("JARVIS_AGENT_CURSOR", "1")` in Hermes runner.
+- **`modes/_shared.md`**: Updated with full UI-TARS Thought → Action → Observe → Finish loop doctrine. "Finish requires verification" discipline enforced at harness level.
+- **Live demo**: Calculator opened via `find_app_launch` → Get-StartApps path → `[observe] screen changed (delta=50)` auto-fired → model focused Calculator window → `visual_inspect` confirmed "Yes, the Windows Calculator UI is visible on screen." Task completed with no false success claim.
+- **Full suite**: 421 passed, 4 pre-existing failures (HERMES_SECRET/websocket in `test_hermes_sync.py` and `test_phase12_robustness.py`), 0 regressions.
+- **Tests**: `tests/test_phase29_grounded.py` — 16 CI-safe tests.
+- **Commit**: `21b2cf4`
+
+---
+
 ## Important Architectural Rules
 
 1. **`AGENTS.md` is the only shared state between agents.** Agents must not call each other's APIs directly.

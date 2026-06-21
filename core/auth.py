@@ -82,33 +82,45 @@ def authenticate(token: str) -> tuple[bool, str | None]:
     return False, None
 
 
+def _output_root() -> str:
+    """Root for generated files (Phase 46 cluster 1).
+
+    JARVIS_OUTPUT_ROOT (set by the CLI to the user's working dir / --output-dir) when present,
+    else the install dir — so unset behaviour (tests, direct module use) is byte-identical to
+    before, while CLI runs write into the user's project instead of the install directory.
+    """
+    env = os.environ.get("JARVIS_OUTPUT_ROOT")
+    if env:
+        return env
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def get_agents_md_path(user_id: str | None = None) -> str:
     """
     Return the path to AGENTS.md, scoped to user_id when running in SaaS mode.
 
-    Self-hosted (user_id=None): <project_root>/AGENTS.md
-    SaaS       (user_id set):   <project_root>/workspaces/<user_id>/AGENTS.md
+    Self-hosted (user_id=None): <output_root>/AGENTS.md
+    SaaS       (user_id set):   <output_root>/workspaces/<user_id>/AGENTS.md
     """
-    import sys
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root = _output_root()
     if user_id:
-        workspace = os.path.join(project_root, "workspaces", user_id)
+        workspace = os.path.join(root, "workspaces", user_id)
         os.makedirs(workspace, exist_ok=True)
         return os.path.join(workspace, "AGENTS.md")
-    return os.path.join(project_root, "AGENTS.md")
+    return os.path.join(root, "AGENTS.md")
 
 
 def get_workspace_path(role: str, user_id: str | None = None) -> str:
     """
     Return the agent workspace path, scoped to user_id in SaaS mode.
 
-    Self-hosted: <project_root>/workspaces/<role>/
-    SaaS:        <project_root>/workspaces/<user_id>/<role>/
+    Self-hosted: <output_root>/workspaces/<role>/
+    SaaS:        <output_root>/workspaces/<user_id>/<role>/
     """
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root = _output_root()
     if user_id:
-        path = os.path.join(project_root, "workspaces", user_id, role)
+        path = os.path.join(root, "workspaces", user_id, role)
     else:
-        path = os.path.join(project_root, "workspaces", role)
+        path = os.path.join(root, "workspaces", role)
     os.makedirs(path, exist_ok=True)
     return path

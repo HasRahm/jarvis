@@ -20,7 +20,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from core.orchestrator.task_parser import parse_task
 from agents.base_agent import AGENTS_MD_PATH
+from core.auth import get_agents_md_path, get_workspace_path
 from core.logging_config import configure_logging
+from core.cli import run_events as ev
+
+
+def _agents_md_path(user_id: str | None = None) -> str:
+    """Resolve the AGENTS.md coordination file, scoped per-user in SaaS mode.
+
+    user_id=None → the project-root AGENTS.md (self-hosted; identical to AGENTS_MD_PATH).
+    user_id set  → workspaces/<user_id>/AGENTS.md so concurrent SaaS users never share state.
+    """
+    return get_agents_md_path(user_id)
 
 configure_logging("dag")
 logger = logging.getLogger(__name__)
@@ -79,21 +90,51 @@ def _get_agent_instance(role: str, user_id: str | None = None):
     user_id is passed to the agent so it can scope its workspace and AGENTS.md
     to the correct user directory in SaaS mode (Phase 13).
     """
-    if role == "backend":
+    if role == "backend" or role == "database":
+        # Phase 41: the database role reuses the BackendAgent (it already writes SQL migrations +
+        # publishes the contract); the DB-focused subtask text steers it. Its model is resolved
+        # per-role via model_router, so 'database' can route differently from 'backend'.
         from agents.backend_agent import BackendAgent
-        return BackendAgent(user_id=user_id)
+        agent = BackendAgent(user_id=user_id)
+        if role == "database":
+            from agents.model_router import get_model, get_provider, get_api_key
+            agent.role = "database"
+            agent.model = get_model("database")
+            agent.provider = get_provider(agent.model)
+            agent.api_key = get_api_key(agent.provider)
+        return agent
     elif role == "frontend":
         from agents.frontend_agent import FrontendAgent
         return FrontendAgent(user_id=user_id)
     elif role == "qa":
         from agents.qa_agent import QAAgent
         return QAAgent(user_id=user_id)
+    elif role == "research":
+        # Research routes to a SkillAgent (research skill) when available, else the backend agent.
+        try:
+            from agents.skill_agent import SkillAgent
+            from core.system.skills import SkillsEngine
+            name = next((s["name"] for s in SkillsEngine().skills
+                         if "research" in (s.get("name") or "").lower()), None)
+            if name:
+                return SkillAgent(name, user_id=user_id)
+        except Exception as e:
+            logger.warning(f"[dag] research SkillAgent unavailable ({e}); using backend agent")
+        from agents.backend_agent import BackendAgent
+        return BackendAgent(user_id=user_id)
     else:
         raise ValueError(f"Unknown agent role: {role}")
 
 
-def _reset_agents_md(task_id: str, user_task: str):
-    """Initialize AGENTS.md for a fresh task run."""
+def _reset_agents_md(task_id: str, user_task: str, user_id: str | None = None):
+    """Initialize AGENTS.md for a fresh task run (per-user in SaaS mode)."""
+    # Single source of truth (Phase 46): the per-agent model column is built from the SAME router
+    # as /agents (model_router.get_model), so AGENTS.md and /agents can never disagree.
+    from agents.model_router import get_model
+    rows = "".join(
+        f"| {role} | {get_model(role)} | IDLE | --- |\n"
+        for role in ("frontend", "backend", "qa", "iac")
+    )
     content = (
         "# AGENTS.md - Shared Agent State\n\n"
         "## Current Task\n"
@@ -106,35 +147,33 @@ def _reset_agents_md(task_id: str, user_task: str):
         "## Agent Assignments\n"
         "| Agent | Model | Status | Current Step |\n"
         "|-------|-------|--------|-------------|\n"
-        "| frontend | gemini-3.1-pro-preview | IDLE | --- |\n"
-        "| backend | claude-sonnet-4-6 | IDLE | --- |\n"
-        "| qa | gpt-5.4 | IDLE | --- |\n"
-        "| iac | claude-sonnet-4-6 | IDLE | --- |\n\n"
+        f"{rows}\n"
         "## Task Log\n"
     )
     try:
-        with open(AGENTS_MD_PATH, "w", encoding="utf-8") as f:
+        with open(_agents_md_path(user_id), "w", encoding="utf-8") as f:
             f.write(content)
     except Exception as e:
         logger.warning(f"Could not reset AGENTS.md: {e}")
 
 
-def log_to_agents_md(message: str):
-    """Appends a log line to AGENTS.md Task Log."""
+def log_to_agents_md(message: str, user_id: str | None = None):
+    """Appends a log line to AGENTS.md Task Log (per-user in SaaS mode)."""
+    path = _agents_md_path(user_id)
     try:
-        with open(AGENTS_MD_PATH, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             content = f.read()
     except Exception:
         content = ""
-    
+
     log_line = f"- [{datetime.now().strftime('%Y-%m-%d %H:%M')}] {message}\n"
     if "## Task Log" in content:
         content = content.replace("## Task Log\n", f"## Task Log\n{log_line}")
     else:
         content += f"\n## Task Log\n{log_line}"
-        
+
     try:
-        with open(AGENTS_MD_PATH, "w", encoding="utf-8") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(content)
     except Exception:
         pass
@@ -175,20 +214,21 @@ class ActiveOrchestrator:
             # Case (a): Target agent currently running
             if self.active_agent == target_agent:
                 reason = f"orchestrator: USER INTERRUPT on '{self.active_agent}' at selector '{selector}'. Instruction: '{instruction}'. Interrupted and rolling back."
-                log_to_agents_md(reason)
-                
+                log_to_agents_md(reason, self.user_id)
+
                 # Mark target agent status as INTERRUPTED in AGENTS.md
                 try:
-                    with open(AGENTS_MD_PATH, "r", encoding="utf-8") as f:
+                    _amp = _agents_md_path(self.user_id)
+                    with open(_amp, "r", encoding="utf-8") as f:
                         content = f.read()
                     import re
                     content = re.sub(
-                        rf"(\| {self.active_agent} \| [^|]+ \|)[^|]+", 
-                        rf"\1 INTERRUPTED", 
-                        content, 
+                        rf"(\| {self.active_agent} \| [^|]+ \|)[^|]+",
+                        rf"\1 INTERRUPTED",
+                        content,
                         count=1
                     )
-                    with open(AGENTS_MD_PATH, "w", encoding="utf-8") as f:
+                    with open(_amp, "w", encoding="utf-8") as f:
                         f.write(content)
                 except Exception:
                     pass
@@ -206,8 +246,8 @@ class ActiveOrchestrator:
             # Case (b): Target completed, downstream running (e.g. backend or qa running)
             else:
                 reason = f"orchestrator: USER INTERRUPT visual correction at selector '{selector}'. Instruction: '{instruction}'. Marking '{target_agent}' as STALE and re-queueing dependents."
-                log_to_agents_md(reason)
-                
+                log_to_agents_md(reason, self.user_id)
+
                 # Interrupt downstream agent
                 self.is_interrupted = True
 
@@ -227,7 +267,8 @@ class ActiveOrchestrator:
 
                 # Mark completed agent target as STALE in AGENTS.md
                 try:
-                    with open(AGENTS_MD_PATH, "r", encoding="utf-8") as f:
+                    _amp = _agents_md_path(self.user_id)
+                    with open(_amp, "r", encoding="utf-8") as f:
                         content = f.read()
                     import re
                     content = re.sub(
@@ -236,7 +277,7 @@ class ActiveOrchestrator:
                         content,
                         count=1
                     )
-                    with open(AGENTS_MD_PATH, "w", encoding="utf-8") as f:
+                    with open(_amp, "w", encoding="utf-8") as f:
                         f.write(content)
                 except Exception:
                     pass
@@ -263,8 +304,8 @@ class ActiveOrchestrator:
         else:
             # Case (c): DAG idle
             reason = f"orchestrator: USER FEEDBACK idle visual correction at selector '{selector}'. Instruction: '{instruction}'. Appending corrective subtask."
-            log_to_agents_md(reason)
-            
+            log_to_agents_md(reason, self.user_id)
+
             corr_subtask = {
                 "id": f"corrective_{target_agent}_{int(time.time())}",
                 "agent": target_agent,
@@ -277,8 +318,8 @@ class ActiveOrchestrator:
 
     def _capture_snapshot(self, subtask_id: str, role: str):
         """Record file paths currently in the agent's workspace before it runs."""
-        _project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        workspace_dir = os.path.join(_project_root, "workspaces", role)
+        # Scope to the running user's workspace so SaaS users never snapshot each other's files.
+        workspace_dir = get_workspace_path(role, self.user_id)
         existing = set()
         if os.path.exists(workspace_dir):
             for dirpath, _, filenames in os.walk(workspace_dir):
@@ -292,8 +333,7 @@ class ActiveOrchestrator:
             logger.warning(f"[HEAL] No snapshot for {subtask_id}. Skipping rollback.")
             return
         pre_run = self.snapshots[subtask_id]
-        _project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        workspace_dir = os.path.join(_project_root, "workspaces", role)
+        workspace_dir = get_workspace_path(role, self.user_id)
         if not os.path.exists(workspace_dir):
             return
         removed = 0
@@ -303,7 +343,7 @@ class ActiveOrchestrator:
                 if full_path not in pre_run:
                     try:
                         os.remove(full_path)
-                        log_to_agents_md(f"orchestrator: Rolled back stale file: {full_path}")
+                        log_to_agents_md(f"orchestrator: Rolled back stale file: {full_path}", self.user_id)
                         removed += 1
                     except Exception as e:
                         logger.warning(f"[HEAL] Could not remove {full_path}: {e}")
@@ -395,13 +435,28 @@ def run_dag(user_task: str, dry_run: bool = False, task_id: str = None, user_id:
     print(f"{'='*60}\n")
 
     if not is_recovered:
-        # Step 1: Decompose into subtasks
+        # Step 0 (Phase 36C): produce a reviewable SPEC artifact before any coding, so every
+        # agent builds against one coherent blueprint (data model + contract + design + criteria).
+        print(f"[0/3] Architecting SPEC...")
+        spec = None
+        try:
+            from core.orchestrator.architect import produce_spec, SPEC_MD_PATH
+            spec = produce_spec(user_task, user_id=user_id)
+            print(f"      SPEC: {spec.get('title', 'untitled')} — "
+                  f"{len(spec.get('api_contract', []))} endpoints, "
+                  f"{len(spec.get('acceptance_criteria', []))} acceptance criteria "
+                  f"(written to {os.path.basename(SPEC_MD_PATH)})")
+        except Exception as _se:
+            logger.warning(f"[{run_id}] architect step skipped: {_se}")
+
+        # Step 1: Decompose into subtasks (grounded in the SPEC when available)
         print(f"[1/3] Decomposing task with orchestrator...")
-        subtasks = parse_task(user_task)
+        subtasks = parse_task(user_task, spec=spec)
 
         # Step 2: Topological sort
         print("[2/3] Building execution DAG...")
         ordered = _topological_sort(subtasks)
+        ev.emit("plan_ready", subtasks=[{"desc": st["task"], "agent": st["agent"]} for st in ordered])
     else:
         print("[1/3] Decomposing task... (Skipped - Session Recovered)")
         print("[2/3] Building execution DAG... (Skipped - Session Recovered)")
@@ -434,7 +489,7 @@ def run_dag(user_task: str, dry_run: bool = False, task_id: str = None, user_id:
                         "plan": [{"id": s["id"], "role": s["agent"], "label": s["task"][:60]} for s in ordered]})
     
     if not is_recovered:
-        _reset_agents_md(task_id, user_task)
+        _reset_agents_md(task_id, user_task, user_id)
 
     # Phase 13: provision E2B cloud or MXC sandbox
     if os.environ.get("JARVIS_SANDBOX_MODE") == "mxc":
@@ -624,6 +679,20 @@ def run_dag(user_task: str, dry_run: bool = False, task_id: str = None, user_id:
             orchestrator.is_interrupted = False
             continue
 
+        # Phase 36A: functional self-correction for code-producing agents (backend/qa).
+        # Frontend uses the visual loop above; here we run/compile backend & QA output in the
+        # task sandbox (E2B when configured, else safe local checks) and feed errors back.
+        if agent_role in ("backend", "qa") and result.get("status") == "success":
+            try:
+                from core.orchestrator.self_correct import verify_and_correct
+                result = verify_and_correct(agent, result, sandbox=orchestrator.sandbox)
+                _v = result.get("verification")
+                if _v and _v.get("ran"):
+                    print(f"    [VERIFY] {agent_role} execution check: "
+                          f"{'PASS' if _v.get('passed') else 'FAIL'} after {_v.get('iterations')} iter")
+            except Exception as _ve:
+                logger.warning(f"[{run_id}] self-correction skipped for {agent_role}: {_ve}")
+
         orchestrator.results.append({
             "subtask_id": st["id"],
             "agent": agent_role,
@@ -685,7 +754,7 @@ def run_dag(user_task: str, dry_run: bool = False, task_id: str = None, user_id:
                     res = SafetyMonitor.run_monitored(cmd)
                     if res.returncode == 0:
                         print("    [PASS] Backend container restarted successfully.")
-                        log_to_agents_md(f"orchestrator: {restart_msg}")
+                        log_to_agents_md(f"orchestrator: {restart_msg}", user_id)
                     else:
                         print(f"    [WARNING] Failed to restart backend container inside WSL: {res.stderr or res.stdout}")
             except Exception as e:
@@ -697,12 +766,13 @@ def run_dag(user_task: str, dry_run: bool = False, task_id: str = None, user_id:
 
     # Update AGENTS.md task status
     try:
-        with open(AGENTS_MD_PATH, "r", encoding="utf-8") as f:
+        _amp = _agents_md_path(user_id)
+        with open(_amp, "r", encoding="utf-8") as f:
             content = f.read()
         import re
         final_status = "COMPLETED" if all(r["status"] == "success" for r in orchestrator.results) else "FAILED"
         content = re.sub(r"(\| Status \|)[^|]+\|", rf"\1 {final_status} |", content, count=1)
-        with open(AGENTS_MD_PATH, "w", encoding="utf-8") as f:
+        with open(_amp, "w", encoding="utf-8") as f:
             f.write(content)
     except Exception:
         final_status = "FAILED"

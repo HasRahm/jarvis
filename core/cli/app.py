@@ -23,20 +23,18 @@ SLASH_COMMANDS = [
     # Awareness
     ("/screen",    "Audit current screen, controls & layout",          "/screen"),
     ("/doctor",    "Verify Ollama, tools & system health",             "/doctor"),
-    # Memory & knowledge
-    ("/memory",    "Query GBrain persistent memory",                   "/memory"),
-    ("/recall",    "Search memory by topic keyword",                   "/recall"),
+    # Knowledge
     ("/vocab",     "Show the visual vocabulary cheatsheet",            "/vocab"),
     # Model control
     ("/model",     "Show or switch the primary orchestration model",   "/model"),
-    ("/models",    "List all models & their routing destinations",     "/models"),
+    ("/models",    "List native models; /models <query> searches OpenRouter", "/models"),
+    ("/agents",    "Show the model assigned to each agent/role",        "/agents"),
+    ("/setmodel",  "Assign any (OpenRouter) model to an agent",         "/setmodel"),
+    ("/resetmodel","Clear an agent's model override",                   "/resetmodel"),
     # Tools & session
     ("/tools",     "List every registered tool with its category",     "/tools"),
     ("/history",   "View recent task & automation log",                "/history"),
     ("/export",    "Export this session to a markdown file",           "/export"),
-    # Workflow
-    ("/batch",     "Run multiple tasks in parallel (comma-separated)", "/batch"),
-    ("/pipeline",  "Run a saved multi-step pipeline by name",          "/pipeline"),
     # Agent perception & cursor (Phase 24)
     ("/agentview", "Toggle/open annotated agent-view screenshots",     "/agentview"),
     ("/cursor",    "Toggle the visible agent cursor overlay",          "/cursor"),
@@ -46,11 +44,20 @@ SLASH_COMMANDS = [
     ("/help",      "Show all commands & usage guide",                  "/help"),
     # Remote
     ("/remote",    "Start Hermes remote-pairing session with phone",   "/remote"),
+    # Session
+    ("/save",      "Save current session to ~/.jarvis/sessions/",      "/save"),
+    ("/load",      "Restore most-recent saved session",                "/load"),
+    ("/forget",    "Clear this directory's memory — start fresh",      "/forget"),
+    ("/context",   "Show active JARVIS.md project context file",       "/context"),
+    # Coding mode
+    ("/build",     "Build software with coding agents (game/app/script/tool)", "/build"),
+    ("/code",      "Alias for /build — force coding agent mode",              "/code"),
 ]
 
 # Commands handled inline in the TUI (no Jarvis subprocess needed)
 _INLINE_COMMANDS = {"/clear", "/help", "/theme", "/model", "/models", "/tools",
-                    "/history", "/export", "/vocab"}
+                    "/history", "/export", "/vocab", "/save", "/load", "/context",
+                    "/build", "/code", "/agents", "/setmodel", "/resetmodel"}
 
 # ── Theme definitions ───────────────────────────────────────────────────────
 _THEMES = {
@@ -85,6 +92,21 @@ _THEMES = {
         "accent":      "#38BDF8",
         "text":        "#BAE6FD",
         "dropdown_bg": "#0A1628",
+    },
+    "warm": {
+        "bg":          "#1B1714",
+        "header_bg":   "#211C18",
+        "border":      "rgba(224,138,95,0.20)",
+        "accent":      "#E08A5F",
+        "text":        "#E9E1D4",
+        "dropdown_bg": "#221F19",
+        # Phase 40 — extra keys for the warm-elegant REPL (additive; app.py ignores them).
+        "grad_a":      "#E08A5F",   # amber  — gradient start
+        "grad_b":      "#F0C27B",   # gold   — gradient end
+        "muted":       "#A89684",   # warm grey-brown for secondary text
+        "rule":        "#3A322B",   # soft warm divider
+        "danger":      "#E06C5F",   # warm red for denied/risky
+        "success":     "#9FC089",   # muted sage for ok
     },
 }
 
@@ -254,8 +276,8 @@ class TextualStreamRedirector:
 class JarvisTuiApp(App):
     """Jarvis Operator Console — Textual TUI."""
 
-    _active_theme: str = "dark"
-    CSS = _build_css("dark")
+    _active_theme: str = "warm"
+    CSS = _build_css("warm")
 
     def compose(self) -> ComposeResult:
         yield Label("JARVIS // OPERATOR CONSOLE", id="header_title")
@@ -380,7 +402,16 @@ class JarvisTuiApp(App):
             self._model_command(arg.strip())
 
         elif cmd == "/models":
-            self._show_models()
+            self._show_models(arg.strip())
+
+        elif cmd == "/agents":
+            self._show_agents()
+
+        elif cmd == "/setmodel":
+            self._set_agent_model_cmd(arg.strip())
+
+        elif cmd == "/resetmodel":
+            self._reset_agent_model_cmd(arg.strip())
 
         elif cmd == "/tools":
             self._show_tools()
@@ -432,8 +463,35 @@ class JarvisTuiApp(App):
         ))
         self.query_one("#status_bar", StatusBar).update_status()
 
-    def _show_models(self) -> None:
+    def _show_models(self, query: str = "") -> None:
+        query = (query or "").strip()
+        if query:
+            try:
+                from core.system.openrouter_catalog import list_models
+                results = list_models(query, limit=40)
+            except Exception as e:
+                self.log_stream.write(Text.from_markup(f"[red]catalog error: {e}[/]"))
+                return
+            if not results:
+                self.log_stream.write(Text.from_markup(
+                    f"[yellow]No OpenRouter models match '{query}'.[/] "
+                    "[dim](needs OPENROUTER_API_KEY + network)[/]"))
+                return
+            t = Table(title=f"OpenRouter models matching '{query}'", style="cyan",
+                      header_style="bold cyan", show_lines=False, expand=False)
+            t.add_column("Model ID", style="bold", width=40)
+            t.add_column("Ctx", style="dim", justify="right")
+            t.add_column("$/Mtok in", style="dim", justify="right")
+            t.add_column("$/Mtok out", style="dim", justify="right")
+            for m in results:
+                t.add_row(m.get("id", "?"), str(m.get("context") or "-"),
+                          "-" if m.get("prompt_price") is None else str(m["prompt_price"]),
+                          "-" if m.get("completion_price") is None else str(m["completion_price"]))
+            self.log_stream.write(t)
+            self.log_stream.write(Text.from_markup("[dim]Assign with: /setmodel <agent> <model-id>[/]"))
+            return
         models = [
+            ("minimaxai/minimax-m3",            "NVIDIA Build",   "minimaxai/minimax-m3"),
             ("gpt-oss:120b",                    "NVIDIA Build",   "openai/gpt-oss-120b"),
             ("moonshotai/kimi-k2.6",            "NVIDIA Build",   "moonshotai/kimi-k2.6"),
             ("nvidia/nemotron-3-nano-omni-30b",  "NVIDIA Build",   "omni — audio+image+text"),
@@ -455,8 +513,61 @@ class JarvisTuiApp(App):
             t.add_row(mid + marker, prov, note)
         self.log_stream.write(t)
         self.log_stream.write(Text.from_markup(
-            "[dim]Set with: /model <model-id>[/]"
+            "[dim]Orchestrator: /model <id>  ·  Browse OpenRouter: /models <query>  ·  "
+            "Per-agent: /agents · /setmodel <agent> <model>[/]"
         ))
+
+    def _show_agents(self) -> None:
+        try:
+            from agents.model_router import get_all_agent_models
+            data = get_all_agent_models()
+        except Exception as e:
+            self.log_stream.write(Text.from_markup(f"[red]{e}[/]"))
+            return
+        t = Table(title="Agent Models", style="cyan", header_style="bold cyan",
+                  show_lines=False, expand=False)
+        t.add_column("Agent", style="bold", width=24)
+        t.add_column("Model", style="cyan", width=40)
+        t.add_column("Source", style="dim", width=8)
+        for agent, info in data.items():
+            t.add_row(agent, info.get("model", "?"), info.get("source", ""))
+        self.log_stream.write(t)
+        self.log_stream.write(Text.from_markup(
+            "[dim]Change: /setmodel <agent> <model>  ·  Reset: /resetmodel <agent>  ·  "
+            "Browse: /models <query>[/]"))
+
+    def _set_agent_model_cmd(self, arg: str) -> None:
+        parts = (arg or "").split()
+        if len(parts) < 2:
+            self.log_stream.write(Text.from_markup(
+                "[yellow]Usage:[/] /setmodel <agent> <model>  "
+                "[dim](agents: frontend/backend/qa/orchestrator/verifier/iac or skill:<name>)[/]"))
+            return
+        target, model = parts[0], parts[1]
+        try:
+            from agents.model_router import set_agent_model
+            stored = set_agent_model(target, model)
+        except Exception as e:
+            self.log_stream.write(Text.from_markup(f"[red]{e}[/]"))
+            return
+        self.log_stream.write(Text.from_markup(
+            f"[bold green]{target}[/] → [bold cyan]{stored}[/] "
+            "[dim](persisted to config/agent_models.json)[/]"))
+
+    def _reset_agent_model_cmd(self, arg: str) -> None:
+        target = (arg or "").strip()
+        if not target:
+            self.log_stream.write(Text.from_markup("[yellow]Usage:[/] /resetmodel <agent>"))
+            return
+        try:
+            from agents.model_router import reset_agent_model
+            removed = reset_agent_model(target)
+        except Exception as e:
+            self.log_stream.write(Text.from_markup(f"[red]{e}[/]"))
+            return
+        self.log_stream.write(Text.from_markup(
+            f"[green]reset {target}[/] [dim](back to default)[/]" if removed
+            else f"[dim]no override set for {target}[/]"))
 
     def _show_tools(self) -> None:
         try:

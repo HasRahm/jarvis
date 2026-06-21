@@ -52,7 +52,8 @@ for col in ws.columns:
     max_len = max(len(str(c.value or "")) for c in col)
     ws.column_dimensions[col[0].column_letter].width = min(max_len + 2, 50)
 
-wb.save(r"C:\Users\YOUR_USERNAME\jarvis\scratch\output.xlsx")
+import os
+wb.save(os.path.join(r"{{OUTPUT_DIR}}", "output.xlsx"))
 print("Excel file created successfully.")
 ```
 
@@ -61,7 +62,7 @@ print("Excel file created successfully.")
 - Headers: Dark navy (#1F2A38) with white bold Calibri
 - Data rows: Default with thin borders
 - Column widths: Auto-fit, max 50 characters
-- Output path: Always in `C:\Users\YOUR_USERNAME\jarvis\scratch\`
+- Output path: Always in the working directory `{{OUTPUT_DIR}}`
 
 ## Error Handling
 

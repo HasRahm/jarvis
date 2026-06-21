@@ -23,7 +23,11 @@ class TestTwoConcurrentClients(unittest.TestCase):
         """Two simultaneous WS connections each receive auth_ok independently."""
         os.environ["JARVIS_CI"] = "true"
         from starlette.testclient import TestClient
-        from core.hermes.server import app, HERMES_SECRET
+        from core.hermes.server import app
+        # HERMES_SECRET is no longer a module constant on the server (auth is call-time,
+        # fail-closed via core.auth.authenticate). Read the secret the autouse clean_env
+        # fixture set for this test from the environment.
+        HERMES_SECRET = os.environ["HERMES_SECRET"]
 
         received = []
         errors = []
@@ -174,7 +178,8 @@ class TestOversizedMessageRejected(unittest.TestCase):
 
         try:
             from starlette.testclient import TestClient
-            from core.hermes.server import app, HERMES_SECRET
+            from core.hermes.server import app
+            HERMES_SECRET = os.environ["HERMES_SECRET"]
 
             with TestClient(app) as client:
                 with client.websocket_connect("/ws") as ws:

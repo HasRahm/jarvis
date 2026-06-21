@@ -96,6 +96,29 @@ def visual_servo_click(target_template_path: str, timeout_sec: float = 5.0, Kp: 
                 last_target_x = target_x
                 last_target_y = target_y
 
+            # Clamp coordinates to active window bounds if it is a regular window
+            try:
+                import pygetwindow as gw
+                active_win = gw.getActiveWindow()
+                if active_win and active_win.title:
+                    title_lower = active_win.title.lower()
+                    is_system = any(sys_t in title_lower for sys_t in ["program manager", "start", "taskbar", "task view", "desktop", "nvidia", "settings"])
+                    if not is_system and active_win.width > 50 and active_win.height > 50:
+                        wx = active_win.left
+                        wy = active_win.top
+                        ww = active_win.width
+                        wh = active_win.height
+                        
+                        margin = 8
+                        clamped_x = max(wx + margin, min(target_x, wx + ww - margin))
+                        clamped_y = max(wy + margin, min(target_y, wy + wh - margin))
+                        
+                        if clamped_x != target_x or clamped_y != target_y:
+                            logger.info(f"[VISUAL SERVO] Clamping target ({target_x}, {target_y}) to active window '{active_win.title}' bounds: ({clamped_x}, {clamped_y})")
+                            target_x, target_y = clamped_x, clamped_y
+            except Exception as e:
+                logger.debug(f"[VISUAL SERVO] Active window clamping error: {e}")
+
             # 3. Get current physical mouse cursor position
             cursor_x, cursor_y = pyautogui.position()
 

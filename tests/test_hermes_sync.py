@@ -11,7 +11,9 @@ from tools.browser import browser_resolve_element_at_coords
 
 def _do_auth(websocket, token: str = None) -> None:
     """Send the first-message auth handshake and assert auth_ok is received."""
-    t = token or HERMES_SECRET
+    # Read at call time: the autouse clean_env fixture (conftest.py) sets HERMES_SECRET
+    # per-test, AFTER this module is imported — so the module-level read above is stale.
+    t = token or os.environ.get("HERMES_SECRET", "")
     websocket.send_text(json.dumps({"type": "auth", "token": t}))
     resp = json.loads(websocket.receive_text())
     assert resp["type"] == "auth_ok", f"Expected auth_ok, got: {resp}"
