@@ -27,6 +27,7 @@ class TelegramBridge:
         self.running = True
         
     def _parse_allowed_chats(self) -> set[int]:
+        print(f"[TRACE] core.hermes.bridge.TelegramBridge._parse_allowed_chats: enter", file=sys.stderr, flush=True)
         chats_str = os.environ.get("JARVIS_ALLOWED_CHAT_IDS", "").strip()
         if not chats_str:
             return set()
@@ -35,11 +36,13 @@ class TelegramBridge:
             try:
                 chats.add(int(c.strip()))
             except ValueError:
+                print(f"[TRACE] core.hermes.bridge.TelegramBridge._parse_allowed_chats: except ValueError", file=sys.stderr, flush=True)
                 continue
         return chats
 
     def send_telegram_message(self, chat_id: int, text: str):
         """Sends a text message back to the whitelisted Telegram Chat ID."""
+        print(f"[TRACE] core.hermes.bridge.TelegramBridge.send_telegram_message: enter", file=sys.stderr, flush=True)
         if not self.token:
             print(f"[MOCK SEND] Chat {chat_id}: {text}")
             return
@@ -61,10 +64,12 @@ class TelegramBridge:
             with urllib.request.urlopen(req, timeout=5) as resp:
                 resp.read()
         except Exception as e:
+            print(f"[TRACE] core.hermes.bridge.TelegramBridge.send_telegram_message: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.error(f"Failed to send Telegram message: {e}")
 
     def execute_prompt(self, chat_id: int, prompt: str):
         """Executes a prompt through Jarvis's CLI pipeline and returns the result."""
+        print(f"[TRACE] core.hermes.bridge.TelegramBridge.execute_prompt: enter", file=sys.stderr, flush=True)
         self.send_telegram_message(chat_id, "⏳ *Jarvis is processing your request...*")
         
         try:
@@ -109,11 +114,13 @@ class TelegramBridge:
                 
             self.send_telegram_message(chat_id, f"✅ *Task Completed!*\n\n```\n{clean_output[:3800]}\n```")
         except Exception as e:
+            print(f"[TRACE] core.hermes.bridge.TelegramBridge.execute_prompt: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.error(f"Failed executing prompt: {e}")
             self.send_telegram_message(chat_id, f"❌ *Error executing task:* {e}")
 
     def poll_updates(self):
         """Polls for new messages from Telegram Bot API."""
+        print(f"[TRACE] core.hermes.bridge.TelegramBridge.poll_updates: enter", file=sys.stderr, flush=True)
         if not self.token:
             print(Fore.YELLOW + "[BRIDGE] Telegram Bot Token (JARVIS_TELEGRAM_TOKEN) is not configured in .env.")
             print("[BRIDGE] Bot Bridge is running in MOCK mode. Standing by...\n" + Style.RESET_ALL)
@@ -179,12 +186,15 @@ class TelegramBridge:
                         
         except urllib.error.URLError as e:
             # Silence expected timeouts during polling updates
+            print(f"[TRACE] core.hermes.bridge.TelegramBridge.poll_updates: except {str(e)[:80]}", file=sys.stderr, flush=True)
             time.sleep(2)
         except Exception as e:
+            print(f"[TRACE] core.hermes.bridge.TelegramBridge.poll_updates: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.error(f"Bridge polling error: {e}")
             time.sleep(5)
 
     def start(self):
+        print(f"[TRACE] core.hermes.bridge.TelegramBridge.start: enter", file=sys.stderr, flush=True)
         print(Fore.CYAN + "====================================")
         print("   Jarvis Secure Messenger Bridge   ")
         print("====================================\n" + Style.RESET_ALL)
@@ -197,5 +207,6 @@ if __name__ == "__main__":
     try:
         bridge.start()
     except KeyboardInterrupt:
+        print(f"[TRACE] core.hermes.bridge.<module>: except KeyboardInterrupt", file=sys.stderr, flush=True)
         print("\nStopping Bot Bridge...")
         bridge.running = False

@@ -12,6 +12,7 @@ init() # Initialize colorama
 try:
     import ollama
 except ImportError:
+    print(f"[TRACE] core.gemma4_loop.<module>: except ImportError", file=sys.stderr, flush=True)
     print(Fore.RED + "Error: 'ollama' package not found. Did you run scripts/bootstrap.sh?" + Style.RESET_ALL)
     sys.exit(1)
 
@@ -19,6 +20,7 @@ try:
     import psutil
     HAS_PSUTIL = True
 except ImportError:
+    print(f"[TRACE] core.gemma4_loop.<module>: except ImportError", file=sys.stderr, flush=True)
     HAS_PSUTIL = False
 
 from tools.dispatcher import dispatch, TOOL_DEFINITIONS
@@ -37,10 +39,12 @@ def get_available_model():
                 return PRIMARY_MODEL
         return FALLBACK_MODEL
     except Exception as e:
+        print(f"[TRACE] core.gemma4_loop.get_available_model: except {str(e)[:80]}", file=sys.stderr, flush=True)
         return FALLBACK_MODEL
 
 
 def run_pc_optimization():
+    print(f"[TRACE] core.gemma4_loop.run_pc_optimization: enter", file=sys.stderr, flush=True)
     print(Fore.CYAN + "\n  [SYSTEM] INITIATING PC PERFORMANCE OPTIMIZATION...")
     print("  ---------------------------------------------")
     if not HAS_PSUTIL:
@@ -75,6 +79,7 @@ def run_pc_optimization():
                     zombie_count += 1
                     zombie_ram_reclaimed += mem_mb
             except Exception:
+                print(f"[TRACE] core.gemma4_loop.run_pc_optimization: except Exception", file=sys.stderr, flush=True)
                 continue
                 
         if zombie_count > 0:
@@ -84,10 +89,12 @@ def run_pc_optimization():
             print(Fore.GREEN + "  [SUCCESS] No background development zombie processes detected. System is running at maximum efficiency!\n" + Style.RESET_ALL)
             
     except Exception as e:
+        print(f"[TRACE] core.gemma4_loop.run_pc_optimization: except {str(e)[:80]}", file=sys.stderr, flush=True)
         print(Fore.RED + f"  Optimization error: {e}\n" + Style.RESET_ALL)
 
 
 def requires_screen_context(text: str) -> bool:
+    print(f"[TRACE] core.gemma4_loop.requires_screen_context: enter", file=sys.stderr, flush=True)
     triggers = [
         "what's on", "what am i looking at",
         "current window", "this page", "that button",
@@ -98,6 +105,7 @@ def requires_screen_context(text: str) -> bool:
 
 
 def jarvis():
+    print(f"[TRACE] core.gemma4_loop.jarvis: enter", file=sys.stderr, flush=True)
     print(Fore.CYAN + "\n====================================")
     print("     Jarvis AI Terminal Shell (OS)  ")
     print("====================================\n" + Style.RESET_ALL)
@@ -145,6 +153,7 @@ def jarvis():
                     if summary:
                         user_input = f"[PROACTIVE SCREEN CONTEXT: {summary}]\nUser request: {user_input}"
                 except Exception as e:
+                    print(f"[TRACE] core.gemma4_loop.jarvis: except {str(e)[:80]}", file=sys.stderr, flush=True)
                     print(Fore.RED + f"  [WARNING] Failed to fetch proactive screen context: {e}" + Style.RESET_ALL)
                     sys.stdout.flush()
                 
@@ -218,6 +227,7 @@ def jarvis():
                         print(f"  Output Tokens   : {tel.get('output_tokens', 0)}")
                         print(f"  Estimated Spend : ${tel.get('estimated_cost_usd', 0.0):.5f} USD\n")
                     except Exception:
+                        print(f"[TRACE] core.gemma4_loop.jarvis: except Exception", file=sys.stderr, flush=True)
                         print("  No telemetry data found. Run tasks to record usage.\n")
                     continue
                 elif cmd == "/agents":
@@ -228,6 +238,7 @@ def jarvis():
                             lines = f.readlines()
                         print("".join(lines[:25]))
                     except Exception:
+                        print(f"[TRACE] core.gemma4_loop.jarvis: except Exception", file=sys.stderr, flush=True)
                         print("  AGENTS.md registry is currently empty.\n")
                     continue
                 else:
@@ -265,6 +276,7 @@ def jarvis():
                     try:
                         result = dispatch(fn, args)
                     except Exception as e:
+                        print(f"[TRACE] core.gemma4_loop.jarvis: except {str(e)[:80]}", file=sys.stderr, flush=True)
                         result = f"ERROR: {e}"
                     
                     messages.append({
@@ -273,11 +285,14 @@ def jarvis():
                     })
         
         except KeyboardInterrupt:
+            print(f"[TRACE] core.gemma4_loop.jarvis: except KeyboardInterrupt", file=sys.stderr, flush=True)
             print("\nType 'exit' to quit.")
         except EOFError:
+            print(f"[TRACE] core.gemma4_loop.jarvis: except EOFError", file=sys.stderr, flush=True)
             print("\nExiting Jarvis...")
             break
         except Exception as e:
+            print(f"[TRACE] core.gemma4_loop.jarvis: except {str(e)[:80]}", file=sys.stderr, flush=True)
             print(Fore.RED + f"\nAn error occurred: {e}\n" + Style.RESET_ALL)
 
 if __name__ == "__main__":

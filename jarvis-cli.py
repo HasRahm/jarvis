@@ -41,6 +41,7 @@ def _persist_env_var(key: str, value: str) -> None:
     Used to persist an auto-generated HERMES_SECRET so it stays stable across
     restarts and a paired phone's stored token keeps working.
     """
+    print(f"[TRACE] jarvis-cli._persist_env_var: enter", file=sys.stderr, flush=True)
     lines = []
     found = False
     if os.path.isfile(_env_path):
@@ -70,6 +71,7 @@ DEFAULT_MODEL = os.environ.get("JARVIS_PRIMARY_MODEL", "gemma4:31b-cloud")
 
 def doctor():
     """Health check — verify Ollama is running and model is available."""
+    print(f"[TRACE] jarvis-cli.doctor: enter", file=sys.stderr, flush=True)
     print("🔍 Jarvis Health Check")
     print("=" * 40)
 
@@ -111,6 +113,7 @@ def doctor():
             print(f"❌ Ollama server: HTTP {resp.status_code}")
             return False
     except Exception as e:
+        print(f"[TRACE] jarvis-cli.doctor: except {str(e)[:80]}", file=sys.stderr, flush=True)
         print(f"❌ Ollama server: not reachable ({e})")
         return False
 
@@ -126,6 +129,7 @@ def doctor():
 def load_mode_instructions(mode: str) -> str:
     """Load behavioral instructions for a mode."""
     # Always load shared rules
+    print(f"[TRACE] jarvis-cli.load_mode_instructions: enter", file=sys.stderr, flush=True)
     shared_path = os.path.join(MODES_DIR, "_shared.md")
     shared_content = ""
     if os.path.exists(shared_path):
@@ -157,6 +161,7 @@ def load_mode_instructions(mode: str) -> str:
 
 def build_prompt(mode: str, task: str) -> str:
     """Build the full prompt for Jarvis."""
+    print(f"[TRACE] jarvis-cli.build_prompt: enter", file=sys.stderr, flush=True)
     instructions = load_mode_instructions(mode)
     output_root = os.environ.get("JARVIS_OUTPUT_ROOT") or os.getcwd()
     return f"""{instructions}
@@ -179,6 +184,7 @@ IMPORTANT: Execute each step in order. Do NOT stop early. Do NOT ask for help. C
 def run_jarvis(mode: str, task: str, model: str = DEFAULT_MODEL):
     """Launch Jarvis to execute a task."""
     # Build prompt
+    print(f"[TRACE] jarvis-cli.run_jarvis: enter", file=sys.stderr, flush=True)
     prompt_content = build_prompt(mode, task)
 
     # Write prompt to temp file
@@ -213,6 +219,7 @@ def run_jarvis(mode: str, task: str, model: str = DEFAULT_MODEL):
     try:
         os.remove(prompt_path)
     except Exception:
+        print(f"[TRACE] jarvis-cli.run_jarvis: except Exception", file=sys.stderr, flush=True)
         pass
 
     # Honest outcome (Phase 46): don't claim "completed successfully" — the runner above printed the
@@ -226,6 +233,7 @@ def run_jarvis(mode: str, task: str, model: str = DEFAULT_MODEL):
 
 def run_screen_dashboard(model: str = DEFAULT_MODEL):
     """Fetch active window structure, visual density imprint, and generate a cognitive visual summary."""
+    print(f"[TRACE] jarvis-cli.run_screen_dashboard: enter", file=sys.stderr, flush=True)
     import asyncio
     from core.system.screen_reader import JarvisScreenReader
     from core.system.screen_imprint import ScreenImprintGraph
@@ -234,6 +242,7 @@ def run_screen_dashboard(model: str = DEFAULT_MODEL):
     sys.stdout.flush()
     
     async def capture():
+        print(f"[TRACE] jarvis-cli.run_screen_dashboard.capture: enter", file=sys.stderr, flush=True)
         reader = JarvisScreenReader()
         imprinter = ScreenImprintGraph()
         screen_data = await reader.read_screen()
@@ -245,6 +254,7 @@ def run_screen_dashboard(model: str = DEFAULT_MODEL):
     try:
         screen, imprint = asyncio.run(capture())
     except Exception as e:
+        print(f"[TRACE] jarvis-cli.run_screen_dashboard: except {str(e)[:80]}", file=sys.stderr, flush=True)
         print(f"❌ Screen capture failed: {e}")
         sys.exit(1)
         
@@ -259,6 +269,7 @@ def run_screen_dashboard(model: str = DEFAULT_MODEL):
         from core.system.llm_adapter import get_last_run
         _vm = get_last_run().get("model_used") or "unknown model"
     except Exception:
+        print(f"[TRACE] jarvis-cli.run_screen_dashboard: except Exception", file=sys.stderr, flush=True)
         _vm = "unknown model"
 
     print("┌──────────────────────────────────────────────────────────┐")
@@ -289,6 +300,7 @@ def run_screen_dashboard(model: str = DEFAULT_MODEL):
 
 def check_tool_health():
     """Verify tool module dependencies and binaries on startup."""
+    print(f"[TRACE] jarvis-cli.check_tool_health: enter", file=sys.stderr, flush=True)
     from tools.dispatcher import TOOL_DEFINITIONS
     
     defined_tools = {t["function"]["name"] for t in TOOL_DEFINITIONS if "function" in t}
@@ -302,6 +314,7 @@ def check_tool_health():
             import playwright
             print("  ✓ browser_navigate (playwright chromium ready)")
         except ImportError:
+            print(f"[TRACE] jarvis-cli.check_tool_health: except ImportError", file=sys.stderr, flush=True)
             print("  ✗ browser_navigate (playwright not found — run: pip install playwright && playwright install chromium)")
             has_errors = True
 
@@ -310,6 +323,7 @@ def check_tool_health():
             import mss
             print("  ✓ screen_imprint (mss ready)")
         except ImportError:
+            print(f"[TRACE] jarvis-cli.check_tool_health: except ImportError", file=sys.stderr, flush=True)
             print("  ✗ screen_imprint (mss not found — run: pip install mss)")
             has_errors = True
 
@@ -327,9 +341,11 @@ def check_tool_health():
             pytesseract.get_tesseract_version()
             print("  ✓ screen_ocr (pytesseract ready)")
         except ImportError:
+            print(f"[TRACE] jarvis-cli.check_tool_health: except ImportError", file=sys.stderr, flush=True)
             print("  ✗ screen_ocr (pytesseract not found — run: pip install pytesseract)")
             has_errors = True
         except Exception as e:
+            print(f"[TRACE] jarvis-cli.check_tool_health: except {str(e)[:80]}", file=sys.stderr, flush=True)
             print(f"  ✗ screen_ocr (tesseract binary not found: {e} — please install tesseract)")
             has_errors = True
             
@@ -347,6 +363,7 @@ def show_qr_code(hermes_secret: str = None):
     token is delivered out-of-band — scanning the locally-shown QR pairs a fresh
     phone in one shot. The token is NEVER published to the public discovery gist.
     """
+    print(f"[TRACE] jarvis-cli.show_qr_code: enter", file=sys.stderr, flush=True)
     from urllib.parse import quote
     from core.hermes.server import print_qr_code
     tunnel_url = os.getenv("CLOUDFLARE_TUNNEL_URL")
@@ -359,6 +376,7 @@ def show_qr_code(hermes_secret: str = None):
                 if data.get("status") == "online":
                     tunnel_url = data.get("url")
         except Exception:
+            print(f"[TRACE] jarvis-cli.show_qr_code: except Exception", file=sys.stderr, flush=True)
             pass
     if not tunnel_url:
         print("❌ No active tunnel URL found in .env or gist.")
@@ -399,6 +417,7 @@ def _run_json_stream():
         {"type": "done",     "text": "..."         }  — final full response
         {"type": "error",    "message": "..."      }  — error
     """
+    print(f"[TRACE] jarvis-cli._run_json_stream: enter", file=sys.stderr, flush=True)
     import json as _json
     import io as _io
     import contextlib as _ctx
@@ -453,6 +472,7 @@ def _run_json_stream():
             with _ctx.redirect_stdout(_sink):
                 msg = call_llm(messages=messages, model=model, tools=TOOL_DEFINITIONS)
         except Exception as e:
+            print(f"[TRACE] jarvis-cli._run_json_stream: except {str(e)[:80]}", file=sys.stderr, flush=True)
             _emit_json({"type": "error", "message": str(e)})
             return
         finally:
@@ -472,6 +492,7 @@ def _run_json_stream():
                 with _ctx.redirect_stdout(_sink):
                     result = dispatch(fn, args)
             except Exception as e:
+                print(f"[TRACE] jarvis-cli._run_json_stream: except {str(e)[:80]}", file=sys.stderr, flush=True)
                 result = f"ERROR: {e}"
             _emit_json({"type": "result", "name": fn, "output": str(result)[:2000]})
             _tcid = call.get("id")
@@ -486,6 +507,7 @@ _JSON_OUT = None   # pinned real stdout for NDJSON, so adapter chatter can be re
 
 def _emit_json(obj: dict):
     """Write a JSON event line to the pinned JSON stdout (never the redirected sink)."""
+    print(f"[TRACE] jarvis-cli._emit_json: enter", file=sys.stderr, flush=True)
     import json as _json
     out = _JSON_OUT or sys.stdout
     out.write(_json.dumps(obj, ensure_ascii=False) + "\n")
@@ -495,6 +517,7 @@ def _emit_json(obj: dict):
 def main():
     # Hard offline / no-cloud switch (smoke-test #1). Set BEFORE the early --output/--tui branches
     # so every path — including JSON and --screen — refuses cloud calls and can't spend credits.
+    print(f"[TRACE] jarvis-cli.main: enter", file=sys.stderr, flush=True)
     if "--offline" in sys.argv or "--no-cloud" in sys.argv:
         os.environ["JARVIS_OFFLINE"] = "1"
 
@@ -578,6 +601,7 @@ Examples:
             print(f"❌ --model: {_why}")
             sys.exit(2)
     except ImportError:
+        print(f"[TRACE] jarvis-cli.main: except ImportError", file=sys.stderr, flush=True)
         pass
 
     if args.tui:
@@ -634,6 +658,7 @@ Examples:
             with open(cf_log, "w") as f:
                 cf_proc = subprocess.Popen(cf_cmd, stderr=f, stdout=subprocess.DEVNULL)
         except Exception as e:
+            print(f"[TRACE] jarvis-cli.main: except {str(e)[:80]}", file=sys.stderr, flush=True)
             print(f"❌ Failed to start cloudflared: {e}")
             sys.exit(1)
             
@@ -649,6 +674,7 @@ Examples:
                         tunnel_url = match.group(0)
                         break
             except Exception:
+                print(f"[TRACE] jarvis-cli.main: except Exception", file=sys.stderr, flush=True)
                 pass
 
         gist_id = "e99532bb52fd6b67e77f759d9921d5d8"
@@ -659,6 +685,7 @@ Examples:
             The auth token is deliberately omitted — publishing it would expose a
             full-RCE agent to anyone who can read the world-readable gist.
             """
+            print(f"[TRACE] jarvis-cli.main._publish_gist: enter", file=sys.stderr, flush=True)
             payload = {
                 "url": url,
                 "updated": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -674,12 +701,14 @@ Examples:
                 )
                 return True
             except Exception as e:
+                print(f"[TRACE] jarvis-cli.main._publish_gist: except {str(e)[:80]}", file=sys.stderr, flush=True)
                 print(f"⚠️ Gist update failed: {e}. Is 'gh' CLI installed and authenticated?")
                 return False
             finally:
                 try:
                     os.remove(tmp_json)
                 except OSError:
+                    print(f"[TRACE] jarvis-cli.main._publish_gist: except OSError", file=sys.stderr, flush=True)
                     pass
 
         if tunnel_url:

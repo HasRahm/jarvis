@@ -1,3 +1,4 @@
+import sys
 # brain/supabase_store.py
 """
 Supabase-backed memory store for Jarvis (Phase 25).
@@ -46,6 +47,7 @@ _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="brain-store")
 
 def _get_client():
     """Build the Supabase client once; return None on any failure."""
+    print(f"[TRACE] brain.supabase_store._get_client: enter", file=sys.stderr, flush=True)
     global _client, _client_tried
     with _client_lock:
         if _client_tried:
@@ -61,6 +63,7 @@ def _get_client():
                 from dotenv import load_dotenv
                 load_dotenv()
             except Exception:
+                print(f"[TRACE] brain.supabase_store._get_client: except Exception", file=sys.stderr, flush=True)
                 pass
 
             url = os.environ.get("SUPABASE_URL", "").strip()
@@ -81,6 +84,7 @@ def _get_client():
                 _client = create_client(url, key)
             logger.info("[brain.store] Supabase memory store ready (table=%s schema=%s)", _TABLE, _SCHEMA)
         except Exception as exc:
+            print(f"[TRACE] brain.supabase_store._get_client: except {str(exc)[:80]}", file=sys.stderr, flush=True)
             logger.warning("[brain.store] client init failed, memory store disabled: %s", exc)
             _client = None
         return _client
@@ -89,15 +93,18 @@ def _get_client():
 def _run_with_timeout(fn, timeout, default):
     """Run fn(client) on the executor with a hard timeout; return default on
     miss/None-client/failure. Never raises."""
+    print(f"[TRACE] brain.supabase_store._run_with_timeout: enter", file=sys.stderr, flush=True)
     cl = _get_client()
     if cl is None:
         return default
     try:
         return _executor.submit(fn, cl).result(timeout=timeout)
     except FutureTimeout:
+        print(f"[TRACE] brain.supabase_store._run_with_timeout: except FutureTimeout", file=sys.stderr, flush=True)
         logger.warning("[brain.store] operation timed out after %.1fs (project paused?)", timeout)
         return default
     except Exception as exc:
+        print(f"[TRACE] brain.supabase_store._run_with_timeout: except {str(exc)[:80]}", file=sys.stderr, flush=True)
         logger.warning("[brain.store] operation failed: %s", exc)
         return default
 
@@ -107,10 +114,12 @@ def _run_with_timeout(fn, timeout, default):
 def mem_get(slug: str) -> str:
     """Exact-slug fetch. Supabase first; falls back to the local store when the
     cloud is unavailable/empty. Returns content string, or '' if absent."""
+    print(f"[TRACE] brain.supabase_store.mem_get: enter", file=sys.stderr, flush=True)
     if not slug:
         return ""
 
     def _op(cl):
+        print(f"[TRACE] brain.supabase_store.mem_get._op: enter", file=sys.stderr, flush=True)
         res = cl.table(_TABLE).select("content").eq("slug", slug).limit(1).execute()
         data = getattr(res, "data", None) or []
         return (data[0].get("content") or "") if data else ""
@@ -122,6 +131,7 @@ def mem_get(slug: str) -> str:
             from brain.local_store import local_upsert
             local_upsert(slug, val)
         except Exception:
+            print(f"[TRACE] brain.supabase_store.mem_get: except Exception", file=sys.stderr, flush=True)
             pass
         return val
     # Supabase missing/unavailable/empty -> local fallback.
@@ -129,18 +139,21 @@ def mem_get(slug: str) -> str:
         from brain.local_store import local_get
         return local_get(slug)
     except Exception:
+        print(f"[TRACE] brain.supabase_store.mem_get: except Exception", file=sys.stderr, flush=True)
         return ""
 
 
 def mem_search(query: str, limit: int = _SEARCH_LIMIT) -> list:
     """Full-text search over the memory table. Returns a list of row dicts
     ({slug, content, ...}), or [] on miss/unavailable."""
+    print(f"[TRACE] brain.supabase_store.mem_search: enter", file=sys.stderr, flush=True)
     if not query or not query.strip():
         return []
     q = query.strip()
 
     def _op(cl):
         # Primary: FTS over the generated tsvector column.
+        print(f"[TRACE] brain.supabase_store.mem_search._op: enter", file=sys.stderr, flush=True)
         try:
             res = (cl.table(_TABLE)
                    .select("slug,content")
@@ -150,6 +163,7 @@ def mem_search(query: str, limit: int = _SEARCH_LIMIT) -> list:
             if data:
                 return data
         except Exception as exc:
+            print(f"[TRACE] brain.supabase_store.mem_search._op: except {str(exc)[:80]}", file=sys.stderr, flush=True)
             logger.debug("[brain.store] text_search failed, falling back to ilike: %s", exc)
         # Fallback: substring match on slug or content.
         safe = q.replace("%", "").replace(",", " ")
@@ -167,6 +181,7 @@ def mem_search(query: str, limit: int = _SEARCH_LIMIT) -> list:
         from brain.local_store import local_search
         return local_search(query, limit)
     except Exception:
+        print(f"[TRACE] brain.supabase_store.mem_search: except Exception", file=sys.stderr, flush=True)
         return []
 
 
@@ -175,6 +190,7 @@ def mem_upsert(slug: str, content: str) -> bool:
     session checkpoints) that must commit before continuing. Always writes to the
     local store (durable offline); also attempts Supabase when reachable. Returns
     True if either store accepted the write. Never raises."""
+    print(f"[TRACE] brain.supabase_store.mem_upsert: enter", file=sys.stderr, flush=True)
     if not slug:
         return False
 
@@ -184,11 +200,13 @@ def mem_upsert(slug: str, content: str) -> bool:
         from brain.local_store import local_upsert
         local_ok = local_upsert(slug, content)
     except Exception:
+        print(f"[TRACE] brain.supabase_store.mem_upsert: except Exception", file=sys.stderr, flush=True)
         local_ok = False
 
     # 2. Best-effort cloud write (skips instantly if client is None).
     def _op(cl):
         # namespace + search_vector are GENERATED columns — send only these two.
+        print(f"[TRACE] brain.supabase_store.mem_upsert._op: enter", file=sys.stderr, flush=True)
         cl.table(_TABLE).upsert(
             {"slug": slug, "content": content or ""},
             on_conflict="slug",
@@ -214,12 +232,14 @@ def _drain():
             if not ok:
                 logger.warning("[brain.store] dropped queued write for '%s' (store unavailable)", slug)
         except Exception as exc:
+            print(f"[TRACE] brain.supabase_store._drain: except {str(exc)[:80]}", file=sys.stderr, flush=True)
             logger.warning("[brain.store] queued write for '%s' failed, dropped: %s", slug, exc)
         finally:
             _wq.task_done()
 
 
 def _ensure_worker():
+    print(f"[TRACE] brain.supabase_store._ensure_worker: enter", file=sys.stderr, flush=True)
     global _worker, _worker_broken
     if _worker_broken or _worker is not None:
         return
@@ -230,6 +250,7 @@ def _ensure_worker():
             _worker = threading.Thread(target=_drain, daemon=True, name="brain-store-writer")
             _worker.start()
         except Exception as exc:
+            print(f"[TRACE] brain.supabase_store._ensure_worker: except {str(exc)[:80]}", file=sys.stderr, flush=True)
             logger.warning("[brain.store] could not start write worker: %s", exc)
             _worker_broken = True
 
@@ -237,12 +258,14 @@ def _ensure_worker():
 def enqueue_upsert(slug: str, content: str) -> None:
     """Fire-and-forget write — returns immediately. The store happens on a
     background thread; on failure it is logged and dropped."""
+    print(f"[TRACE] brain.supabase_store.enqueue_upsert: enter", file=sys.stderr, flush=True)
     if not slug:
         return
     _ensure_worker()
     try:
         _wq.put_nowait((slug, content))
     except queue.Full:
+        print(f"[TRACE] brain.supabase_store.enqueue_upsert: except Full", file=sys.stderr, flush=True)
         logger.warning("[brain.store] write queue full — dropped write for '%s'", slug)
 
 
@@ -254,4 +277,5 @@ def flush(timeout: float = 10.0) -> None:
         while not _wq.empty() and time.monotonic() < deadline:
             time.sleep(0.05)
     except Exception:
+        print(f"[TRACE] brain.supabase_store.flush: except Exception", file=sys.stderr, flush=True)
         pass

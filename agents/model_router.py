@@ -232,7 +232,7 @@ def get_provider(model: str) -> str:
     if "gpt-oss" in ml:
         return "nvidia"
     # A bare vendor/model slug (not openrouter/) is an NVIDIA Build id.
-    if "nvidia/" in ml:
+    if "/" in ml:
         return "nvidia"
     import logging
     logging.getLogger(__name__).warning(

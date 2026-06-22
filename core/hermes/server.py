@@ -1,3 +1,4 @@
+import sys
 import os
 import json
 import logging
@@ -38,6 +39,7 @@ def print_qr_code(tunnel_url: str):
         qr.print_ascii(invert=True)
         print(f"\n  URL: {tunnel_url}\n")
     except ImportError:
+        print(f"[TRACE] core.hermes.server.print_qr_code: except ImportError", file=sys.stderr, flush=True)
         logger.warning("[Server] qrcode package not installed, skipping terminal QR.")
         print(f"\n⚡ JARVIS Connection URL: {tunnel_url}\n")
 
@@ -46,6 +48,7 @@ goal_scheduler = None
 
 @app.on_event("startup")
 async def startup_event():
+    print(f"[TRACE] core.hermes.server.startup_event: enter", file=sys.stderr, flush=True)
     global goal_scheduler
     try:
         from core.system.goal_scheduler import GoalScheduler
@@ -53,6 +56,7 @@ async def startup_event():
         goal_scheduler.start()
         logger.info("[Server] GoalScheduler started successfully.")
     except Exception as e:
+        print(f"[TRACE] core.hermes.server.startup_event: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.error(f"[Server] Failed to start GoalScheduler: {e}")
 
     # Generate QR Code on startup
@@ -67,6 +71,7 @@ async def startup_event():
                 if data.get("status") == "online":
                     tunnel_url = data.get("url")
         except Exception as e:
+            print(f"[TRACE] core.hermes.server.startup_event: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.debug(f"[Server] Gist discovery failed: {e}")
             
     if tunnel_url:
@@ -76,12 +81,14 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    print(f"[TRACE] core.hermes.server.shutdown_event: enter", file=sys.stderr, flush=True)
     global goal_scheduler
     if goal_scheduler:
         try:
             goal_scheduler.stop()
             logger.info("[Server] GoalScheduler stopped successfully.")
         except Exception as e:
+            print(f"[TRACE] core.hermes.server.shutdown_event: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.error(f"[Server] Error stopping GoalScheduler: {e}")
 
 # Auth is enforced via core.auth.authenticate() (call-time, fail-closed) in both
@@ -110,6 +117,7 @@ async def _require_token(authorization: str = Header(default="")) -> None:
     Routes through core.auth.authenticate so HTTP and the WebSocket handler share
     one fail-closed, call-time validator (reads HERMES_SECRET fresh each request).
     """
+    print(f"[TRACE] core.hermes.server._require_token: enter", file=sys.stderr, flush=True)
     token = authorization.removeprefix("Bearer ").strip()
     if not token:
         raise HTTPException(status_code=401, detail="Authorization header required")
@@ -125,6 +133,7 @@ def generate_voice_chunk(word: str, duration: float = 0.18, sample_rate: int = 1
     for a specific word, avoiding pop noises and utilizing frequency modulation.
     """
     # A pleasant pentatonic scale for melodic futuristic synth feedback
+    print(f"[TRACE] core.hermes.server.generate_voice_chunk: enter", file=sys.stderr, flush=True)
     frequencies = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 587.33, 659.25]
     idx = len(word.strip(".,!?\"'()")) % len(frequencies)
     frequency = frequencies[idx]
@@ -161,6 +170,7 @@ def generate_voice_chunk(word: str, duration: float = 0.18, sample_rate: int = 1
 
 async def get_jervis_voice_response(user_text: str) -> str:
     """Resolve text response from Ollama cloud/local model or return robust fallback."""
+    print(f"[TRACE] core.hermes.server.get_jervis_voice_response: enter", file=sys.stderr, flush=True)
     if os.environ.get("JARVIS_CI") == "true":
         return f"Greetings. I am Jarvis. I have processed your input: '{user_text}'. All voice telemetry links are fully operational."
 
@@ -180,6 +190,7 @@ async def get_jervis_voice_response(user_text: str) -> str:
         )
         return response.get("content", "") if isinstance(response, dict) else str(response)
     except Exception as e:
+        print(f"[TRACE] core.hermes.server.get_jervis_voice_response: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"Voice response model execution failed: {e}. Executing fast synth offline fallback.")
         return f"Telemetry received. Connection established and running smoothly. Awaiting next command."
 
@@ -246,6 +257,7 @@ class HermesEventManager:
 
     def enqueue_speech_sync(self, text: str, interrupt: bool = False, role_hint: str = "system") -> None:
         """Thread-safe: push a speech event to every active connection's asyncio queue."""
+        print(f"[TRACE] core.hermes.server.HermesEventManager.enqueue_speech_sync: enter", file=sys.stderr, flush=True)
         entry = {
             "text": text,
             "role": role_hint,
@@ -272,6 +284,7 @@ class HermesEventManager:
             try:
                 asyncio.run_coroutine_threadsafe(state.event_queue.put(event), state.loop)
             except Exception as _e:
+                print(f"[TRACE] core.hermes.server.HermesEventManager.enqueue_speech_sync: except {str(_e)[:80]}", file=sys.stderr, flush=True)
                 logger.warning(f"[hermes] Failed to enqueue speech for {state.conn_id}: {_e}")
 
     # --- Generic event broadcast (DAG lifecycle, screenshot, etc.) ---
@@ -280,6 +293,7 @@ class HermesEventManager:
         """Broadcast any arbitrary event dict to all active connections.
         Used by dag.py to push dag_update / task_status events in real-time.
         Thread-safe; no-op when no clients are connected."""
+        print(f"[TRACE] core.hermes.server.HermesEventManager.enqueue_event: enter", file=sys.stderr, flush=True)
         with self._lock:
             targets = list(self._connections.values())
         for state in targets:
@@ -288,6 +302,7 @@ class HermesEventManager:
             try:
                 asyncio.run_coroutine_threadsafe(state.event_queue.put(event), state.loop)
             except Exception as _e:
+                print(f"[TRACE] core.hermes.server.HermesEventManager.enqueue_event: except {str(_e)[:80]}", file=sys.stderr, flush=True)
                 logger.warning(f"[hermes] enqueue_event failed for {state.conn_id}: {_e}")
 
 
@@ -343,6 +358,7 @@ _dag_limiter = _DagDispatchLimiter()
 
 def get_visual_context_history() -> list:
     """Returns the most-recently-authenticated client's visual tap history (or [] if none)."""
+    print(f"[TRACE] core.hermes.server.get_visual_context_history: enter", file=sys.stderr, flush=True)
     with hermes_event_manager._lock:
         if hermes_event_manager._connections:
             return list(hermes_event_manager._connections.values())[-1].visual_context_history
@@ -361,6 +377,7 @@ def get_speech_history() -> list:
 @app.get("/api/browser/screenshot")
 async def get_browser_screenshot(_: None = Depends(_require_token)):
     """Returns the current full-page Playwright screenshot as an image."""
+    print(f"[TRACE] core.hermes.server.get_browser_screenshot: enter", file=sys.stderr, flush=True)
     from fastapi.responses import JSONResponse
     # Check both Docker container path and local Windows workspace path
     candidate_paths = [
@@ -390,6 +407,7 @@ async def health_check():
 @app.websocket("/ws")
 async def hermes_endpoint(websocket: WebSocket):
     """Bidirectional streaming WebSocket endpoint for Hermes voice protocol."""
+    print(f"[TRACE] core.hermes.server.hermes_endpoint: enter", file=sys.stderr, flush=True)
     await websocket.accept()
 
     # First-message auth handshake — token never travels in the URL
@@ -404,10 +422,12 @@ async def hermes_endpoint(websocket: WebSocket):
             await websocket.close(code=1008, reason="Unauthorized")
             return
     except asyncio.TimeoutError:
+        print(f"[TRACE] core.hermes.server.hermes_endpoint: except TimeoutError", file=sys.stderr, flush=True)
         logger.warning("Rejected WebSocket: auth handshake timed out.")
         await websocket.close(code=1008, reason="Auth timeout")
         return
     except Exception as _e:
+        print(f"[TRACE] core.hermes.server.hermes_endpoint: except {str(_e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"Rejected WebSocket: auth parse error: {_e}")
         await websocket.close(code=1008, reason="Auth error")
         return
@@ -429,6 +449,7 @@ async def hermes_endpoint(websocket: WebSocket):
 
     async def client_listener():
         # Input size limit (Phase 12): configurable via JARVIS_MAX_WS_MSG_BYTES
+        print(f"[TRACE] core.hermes.server.hermes_endpoint.client_listener: enter", file=sys.stderr, flush=True)
         _MAX_MSG_BYTES = int(os.environ.get("JARVIS_MAX_WS_MSG_BYTES", str(1 * 1024 * 1024)))
         try:
             while True:
@@ -444,6 +465,7 @@ async def hermes_endpoint(websocket: WebSocket):
                     payload = json.loads(data)
                     msg_type = payload.get("type")
                 except Exception:
+                    print(f"[TRACE] core.hermes.server.hermes_endpoint.client_listener: except Exception", file=sys.stderr, flush=True)
                     payload = {}
                     msg_type = None
 
@@ -561,6 +583,7 @@ async def hermes_endpoint(websocket: WebSocket):
                         try:
                             run_dag(_text, task_id=_tid, user_id=_uid)
                         except Exception as _exc:
+                            print(f"[TRACE] core.hermes.server.hermes_endpoint.client_listener._run_dag_thread: except {str(_exc)[:80]}", file=sys.stderr, flush=True)
                             logger.error(f"[{conn_id}] run_dag error: {_exc}")
                             hermes_event_manager.enqueue_event({
                                 "type": "task_status",
@@ -626,6 +649,7 @@ async def hermes_endpoint(websocket: WebSocket):
                     await websocket.send_text(json.dumps({"type": "done"}))
 
         except WebSocketDisconnect:
+            print(f"[TRACE] core.hermes.server.hermes_endpoint.client_listener: except WebSocketDisconnect", file=sys.stderr, flush=True)
             logger.info(f"[{conn_id}] PWA client disconnected.")
             raise
 
@@ -659,19 +683,24 @@ async def hermes_endpoint(websocket: WebSocket):
 
                 state.event_queue.task_done()
         except asyncio.CancelledError:
+            print(f"[TRACE] core.hermes.server.hermes_endpoint.event_listener: except CancelledError", file=sys.stderr, flush=True)
             pass
         except Exception as e:
+            print(f"[TRACE] core.hermes.server.hermes_endpoint.event_listener: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.error(f"[{conn_id}] Hermes event listener exception: {e}")
 
     try:
         await asyncio.gather(client_listener(), event_listener())
     except WebSocketDisconnect:
+        print(f"[TRACE] core.hermes.server.hermes_endpoint: except WebSocketDisconnect", file=sys.stderr, flush=True)
         logger.info(f"[{conn_id}] Phone disconnected from Hermes Bridge.")
     except Exception as e:
+        print(f"[TRACE] core.hermes.server.hermes_endpoint: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.error(f"[{conn_id}] WebSocket session exception: {e}")
         try:
             await websocket.close(code=1011)
         except Exception:
+            print(f"[TRACE] core.hermes.server.hermes_endpoint: except Exception", file=sys.stderr, flush=True)
             pass
     finally:
         hermes_event_manager.unregister(conn_id)
@@ -681,6 +710,7 @@ async def hermes_endpoint(websocket: WebSocket):
 @app.post("/api/notify")
 async def post_notification(body: dict, _: None = Depends(_require_token)):
     """Allows posting a system speech/text notification to all connected clients."""
+    print(f"[TRACE] core.hermes.server.post_notification: enter", file=sys.stderr, flush=True)
     text = body.get("text", "").strip()
     if not text:
         raise HTTPException(status_code=422, detail="Missing 'text' in request body")
@@ -695,6 +725,7 @@ async def post_notification(body: dict, _: None = Depends(_require_token)):
 @app.get("/api/cleanup/scan")
 async def cleanup_scan(_: None = Depends(_require_token)):
     """Stage 1 — Return disk usage survey by category."""
+    print(f"[TRACE] core.hermes.server.cleanup_scan: enter", file=sys.stderr, flush=True)
     from tools.disk_cleanup import scan
     return scan()
 
@@ -702,6 +733,7 @@ async def cleanup_scan(_: None = Depends(_require_token)):
 @app.post("/api/cleanup/safe")
 async def cleanup_safe(_: None = Depends(_require_token)):
     """Stage 2 — Run safe auto-clean (dry_run=False, no confirmation needed for always-safe dirs)."""
+    print(f"[TRACE] core.hermes.server.cleanup_safe: enter", file=sys.stderr, flush=True)
     from tools.disk_cleanup import safe_clean
     return safe_clean(dry_run=False)
 
@@ -709,6 +741,7 @@ async def cleanup_safe(_: None = Depends(_require_token)):
 @app.get("/api/cleanup/judge")
 async def cleanup_judge(_: None = Depends(_require_token)):
     """Stage 3 — Return judgment-needed candidates with AI suggestions."""
+    print(f"[TRACE] core.hermes.server.cleanup_judge: enter", file=sys.stderr, flush=True)
     from tools.disk_cleanup import judgment_scan
     return judgment_scan()
 
@@ -720,6 +753,7 @@ async def cleanup_delete(body: dict, _: None = Depends(_require_token)):
     Body: {"path": "C:\\...\\something"}
     Never-touch paths are rejected with 403.
     """
+    print(f"[TRACE] core.hermes.server.cleanup_delete: enter", file=sys.stderr, flush=True)
     from fastapi import HTTPException
     from tools.disk_cleanup import delete_judgment_item, never_touch_check
     path = body.get("path", "").strip()
@@ -744,6 +778,7 @@ phone_dir = os.path.join(project_root, "phone")
 @app.get("/api/telemetry")
 async def get_telemetry_api(_: None = Depends(_require_token)):
     """Returns aggregated agent execution telemetry and costs."""
+    print(f"[TRACE] core.hermes.server.get_telemetry_api: enter", file=sys.stderr, flush=True)
     import json
     from core.orchestrator.distributed_sync import agents_md_lock
 
@@ -771,6 +806,7 @@ async def get_telemetry_api(_: None = Depends(_require_token)):
             with open(telemetry_path, "r", encoding="utf-8") as f:
                 records = json.load(f)
         except Exception as e:
+            print(f"[TRACE] core.hermes.server.get_telemetry_api: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.error(f"Error loading telemetry records: {e}")
             records = []
 

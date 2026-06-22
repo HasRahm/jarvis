@@ -12,6 +12,7 @@ path (bus → controller → renderer → Live), not a private shortcut.
 """
 
 from __future__ import annotations
+import sys
 
 import time
 from rich.console import Console
@@ -30,6 +31,7 @@ SUBTASKS = [
 
 
 def main() -> None:
+    print(f"[TRACE] core.cli.demo_graph.main: enter", file=sys.stderr, flush=True)
     console = Console()
     with GraphSession(console, TASK):
         time.sleep(1.0)

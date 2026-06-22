@@ -1,3 +1,4 @@
+import sys
 import subprocess
 import os
 
@@ -24,4 +25,5 @@ def brain_get(slug: str) -> str:
         from brain.supabase_store import mem_get
         return mem_get(slug) or ""
     except Exception:
+        print(f"[TRACE] brain.get.brain_get: except Exception", file=sys.stderr, flush=True)
         return ""

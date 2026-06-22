@@ -6,6 +6,7 @@ Supabase is unreachable (e.g. the project is paused -> getaddrinfo fails). Memor
 is therefore ALWAYS there: writes persist locally; supabase_store syncs to the
 cloud when it's up. Never raises.
 """
+import sys
 
 import os
 import sqlite3
@@ -24,6 +25,7 @@ _initialized = False
 
 
 def _conn():
+    print(f"[TRACE] brain.local_store._conn: enter", file=sys.stderr, flush=True)
     os.makedirs(os.path.dirname(_DB_PATH), exist_ok=True)
     c = sqlite3.connect(_DB_PATH, timeout=5.0)
     c.execute("PRAGMA journal_mode=WAL")
@@ -31,6 +33,7 @@ def _conn():
 
 
 def _ensure_schema():
+    print(f"[TRACE] brain.local_store._ensure_schema: enter", file=sys.stderr, flush=True)
     global _initialized
     if _initialized:
         return
@@ -46,11 +49,13 @@ def _ensure_schema():
                 )
             _initialized = True
         except Exception as e:
+            print(f"[TRACE] brain.local_store._ensure_schema: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.warning("[local_store] schema init failed: %s", e)
 
 
 def local_get(slug: str) -> str:
     """Exact-slug fetch. Returns content or '' if absent/unavailable."""
+    print(f"[TRACE] brain.local_store.local_get: enter", file=sys.stderr, flush=True)
     if not slug:
         return ""
     _ensure_schema()
@@ -59,12 +64,14 @@ def local_get(slug: str) -> str:
             row = c.execute("SELECT content FROM memory WHERE slug=?", (slug,)).fetchone()
             return (row[0] if row else "") or ""
     except Exception as e:
+        print(f"[TRACE] brain.local_store.local_get: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning("[local_store] get failed: %s", e)
         return ""
 
 
 def local_search(query: str, limit: int = 5) -> list[dict]:
     """Substring search over slug + content. Returns list of {slug, content}."""
+    print(f"[TRACE] brain.local_store.local_search: enter", file=sys.stderr, flush=True)
     q = (query or "").strip()
     if not q:
         return []
@@ -80,12 +87,14 @@ def local_search(query: str, limit: int = 5) -> list[dict]:
             ).fetchall()
         return [{"slug": r[0], "content": r[1]} for r in rows]
     except Exception as e:
+        print(f"[TRACE] brain.local_store.local_search: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning("[local_store] search failed: %s", e)
         return []
 
 
 def local_upsert(slug: str, content: str) -> bool:
     """Insert or update a memory row. Returns True on success."""
+    print(f"[TRACE] brain.local_store.local_upsert: enter", file=sys.stderr, flush=True)
     if not slug:
         return False
     _ensure_schema()
@@ -99,5 +108,6 @@ def local_upsert(slug: str, content: str) -> bool:
             )
         return True
     except Exception as e:
+        print(f"[TRACE] brain.local_store.local_upsert: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning("[local_store] upsert failed: %s", e)
         return False

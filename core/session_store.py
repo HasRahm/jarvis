@@ -10,6 +10,7 @@ Two layers:
 Each line is one message dict: {"role": ..., "content": ...}.
 System messages are stripped on save (they are rebuilt at startup).
 """
+import sys
 import json
 import os
 import hashlib
@@ -21,6 +22,7 @@ _BY_DIR = _SESSIONS_DIR / "by_dir"
 
 
 def _ensure_dir() -> Path:
+    print(f"[TRACE] core.session_store._ensure_dir: enter", file=sys.stderr, flush=True)
     _SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     return _SESSIONS_DIR
 
@@ -29,6 +31,7 @@ def _ensure_dir() -> Path:
 
 def _cwd_key(cwd: str | None = None) -> str:
     """Stable, filesystem-safe key for a working directory."""
+    print(f"[TRACE] core.session_store._cwd_key: enter", file=sys.stderr, flush=True)
     p = os.path.abspath(cwd or os.getcwd())
     # Normalise case on Windows so C:\X and c:\x map to the same memory.
     if os.name == "nt":
@@ -37,12 +40,14 @@ def _cwd_key(cwd: str | None = None) -> str:
 
 
 def _cwd_path(cwd: str | None = None) -> Path:
+    print(f"[TRACE] core.session_store._cwd_path: enter", file=sys.stderr, flush=True)
     _BY_DIR.mkdir(parents=True, exist_ok=True)
     return _BY_DIR / f"{_cwd_key(cwd)}.jsonl"
 
 
 def save_cwd(messages: list[dict], cwd: str | None = None, max_turns: int = 200) -> str:
     """Persist conversation for the current directory (rolling, capped)."""
+    print(f"[TRACE] core.session_store.save_cwd: enter", file=sys.stderr, flush=True)
     path = _cwd_path(cwd)
     # Keep the tail so the file never grows without bound.
     kept = [m for m in messages if m.get("role") != "system"][-max_turns * 4:]
@@ -57,6 +62,7 @@ def save_cwd(messages: list[dict], cwd: str | None = None, max_turns: int = 200)
 
 def load_cwd(cwd: str | None = None) -> list[dict]:
     """Return saved messages for the current directory (excluding the _meta line)."""
+    print(f"[TRACE] core.session_store.load_cwd: enter", file=sys.stderr, flush=True)
     path = _cwd_path(cwd)
     if not path.exists():
         return []
@@ -65,18 +71,21 @@ def load_cwd(cwd: str | None = None) -> list[dict]:
 
 def clear_cwd(cwd: str | None = None) -> bool:
     """Forget the current directory's rolling memory. Returns True if something was removed."""
+    print(f"[TRACE] core.session_store.clear_cwd: enter", file=sys.stderr, flush=True)
     path = _cwd_path(cwd)
     if path.exists():
         try:
             path.unlink()
             return True
         except Exception:
+            print(f"[TRACE] core.session_store.clear_cwd: except Exception", file=sys.stderr, flush=True)
             return False
     return False
 
 
 def save(messages: list[dict], name: str = "") -> str:
     """Persist conversation messages to disk.  Returns the file path."""
+    print(f"[TRACE] core.session_store.save: enter", file=sys.stderr, flush=True)
     d = _ensure_dir()
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     fname = f"{name}_{ts}.jsonl" if name else f"session_{ts}.jsonl"
@@ -91,6 +100,7 @@ def save(messages: list[dict], name: str = "") -> str:
 
 def load_last() -> list[dict] | None:
     """Return messages from the most-recent session file, or None."""
+    print(f"[TRACE] core.session_store.load_last: enter", file=sys.stderr, flush=True)
     d = _ensure_dir()
     files = sorted(d.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not files:
@@ -104,6 +114,7 @@ def load_file(path: str) -> list[dict]:
 
 def list_sessions(limit: int = 10) -> list[tuple[str, str, int]]:
     """Return (filename, mtime-string, turn-count) for recent sessions."""
+    print(f"[TRACE] core.session_store.list_sessions: enter", file=sys.stderr, flush=True)
     d = _ensure_dir()
     files = sorted(d.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)[:limit]
     out = []
@@ -116,6 +127,7 @@ def list_sessions(limit: int = 10) -> list[tuple[str, str, int]]:
 
 
 def _read(path: Path) -> list[dict]:
+    print(f"[TRACE] core.session_store._read: enter", file=sys.stderr, flush=True)
     msgs = []
     with open(path, encoding="utf-8", errors="replace") as f:
         for line in f:
@@ -124,5 +136,6 @@ def _read(path: Path) -> list[dict]:
                 try:
                     msgs.append(json.loads(line))
                 except json.JSONDecodeError:
+                    print(f"[TRACE] core.session_store._read: except JSONDecodeError", file=sys.stderr, flush=True)
                     pass
     return msgs

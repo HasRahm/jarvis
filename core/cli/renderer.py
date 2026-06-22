@@ -11,6 +11,7 @@ console = Console()
 def render_tool_call(name: str, args: dict):
     """Render a tool call block in a yellow panel."""
     # Convert args to clean string
+    print(f"[TRACE] core.cli.renderer.render_tool_call: enter", file=sys.stderr, flush=True)
     args_str = ", ".join(f"{k}={repr(v)}" for k, v in args.items()) if isinstance(args, dict) else str(args)
     text = Text.from_markup(f"[bold yellow]Executing:[/] [bold]{name}[/]({args_str})")
     console.print(
@@ -24,6 +25,7 @@ def render_tool_call(name: str, args: dict):
 
 def render_tool_result(name: str, result: str):
     """Render a tool execution result in a green panel."""
+    print(f"[TRACE] core.cli.renderer.render_tool_result: enter", file=sys.stderr, flush=True)
     res_str = str(result)
     summary = res_str[:300] + ("..." if len(res_str) > 300 else "")
     text = Text.from_markup(f"[bold green]Result of:[/] {name}\n[dim]{summary}[/]")
@@ -38,6 +40,7 @@ def render_tool_result(name: str, result: str):
 
 def render_agent_dispatch(agent: str, model: str, task: str):
     """Render an agent task dispatch block in dynamic colors."""
+    print(f"[TRACE] core.cli.renderer.render_agent_dispatch: enter", file=sys.stderr, flush=True)
     color = {
         "frontend": "blue",
         "backend": "orange1",
@@ -57,6 +60,7 @@ def render_agent_dispatch(agent: str, model: str, task: str):
 
 def render_agents_md_update(agent: str, status: str, step: str):
     """Log an AGENTS.md state update."""
+    print(f"[TRACE] core.cli.renderer.render_agents_md_update: enter", file=sys.stderr, flush=True)
     color = {
         "idle": "dim white",
         "working": "yellow",
@@ -72,6 +76,7 @@ def render_agents_md_update(agent: str, status: str, step: str):
 
 def render_system_banner():
     """Print the welcome header banner."""
+    print(f"[TRACE] core.cli.renderer.render_system_banner: enter", file=sys.stderr, flush=True)
     table = Table(show_header=False, border_style="cyan")
     table.add_row(
         Text.from_markup(

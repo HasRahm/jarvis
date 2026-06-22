@@ -1,3 +1,4 @@
+import sys
 import os
 import time
 import requests
@@ -20,9 +21,11 @@ def is_local_online():
         resp = requests.get(LOCAL_HEALTH_URL, timeout=5)
         return resp.status_code == 200
     except requests.RequestException:
+        print(f"[TRACE] core.sync.watcher.is_local_online: except RequestException", file=sys.stderr, flush=True)
         return False
 
 def ping_cloud():
+    print(f"[TRACE] core.sync.watcher.ping_cloud: enter", file=sys.stderr, flush=True)
     if not OPENCLAW_URL:
         logger.warning("OPENCLAW_URL not set in .env. Skipping cloud ping.")
         return
@@ -41,6 +44,7 @@ def ping_cloud():
         else:
             logger.warning(f"Failed to ping OpenClaw: {resp.status_code} {resp.text}")
     except requests.RequestException as e:
+        print(f"[TRACE] core.sync.watcher.ping_cloud: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.error(f"Error pinging cloud: {e}")
 
 if __name__ == "__main__":

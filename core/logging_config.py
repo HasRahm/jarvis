@@ -5,6 +5,7 @@ Call configure_logging(service_name) once at the top of each entry-point module.
 Writes rotating log files to logs/<service>.log (10 MB per file, 5 backups).
 Console output uses the same format. Set JARVIS_DEBUG=true for DEBUG level.
 """
+import sys
 
 import logging
 import os
@@ -30,6 +31,7 @@ def configure_logging(service_name: str = "jarvis") -> None:
     Safe to call multiple times — subsequent calls for the same service_name
     are no-ops. Uses JARVIS_DEBUG env var to switch between INFO and DEBUG.
     """
+    print(f"[TRACE] core.logging_config.configure_logging: enter", file=sys.stderr, flush=True)
     if service_name in _configured:
         return
     _configured.add(service_name)
