@@ -545,6 +545,45 @@ class JarvisRepl:
             def write(self, *a, **k): pass
             def flush(self): pass
 
+        # Trace-preserving stderr sink. The REPL must swallow the adapter's raw routing
+        # chatter (it would corrupt the Live display), but the always-on [TRACE] lines are
+        # debug signal we DON'T want to lose. This sink drops normal noise but tees any line
+        # containing "[TRACE]" to logs/repl_trace.log (and to the real stderr when
+        # JARVIS_TRACE_CONSOLE=1, for users who redirect stderr to a file on launch).
+        _trace_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "logs", "repl_trace.log")
+        _trace_to_console = os.environ.get("JARVIS_TRACE_CONSOLE") == "1"
+
+        class _TraceSink:
+            def __init__(self, real):
+                self._real = real
+                self._buf = ""
+
+            def write(self, s):
+                try:
+                    self._buf += s
+                    while "\n" in self._buf:
+                        line, self._buf = self._buf.split("\n", 1)
+                        if "[TRACE]" in line:
+                            try:
+                                os.makedirs(os.path.dirname(_trace_path), exist_ok=True)
+                                with open(_trace_path, "a", encoding="utf-8") as _tf:
+                                    _tf.write(line + "\n")
+                            except Exception:
+                                pass
+                            if _trace_to_console and self._real is not None:
+                                self._real.write(line + "\n")
+                except Exception:
+                    pass
+
+            def flush(self):
+                try:
+                    if _trace_to_console and self._real is not None:
+                        self._real.flush()
+                except Exception:
+                    pass
+
         # Phase 39: harness-enforced autonomy + verification state.
         from core.orchestrator import exec_guard
         continues = 0            # autonomy nudges used this turn
@@ -587,7 +626,7 @@ class JarvisRepl:
                     real_stderr = sys.stderr
                     if coding:
                         sys.stdout = _Sink()
-                        sys.stderr = _Sink()
+                        sys.stderr = _TraceSink(real_stderr)  # keep [TRACE] lines, drop UI noise
                         try:
                             msg = call_llm(messages=messages, model=model, tools=TOOL_DEFINITIONS)
                         finally:
@@ -600,9 +639,9 @@ class JarvisRepl:
                                 buf[kind] = buf.get(kind, "") + t
                                 live.update(render())
                             set_stream_hook(hook)
-                            # Swallow the adapter's raw prints on BOTH streams
+                            # Swallow the adapter's raw prints on stdout; keep [TRACE] on stderr.
                             sys.stdout = _Sink()
-                            sys.stderr = _Sink()
+                            sys.stderr = _TraceSink(real_stderr)
                             try:
                                 msg = call_llm(messages=messages, model=model, tools=TOOL_DEFINITIONS)
                             finally:
