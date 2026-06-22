@@ -8,6 +8,7 @@ Reuses the proven primitives in tools/hybrid_cursor.py (one source of truth):
 Exposes a clean dict-returning public API so the model can call verify_outcome as a
 tool after consequential actions instead of assuming success. Never raises.
 """
+import sys
 
 import logging
 
@@ -27,6 +28,7 @@ def verify_outcome(expected_text: str | None = None, timeout: float = 3.0) -> di
         ok, message = _verify_outcome(expected_text=expected_text, timeout=timeout)
         return {"success": bool(ok), "message": message}
     except Exception as e:
+        print(f"[TRACE] core.orchestrator.verification_loop.verify_outcome: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[verify] verify_outcome failed: {e}")
         return {"success": False, "message": f"verification error: {e}"}
 
@@ -38,5 +40,6 @@ def check_text_on_screen(text: str, min_conf: int = 40) -> dict:
         found, location = _check_text_on_screen(text, min_conf=min_conf)
         return {"found": bool(found), "location": location}
     except Exception as e:
+        print(f"[TRACE] core.orchestrator.verification_loop.check_text_on_screen: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[verify] check_text_on_screen failed: {e}")
         return {"found": False, "location": f"error: {e}"}

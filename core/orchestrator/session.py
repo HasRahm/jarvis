@@ -1,3 +1,4 @@
+import sys
 import os
 import json
 import time
@@ -10,6 +11,7 @@ from brain.supabase_store import mem_upsert
 class SessionManager:
     def checkpoint(self, session_id: str, state: dict):
         """Write checkpoint before every action."""
+        print(f"[TRACE] core.orchestrator.session.SessionManager.checkpoint: enter", file=sys.stderr, flush=True)
         data = {
             "session_id": session_id,
             "state": state,
@@ -23,6 +25,7 @@ class SessionManager:
         
     def mark_completed(self, session_id: str, state: dict):
         """Mark session as completed."""
+        print(f"[TRACE] core.orchestrator.session.SessionManager.mark_completed: enter", file=sys.stderr, flush=True)
         data = {
             "session_id": session_id,
             "state": state,
@@ -36,6 +39,7 @@ class SessionManager:
 
     def recover(self) -> dict | None:
         """On startup, check for incomplete sessions."""
+        print(f"[TRACE] core.orchestrator.session.SessionManager.recover: enter", file=sys.stderr, flush=True)
         try:
             from brain.write import _GBRAIN_PATH
             if _GBRAIN_PATH:
@@ -58,7 +62,9 @@ class SessionManager:
                                     if data.get("status") == "incomplete":
                                         return data
                                 except Exception:
+                                    print(f"[TRACE] core.orchestrator.session.SessionManager.recover: except Exception", file=sys.stderr, flush=True)
                                     continue
         except Exception:
+            print(f"[TRACE] core.orchestrator.session.SessionManager.recover: except Exception", file=sys.stderr, flush=True)
             pass
         return None

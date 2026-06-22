@@ -11,6 +11,7 @@ working mean" bar.
 returns a deterministic mock and writes a mock SPEC.md when JARVIS_CI=true. Never raises — on any
 failure it returns a minimal spec so the DAG can still proceed.
 """
+import sys
 
 import os
 import json
@@ -90,6 +91,7 @@ def _finalize_assignments(spec: dict) -> list:
     """Return the spec's agent assignments — validated, synthesized when absent, each tagged with
     the cost-optimized model for its role (via model_router). This is the "office meeting" output
     the DAG executes from."""
+    print(f"[TRACE] core.orchestrator.architect._finalize_assignments: enter", file=sys.stderr, flush=True)
     from agents.model_router import get_model
 
     raw = spec.get("assignments")
@@ -141,6 +143,7 @@ def _finalize_assignments(spec: dict) -> list:
 
 def _render_markdown(spec: dict) -> str:
     """Render the spec dict as a human-reviewable SPEC.md artifact."""
+    print(f"[TRACE] core.orchestrator.architect._render_markdown: enter", file=sys.stderr, flush=True)
     lines = [f"# SPEC — {spec.get('title', 'Project')}", "",
              spec.get("summary", ""), "", "## Stack"]
     for k, v in (spec.get("stack") or {}).items():
@@ -176,11 +179,13 @@ def _write_spec_md(spec: dict) -> None:
         with open(SPEC_MD_PATH, "w", encoding="utf-8") as f:
             f.write(_render_markdown(spec))
     except Exception as e:
+        print(f"[TRACE] core.orchestrator.architect._write_spec_md: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[architect] could not write SPEC.md: {e}")
 
 
 def produce_spec(user_task: str, user_id: str | None = None) -> dict:
     """Produce and persist a SPEC artifact for the user task. Returns the spec dict."""
+    print(f"[TRACE] core.orchestrator.architect.produce_spec: enter", file=sys.stderr, flush=True)
     if os.environ.get("JARVIS_CI") == "true":
         spec = _mock_spec(user_task)
         spec["assignments"] = _finalize_assignments(spec)
@@ -215,6 +220,7 @@ def produce_spec(user_task: str, user_id: str | None = None) -> dict:
                     f"{len(spec.get('assignments', []))} agent assignments)")
         return spec
     except Exception as e:
+        print(f"[TRACE] core.orchestrator.architect.produce_spec: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[architect] SPEC generation failed ({e}); proceeding with minimal spec.")
         spec = _mock_spec(user_task)
         spec["assignments"] = _finalize_assignments(spec)

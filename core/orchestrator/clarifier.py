@@ -9,6 +9,7 @@ shared rules mandate autonomy, so:
 
 Fails OPEN: any LLM/parse error -> proceed (autonomy preserved).
 """
+import sys
 
 import os
 import re
@@ -45,6 +46,7 @@ def check_ambiguity(task: str) -> dict:
 
     Each question: {"question": str, "options": [str, ...]}.
     """
+    print(f"[TRACE] core.orchestrator.clarifier.check_ambiguity: enter", file=sys.stderr, flush=True)
     task = (task or "").strip()
     if not task:
         return {"proceed": True}
@@ -63,6 +65,7 @@ def check_ambiguity(task: str) -> dict:
         )
         raw = (result.get("content") if isinstance(result, dict) else str(result)) or ""
     except Exception as e:
+        print(f"[TRACE] core.orchestrator.clarifier.check_ambiguity: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[clarifier] check failed, proceeding: {e}")
         return {"proceed": True}
 
@@ -78,6 +81,7 @@ def check_ambiguity(task: str) -> dict:
 
 def _parse_questions(raw: str) -> list[dict]:
     """Parse 'Q: ...' blocks with following '- option' bullet lines."""
+    print(f"[TRACE] core.orchestrator.clarifier._parse_questions: enter", file=sys.stderr, flush=True)
     questions = []
     current = None
     for line in raw.splitlines():

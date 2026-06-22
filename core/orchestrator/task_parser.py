@@ -2,6 +2,7 @@
 Task Parser — uses gemma4:31b-cloud to decompose a natural language task
 into structured subtasks with agent assignments and dependencies.
 """
+import sys
 
 import json
 import logging
@@ -50,6 +51,7 @@ def parse_task(user_task: str, spec: dict | None = None) -> list[dict]:
     Returns:
         List of subtask dicts with id, agent, task, depends_on
     """
+    print(f"[TRACE] core.orchestrator.task_parser.parse_task: enter", file=sys.stderr, flush=True)
     import os
 
     # Phase 41: when the architect produced an office brief with assignments, derive the subtask
@@ -151,6 +153,7 @@ def parse_task(user_task: str, spec: dict | None = None) -> list[dict]:
                 "acceptance_criteria."
             )
         except Exception:
+            print(f"[TRACE] core.orchestrator.task_parser.parse_task: except Exception", file=sys.stderr, flush=True)
             decomposition_input = user_task
 
     raw = agent._call_model(final_prompt, decomposition_input)
