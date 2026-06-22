@@ -425,6 +425,7 @@ def run_dag(user_task: str, dry_run: bool = False, task_id: str = None, user_id:
     orchestrator.user_id = user_id
     register_orchestrator(task_id, orchestrator)
 
+    print(f"[TRACE] {__name__}.run_dag: enter task={user_task[:60]} task_id={task_id} dry_run={dry_run} recovered={is_recovered}", file=sys.stderr, flush=True)
     logger.info(f"[{run_id}] Starting DAG: {user_task[:80]}")
     _push_hermes_event({"type": "task_status", "status": "PLANNING", "task_id": task_id, "task": user_task[:120]})
 
@@ -563,10 +564,13 @@ def run_dag(user_task: str, dry_run: bool = False, task_id: str = None, user_id:
                             "status": "active", "label": st["task"][:80]})
 
         # Phase 12: Run agent in thread pool with timeout to prevent indefinite blocking
+        print(f"[TRACE] {__name__}.run_dag: submit subtask id={st['id']} agent={agent_role} desc={subtask_desc[:60]}", file=sys.stderr, flush=True)
         _future = _agent_executor.submit(agent.run, subtask_desc)
         try:
             result = _future.result(timeout=_AGENT_TIMEOUT_SEC)
+            print(f"[TRACE] {__name__}.run_dag: subtask done id={st['id']} agent={agent_role} status={result.get('status') if isinstance(result, dict) else type(result).__name__}", file=sys.stderr, flush=True)
         except FuturesTimeoutError:
+            print(f"[TRACE] {__name__}.run_dag: subtask TIMEOUT id={st['id']} agent={agent_role} after={_AGENT_TIMEOUT_SEC}s", file=sys.stderr, flush=True)
             result = {
                 "status": "error",
                 "output": f"[TIMEOUT] {agent_role} agent timed out after {_AGENT_TIMEOUT_SEC}s",

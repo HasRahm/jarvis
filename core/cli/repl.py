@@ -488,6 +488,7 @@ class JarvisRepl:
 
         cli  = self._lazy_jarvis_cli()
         task = self._expand_file_refs(task)
+        print(f"[TRACE] {__name__}._agent_turn: enter mode={mode} force_coding={force_coding} task={task[:60]}", file=sys.stderr, flush=True)
 
         # Coding intent detection — runs in < 1 ms, no LLM cost
         if force_coding:
@@ -687,6 +688,7 @@ class JarvisRepl:
 
                     # Part 3: permission gate — ask y/N before risky/irreversible actions.
                     risky, reason = exec_guard.is_risky(fn, args)
+                    print(f"[TRACE] {__name__}._agent_turn: tool_call fn={fn} risky={risky} consequential={exec_guard.is_consequential(fn)}", file=sys.stderr, flush=True)
                     if risky and os.environ.get("JARVIS_AUTO_APPROVE") != "1":
                         if not self._ask_yes_no(f"⚠ Jarvis wants to {reason}: {fn}({args_str}). Proceed?"):
                             denied = (f"User DENIED the action {fn}. Do NOT retry it. Find a safe alternative "
@@ -718,6 +720,7 @@ class JarvisRepl:
                         baseline = exec_guard.capture_baseline()
 
                     result = self._dispatch_with_timeout(dispatch, fn, args)
+                    print(f"[TRACE] {__name__}._agent_turn: tool_result fn={fn} result={str(result)[:80]}", file=sys.stderr, flush=True)
                     if not coding:
                         preview = str(result)[:400]
                         _w = _warm()

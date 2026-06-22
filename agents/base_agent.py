@@ -229,6 +229,7 @@ class BaseAgent(ABC):
             except Exception as se:
                 logger.warning(f"[{self.role}] Dynamic skills injection failed: {se}")
 
+        print(f"[TRACE] {__name__}.BaseAgent._call_model: enter role={self.role} model={self.model}", file=sys.stderr, flush=True)
         if os.environ.get("JARVIS_CI") == "true":
             logger.info(f"[{self.role}] JARVIS_CI=true. Returning mock response.")
             return self._get_mock_response(user_prompt)
@@ -249,12 +250,14 @@ class BaseAgent(ABC):
                     expanded.append(mirror)
             models_to_try = expanded
 
+        print(f"[TRACE] {__name__}.BaseAgent._call_model: chain={[str(m)[:40] for m in models_to_try]}", file=sys.stderr, flush=True)
         for model_str in models_to_try:
             provider = get_provider(model_str)
             for attempt in range(self.max_retries):
                 try:
                     return self._raw_call(provider, model_str, system_prompt, user_prompt)
                 except Exception as e:
+                    print(f"[TRACE] {__name__}.BaseAgent._call_model: attempt failed model={model_str} attempt={attempt+1} err={str(e)[:80]}", file=sys.stderr, flush=True)
                     if _is_permanent_error(e):
                         logger.warning(
                             f"[{self.role}] {model_str} failed permanently: {e}. "
@@ -274,6 +277,7 @@ class BaseAgent(ABC):
 
     def _raw_call(self, provider: str, model: str, system_prompt: str, user_prompt: str) -> str:
         """Make a single API call to the specified provider/model."""
+        print(f"[TRACE] {__name__}.BaseAgent._raw_call: provider={provider} model={model} in_chars={len(system_prompt)+len(user_prompt)}", file=sys.stderr, flush=True)
         start_time = time.time()
         input_tokens = len(system_prompt + user_prompt) // 4
         output_tokens = 0
@@ -453,6 +457,7 @@ class BaseAgent(ABC):
                 raise ValueError(f"Unknown provider: {provider}")
 
             latency = time.time() - start_time
+            print(f"[TRACE] {__name__}.BaseAgent._raw_call: ok model={model} latency={latency:.2f}s out_tokens={output_tokens}", file=sys.stderr, flush=True)
             record_api_telemetry(self.role, model, latency, input_tokens, output_tokens, status)
             ev.emit("tokens", agent=self.role, tokens=input_tokens + output_tokens)
             # 10b: Record success for adaptive learning
@@ -465,6 +470,7 @@ class BaseAgent(ABC):
             return response_text
 
         except Exception as e:
+            print(f"[TRACE] {__name__}.BaseAgent._raw_call: EXCEPTION provider={provider} model={model} err={str(e)[:80]}", file=sys.stderr, flush=True)
             status = "error"
             latency = time.time() - start_time
             record_api_telemetry(self.role, model, latency, input_tokens, 0, status)

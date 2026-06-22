@@ -51,6 +51,8 @@ def _mark_model_used(model: str, result):
     really answered — not an intermediate attempt that also failed. STDERR keeps NDJSON stdout clean.
     """
     _LAST_RUN["model_used"] = model
+    _tc = len(result.get("tool_calls", [])) if isinstance(result, dict) else 0
+    print(f"[TRACE] {__name__}._mark_model_used: model_used={model} fallbacks={_LAST_RUN.get('fallbacks', 0)} tool_calls={_tc}", file=sys.stderr, flush=True)
     req = _LAST_RUN.get("requested")
     if _LAST_RUN.get("fallbacks", 0) > 0 and req and model != req:
         _notice = Fore.YELLOW + f"⚠ requested '{req}' unavailable → using '{model}'" + Style.RESET_ALL
@@ -309,6 +311,7 @@ def _format_messages_for_openai(messages):
 
 def _call_openai_compatible_api(api_key, base_url, model, messages, tools, extra_headers=None):
     """Unified OpenAI-compatible API caller for both OpenAI and Gemini fallback endpoints."""
+    print(f"[TRACE] {__name__}._call_openai_compatible_api: model={model} base_url={base_url[:40]} msgs={len(messages)}", file=sys.stderr, flush=True)
     formatted_messages = _format_messages_for_openai(messages)
 
     # Format tool definitions to OpenAI structure
@@ -719,6 +722,7 @@ def call_llm(messages, model="gemma4:31b-cloud", tools=None):
     never spend credits — only local Ollama is attempted.
     """
     _offline = is_offline_mode()
+    print(f"[TRACE] {__name__}.call_llm: enter requested={model} offline={_offline} msgs={len(messages)} tools={len(tools) if tools else 0}", file=sys.stderr, flush=True)
     # Phase 42: FREE + reachable models first, so a turn never dies on billing/rate limits.
     # A truly-free OpenRouter model (qwen3-next-80b:free) sits right after local gemma as the
     # reliable safety net — it works over the internet even when local Ollama is down AND all paid
@@ -747,6 +751,7 @@ def call_llm(messages, model="gemma4:31b-cloud", tools=None):
         _LAST_RUN["fallbacks"] = i      # the successful attempt's index = number of fallbacks taken
         try:
             m_lower = m.lower()
+            print(f"[TRACE] {__name__}.call_llm: try[{i}] model={m}", file=sys.stderr, flush=True)
 
             # Offline guard: never touch a cloud provider. Skip anything not local-Ollama-routable.
             if _offline and not _is_ollama_routable(m_lower):
@@ -895,6 +900,7 @@ def call_llm(messages, model="gemma4:31b-cloud", tools=None):
                 
         except Exception as e:
             # Phase 42: concise one-line notice (full traceback only under JARVIS_DEBUG=1).
+            print(f"[TRACE] {__name__}.call_llm: model={m} FAILED err={str(e)[:80]}", file=sys.stderr, flush=True)
             _short = (str(e).splitlines()[0] if str(e).strip() else type(e).__name__)[:140]
             _qprint(Fore.YELLOW + f"[LLM Adapter] {m} unavailable ({_short}); trying next fallback…" + Style.RESET_ALL)
             if os.environ.get("JARVIS_DEBUG") == "1":
@@ -920,6 +926,7 @@ def call_llm(messages, model="gemma4:31b-cloud", tools=None):
             f"(last error: {_err})"
         )
     # Total failure — no model answered. Mark it so callers don't report false success.
+    print(f"[TRACE] {__name__}.call_llm: ALL MODELS FAILED last_err={_err[:80]}", file=sys.stderr, flush=True)
     _LAST_RUN["model_used"] = None
     return {"role": "assistant", "content": content, "_model_used": None, "_failed": True}
 
