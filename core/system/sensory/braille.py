@@ -1,3 +1,4 @@
+import sys
 import os
 import hashlib
 import logging
@@ -13,18 +14,21 @@ try:
         import win32process
         HAS_WIN32 = True
 except ImportError:
+    print(f"[TRACE] core.system.sensory.braille.<module>: except ImportError", file=sys.stderr, flush=True)
     pass
 
 try:
     import psutil
     HAS_PSUTIL = True
 except ImportError:
+    print(f"[TRACE] core.system.sensory.braille.<module>: except ImportError", file=sys.stderr, flush=True)
     HAS_PSUTIL = False
 
 class BrailleLayer:
     """Structural texture detection — feels the shape of context."""
     
     def read(self) -> dict:
+        print(f"[TRACE] core.system.sensory.braille.BrailleLayer.read: enter", file=sys.stderr, flush=True)
         if not HAS_WIN32:
             return {
                 "hwnd": 0,
@@ -69,6 +73,7 @@ class BrailleLayer:
                 "dom_hash": dom_hash
             }
         except Exception as e:
+            print(f"[TRACE] core.system.sensory.braille.BrailleLayer.read: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.warning(f"[Braille] Error reading window state: {e}")
             return {
                 "hwnd": 0,
@@ -80,6 +85,7 @@ class BrailleLayer:
             }
             
     def _get_process(self, hwnd) -> str:
+        print(f"[TRACE] core.system.sensory.braille.BrailleLayer._get_process: enter", file=sys.stderr, flush=True)
         if not HAS_PSUTIL or not HAS_WIN32:
             return "unknown"
         try:
@@ -87,9 +93,11 @@ class BrailleLayer:
             proc = psutil.Process(pid)
             return proc.name()
         except Exception:
+            print(f"[TRACE] core.system.sensory.braille.BrailleLayer._get_process: except Exception", file=sys.stderr, flush=True)
             return "unknown"
             
     def _hash_accessibility_tree(self, hwnd) -> str:
+        print(f"[TRACE] core.system.sensory.braille.BrailleLayer._hash_accessibility_tree: enter", file=sys.stderr, flush=True)
         if not HAS_WIN32:
             return ""
         children = []
@@ -98,10 +106,12 @@ class BrailleLayer:
                 class_name = win32gui.GetClassName(child)
                 children.append(class_name)
             except Exception:
+                print(f"[TRACE] core.system.sensory.braille.BrailleLayer._hash_accessibility_tree.collect: except Exception", file=sys.stderr, flush=True)
                 pass
         try:
             win32gui.EnumChildWindows(hwnd, collect, None)
         except Exception:
+            print(f"[TRACE] core.system.sensory.braille.BrailleLayer._hash_accessibility_tree: except Exception", file=sys.stderr, flush=True)
             pass
             
         if not children:

@@ -8,6 +8,7 @@ the task: the native app if installed, else an alternative app, else an API clie
 Wired into tools/open_app.py so opening an app never dead-ends on missing software.
 Never raises.
 """
+import sys
 
 import os
 import shutil
@@ -75,6 +76,7 @@ def _api_key_present(env_var: str) -> bool:
 
 def is_installed(app_name: str) -> bool:
     """True if the app can be found via PATH, registry, running process, or install dirs."""
+    print(f"[TRACE] core.system.app_resolver.is_installed: enter", file=sys.stderr, flush=True)
     key = (app_name or "").strip().lower()
     if not key:
         return False
@@ -95,8 +97,10 @@ def is_installed(app_name: str) -> bool:
                 ):
                     return True
             except OSError:
+                print(f"[TRACE] core.system.app_resolver.is_installed: except OSError", file=sys.stderr, flush=True)
                 continue
     except Exception:
+        print(f"[TRACE] core.system.app_resolver.is_installed: except Exception", file=sys.stderr, flush=True)
         pass
 
     # 3. Running process
@@ -107,6 +111,7 @@ def is_installed(app_name: str) -> bool:
             if n.startswith(key):
                 return True
     except Exception:
+        print(f"[TRACE] core.system.app_resolver.is_installed: except Exception", file=sys.stderr, flush=True)
         pass
 
     # 4. Common install dirs
@@ -117,6 +122,7 @@ def is_installed(app_name: str) -> bool:
             if base and os.path.isdir(os.path.join(base, app_name)):
                 return True
         except Exception:
+            print(f"[TRACE] core.system.app_resolver.is_installed: except Exception", file=sys.stderr, flush=True)
             continue
 
     # 5. Start panel (Get-StartApps) — matches what open_app can actually launch.
@@ -125,6 +131,7 @@ def is_installed(app_name: str) -> bool:
         if _find_in_start_panel(app_name):
             return True
     except Exception:
+        print(f"[TRACE] core.system.app_resolver.is_installed: except Exception", file=sys.stderr, flush=True)
         pass
 
     return False
@@ -136,6 +143,7 @@ def resolve(app_name: str, action: str = "open") -> dict:
     {"method": native_app|alternative_app|api|browser|web_search, "app"/"url"/"client",
      "note": substitution message or None, "confidence": float}
     """
+    print(f"[TRACE] core.system.app_resolver.resolve: enter", file=sys.stderr, flush=True)
     app_name = (app_name or "").strip()
     if not app_name:
         return {"method": "web_search", "query": "", "note": None, "confidence": 0.0}

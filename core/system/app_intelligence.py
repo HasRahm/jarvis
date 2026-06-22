@@ -10,6 +10,7 @@ PASSIVE by default — exploration only READS the screen. Active probing (sendin
 shortcuts, clicking menus) has side effects and is gated behind explore_active=True
 (deferred, off by default). Never raises.
 """
+import sys
 
 import os
 import json
@@ -25,6 +26,7 @@ def _guide_slug(app_name: str) -> str:
 
 def get_app_guide(app_name: str) -> str:
     """Return a stored guide from GBrain, or build + persist one on first encounter."""
+    print(f"[TRACE] core.system.app_intelligence.get_app_guide: enter", file=sys.stderr, flush=True)
     app_name = (app_name or "").strip()
     if not app_name:
         return "[app_guide] no app name provided."
@@ -38,6 +40,7 @@ def get_app_guide(app_name: str) -> str:
         if existing and existing.strip():
             return existing
     except Exception as e:
+        print(f"[TRACE] core.system.app_intelligence.get_app_guide: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[app_intel] recall failed: {e}")
 
     # 2. First encounter — explore + synthesize
@@ -50,6 +53,7 @@ def get_app_guide(app_name: str) -> str:
         mem_upsert(slug, guide)
         logger.info(f"[app_intel] stored guide: {slug}")
     except Exception as e:
+        print(f"[TRACE] core.system.app_intelligence.get_app_guide: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[app_intel] persist failed: {e}")
 
     return guide
@@ -57,6 +61,7 @@ def get_app_guide(app_name: str) -> str:
 
 def explore_app(app_name: str, explore_active: bool = False) -> dict:
     """PASSIVE structural read of the active app. Active probing deferred (off)."""
+    print(f"[TRACE] core.system.app_intelligence.explore_app: enter", file=sys.stderr, flush=True)
     structure = {
         "app": app_name,
         "explored_at": datetime.now().isoformat(),
@@ -76,6 +81,7 @@ def explore_app(app_name: str, explore_active: bool = False) -> dict:
             for n in graph["nodes"][:40] if n.get("name")
         ]
     except Exception as e:
+        print(f"[TRACE] core.system.app_intelligence.explore_app: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[app_intel] tree read failed: {e}")
 
     # Density zones -> rough layout
@@ -89,6 +95,7 @@ def explore_app(app_name: str, explore_active: bool = False) -> dict:
             "has_density_map": bool(imp.get("ascii_map")),
         }
     except Exception as e:
+        print(f"[TRACE] core.system.app_intelligence.explore_app: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[app_intel] density read failed: {e}")
 
     # Active probing intentionally NOT performed unless explicitly enabled.
@@ -100,6 +107,7 @@ def explore_app(app_name: str, explore_active: bool = False) -> dict:
 
 def _synthesize_guide(app_name: str, structure: dict) -> str:
     """Ask the orchestrator model to write a concise (<300-word) usage guide."""
+    print(f"[TRACE] core.system.app_intelligence._synthesize_guide: enter", file=sys.stderr, flush=True)
     if os.environ.get("JARVIS_CI") == "true":
         return (f"# Guide: {app_name}\n"
                 f"(CI stub) Use desktop_get_ui_tree / element_graph to locate elements, "
@@ -121,6 +129,7 @@ def _synthesize_guide(app_name: str, structure: dict) -> str:
         guide = guide.strip()
         return guide or f"# Guide: {app_name}\n(No synthesis available — explore with desktop_get_ui_tree.)"
     except Exception as e:
+        print(f"[TRACE] core.system.app_intelligence._synthesize_guide: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[app_intel] synthesis failed: {e}")
         return (f"# Guide: {app_name}\n"
                 f"Use desktop_get_ui_tree / element_graph to locate elements, "

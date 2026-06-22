@@ -4,6 +4,7 @@ Free tier: 40 RPM per model, no billing required.
 Uses NVIDIA_API_KEY when present; falls back to a curated known list.
 Cache: config/nvidia_models_cache.json (24h TTL).
 """
+import sys
 
 import os
 import json
@@ -42,12 +43,14 @@ _RATE_LIMIT = "40 RPM"
 
 
 def _read_cache() -> list | None:
+    print(f"[TRACE] core.system.nvidia_catalog._read_cache: enter", file=sys.stderr, flush=True)
     try:
         with open(_CACHE_PATH, "r", encoding="utf-8") as f:
             blob = json.load(f)
         if time.time() - blob.get("ts", 0) < _CACHE_TTL:
             return blob.get("models")
     except Exception:
+        print(f"[TRACE] core.system.nvidia_catalog._read_cache: except Exception", file=sys.stderr, flush=True)
         pass
     return None
 
@@ -58,10 +61,12 @@ def _write_cache(models: list) -> None:
         with open(_CACHE_PATH, "w", encoding="utf-8") as f:
             json.dump({"ts": time.time(), "models": models}, f)
     except Exception as e:
+        print(f"[TRACE] core.system.nvidia_catalog._write_cache: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[nvidia_catalog] cache write: {e}")
 
 
 def _fetch() -> list:
+    print(f"[TRACE] core.system.nvidia_catalog._fetch: enter", file=sys.stderr, flush=True)
     import httpx
     key = os.environ.get("NVIDIA_API_KEY") or os.environ.get("NVIDIA_NIM_API_KEY")
     if not key:
@@ -83,6 +88,7 @@ def _fetch() -> list:
 
 def list_models(query: str | None = None, refresh: bool = False, limit: int = 80) -> list:
     """Return NVIDIA Build models with rate_limit annotation, optionally filtered by query."""
+    print(f"[TRACE] core.system.nvidia_catalog.list_models: enter", file=sys.stderr, flush=True)
     models = None if refresh else _read_cache()
     if models is None:
         try:
@@ -90,6 +96,7 @@ def list_models(query: str | None = None, refresh: bool = False, limit: int = 80
             models = fetched if fetched else _KNOWN
             _write_cache(models)
         except Exception as e:
+            print(f"[TRACE] core.system.nvidia_catalog.list_models: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.debug(f"[nvidia_catalog] live fetch failed ({e}); using known list.")
             models = _KNOWN
 

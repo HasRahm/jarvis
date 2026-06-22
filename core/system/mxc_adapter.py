@@ -9,6 +9,7 @@ Usage:
     result  = run_in_sandbox(sandbox, cmd)
     destroy_sandbox(sandbox, task_id)
 """
+import sys
 
 import os
 import shutil
@@ -33,6 +34,7 @@ class MXCSandbox:
             subprocess.run(["mxc", "rm", "-f", self.container_id], check=True, capture_output=True, text=True)
             logger.info(f"[mxc_adapter] Terminated MXC container {self.container_id}")
         except subprocess.CalledProcessError as e:
+            print(f"[TRACE] core.system.mxc_adapter.MXCSandbox.kill: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.error(f"[mxc_adapter] Failed to terminate MXC container: {e.stderr}")
             raise e
 
@@ -50,6 +52,7 @@ class MXCSandbox:
                     self.stderr = stderr
             return ResultDict(result.stdout, result.stderr)
         except Exception as e:
+            print(f"[TRACE] core.system.mxc_adapter.MXCSandbox.run: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.error(f"[mxc_adapter] MXC exec failed: {e}")
             raise e
 
@@ -58,6 +61,7 @@ def create_sandbox(task_id: str) -> object | None:
     """
     Create a fresh MXC container for the given task.
     """
+    print(f"[TRACE] core.system.mxc_adapter.create_sandbox: enter", file=sys.stderr, flush=True)
     if _SANDBOX_MODE != "mxc":
         return None
 
@@ -86,9 +90,11 @@ def create_sandbox(task_id: str) -> object | None:
         return MXCSandbox(task_id, container_id)
         
     except subprocess.CalledProcessError as e:
+        print(f"[TRACE] core.system.mxc_adapter.create_sandbox: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[mxc_adapter] MXC create failed for task {task_id}: {e.stderr}. Falling back.")
         return None
     except Exception as e:
+        print(f"[TRACE] core.system.mxc_adapter.create_sandbox: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[mxc_adapter] MXC create exception: {e}. Falling back.")
         return None
 
@@ -97,6 +103,7 @@ def destroy_sandbox(sandbox: object | None, task_id: str) -> None:
     """
     Cleanly tear down an MXC container.
     """
+    print(f"[TRACE] core.system.mxc_adapter.destroy_sandbox: enter", file=sys.stderr, flush=True)
     if sandbox is None:
         return
     try:
@@ -104,6 +111,7 @@ def destroy_sandbox(sandbox: object | None, task_id: str) -> None:
             sandbox.kill()
         logger.info(f"[mxc_adapter] MXC container destroyed for task {task_id}")
     except Exception as e:
+        print(f"[TRACE] core.system.mxc_adapter.destroy_sandbox: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[mxc_adapter] MXC destroy failed for task {task_id}: {e}")
 
 
@@ -111,6 +119,7 @@ def run_in_sandbox(sandbox: object | None, command: str, cwd: str = "/workspace"
     """
     Execute a shell command inside an MXC container.
     """
+    print(f"[TRACE] core.system.mxc_adapter.run_in_sandbox: enter", file=sys.stderr, flush=True)
     if sandbox is None:
         return ""
     try:
@@ -119,5 +128,6 @@ def run_in_sandbox(sandbox: object | None, command: str, cwd: str = "/workspace"
             return (result.stdout or "") + (result.stderr or "")
         return ""
     except Exception as e:
+        print(f"[TRACE] core.system.mxc_adapter.run_in_sandbox: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[mxc_adapter] MXC command failed: {e}")
         return f"MXC error: {e}"

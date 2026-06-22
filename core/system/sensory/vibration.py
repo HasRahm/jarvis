@@ -1,3 +1,4 @@
+import sys
 import logging
 
 logger = logging.getLogger(__name__)
@@ -6,6 +7,7 @@ try:
     import psutil
     HAS_PSUTIL = True
 except ImportError:
+    print(f"[TRACE] core.system.sensory.vibration.<module>: except ImportError", file=sys.stderr, flush=True)
     HAS_PSUTIL = False
 
 class VibrationLayer:
@@ -15,6 +17,7 @@ class VibrationLayer:
         self.last = None
         
     def read(self) -> dict:
+        print(f"[TRACE] core.system.sensory.vibration.VibrationLayer.read: enter", file=sys.stderr, flush=True)
         if not HAS_PSUTIL:
             return {
                 "cpu": 0.0,
@@ -54,6 +57,7 @@ class VibrationLayer:
             self.last = current
             return {**current, "deltas": deltas}
         except Exception as e:
+            print(f"[TRACE] core.system.sensory.vibration.VibrationLayer.read: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.debug(f"[Vibration] Error reading system metrics: {e}")
             return {
                 "cpu": 0.0,

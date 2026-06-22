@@ -1,3 +1,4 @@
+import sys
 import os
 import re
 import json
@@ -40,6 +41,7 @@ class SkillsEngine:
         Uses a JSON mtime cache to skip reparsing unchanged files. On a warm
         start with 767 skills and no changes, this drops from ~500-2000ms to ~10ms.
         """
+        print(f"[TRACE] core.system.skills.SkillsEngine._load_skills: enter", file=sys.stderr, flush=True)
         self.skills = []
         if not os.path.exists(self.skills_dir):
             logger.warning(f"Skills directory '{self.skills_dir}' does not exist.")
@@ -52,6 +54,7 @@ class SkillsEngine:
                 with open(cache_path, "r", encoding="utf-8") as cf:
                     cache = json.load(cf)
         except Exception:
+            print(f"[TRACE] core.system.skills.SkillsEngine._load_skills: except Exception", file=sys.stderr, flush=True)
             cache = {}
 
         cache_dirty = False
@@ -65,6 +68,7 @@ class SkillsEngine:
                     try:
                         mtime = os.path.getmtime(file_path)
                     except OSError:
+                        print(f"[TRACE] core.system.skills.SkillsEngine._load_skills: except OSError", file=sys.stderr, flush=True)
                         continue
                     
                     # Check cache: if mtime matches, use cached data (skip file I/O + parsing)
@@ -102,6 +106,7 @@ class SkillsEngine:
                 if skill_data:
                     self.skills.append(skill_data)
         except Exception as pe:
+            print(f"[TRACE] core.system.skills.SkillsEngine._load_skills: except {str(pe)[:80]}", file=sys.stderr, flush=True)
             logger.warning(f"Failed loading plugin skills: {pe}")
         
         # Persist cache if anything changed
@@ -110,6 +115,7 @@ class SkillsEngine:
                 with open(cache_path, "w", encoding="utf-8") as cf:
                     json.dump(cache, cf)
             except Exception as ce:
+                print(f"[TRACE] core.system.skills.SkillsEngine._load_skills: except {str(ce)[:80]}", file=sys.stderr, flush=True)
                 logger.warning(f"Could not write skills cache: {ce}")
         
         logger.info(f"SkillsEngine: Loaded {len(self.skills)} developer skills.")
@@ -171,16 +177,19 @@ class SkillsEngine:
                 "tokens": searchable_tokens
             }
         except Exception as e:
+            print(f"[TRACE] core.system.skills.SkillsEngine._parse_skill_file: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.error(f"Failed to parse skill file '{file_path}': {e}")
             return None
 
     def _tokenize(self, text: str) -> set[str]:
         """Clean, lowercase, and tokenize text into alphanumeric words, filtering out stop words."""
+        print(f"[TRACE] core.system.skills.SkillsEngine._tokenize: enter", file=sys.stderr, flush=True)
         words = re.findall(r"\b[a-zA-Z0-9_-]+\b", text.lower())
         return {w for w in words if w not in STOP_WORDS and len(w) > 1}
 
     def get_relevant_skills(self, task: str, limit: int = 3) -> List[Dict]:
         """Match task keywords against skills and return top matching skills."""
+        print(f"[TRACE] core.system.skills.SkillsEngine.get_relevant_skills: enter", file=sys.stderr, flush=True)
         if not self.skills:
             self._load_skills()
             if not self.skills:
@@ -211,6 +220,7 @@ class SkillsEngine:
         Resolves skills anywhere under skills/ — including vendored clones in
         skills/external/ — because it searches the already-parsed index rather than
         guessing hardcoded paths."""
+        print(f"[TRACE] core.system.skills.SkillsEngine.get_skill_by_name: enter", file=sys.stderr, flush=True)
         if not self.skills:
             self._load_skills()
         target = (skill_name or "").strip().lower()
@@ -221,6 +231,7 @@ class SkillsEngine:
 
     def get_skill_content(self, skill_name: str) -> str:
         """Return the parsed SKILL.md body for a named skill (for SkillAgent personas)."""
+        print(f"[TRACE] core.system.skills.SkillsEngine.get_skill_content: enter", file=sys.stderr, flush=True)
         skill = self.get_skill_by_name(skill_name)
         if skill and skill.get("content"):
             return skill["content"]
@@ -230,6 +241,7 @@ class SkillsEngine:
     def load_skill_prompt(self, skill_name: str) -> str:
         """Return the raw SKILL.md body content for a named skill (for use in run_skill)."""
         # 1. Prefer the parsed index — finds skills nested anywhere under skills/ (incl. external/).
+        print(f"[TRACE] core.system.skills.SkillsEngine.load_skill_prompt: enter", file=sys.stderr, flush=True)
         skill = self.get_skill_by_name(skill_name)
         if skill and skill.get("path") and os.path.exists(skill["path"]):
             with open(skill["path"], "r", encoding="utf-8") as f:
@@ -250,6 +262,7 @@ class SkillsEngine:
 
     def get_skills_prompt_addition(self, task: str) -> str:
         """Generate a formatted markdown addition to append to the system prompt containing relevant skill rules."""
+        print(f"[TRACE] core.system.skills.SkillsEngine.get_skills_prompt_addition: enter", file=sys.stderr, flush=True)
         relevant = self.get_relevant_skills(task)
         if not relevant:
             return ""

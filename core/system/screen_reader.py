@@ -1,3 +1,4 @@
+import sys
 # core/system/screen_reader.py
 import win32gui
 import win32process
@@ -23,6 +24,7 @@ class JarvisScreenReader:
         Full screen understanding in one call.
         Returns structured semantic graph of everything visible.
         """
+        print(f"[TRACE] core.system.screen_reader.JarvisScreenReader.read_screen: enter", file=sys.stderr, flush=True)
         active_hwnd = win32gui.GetForegroundWindow()
         
         screen_graph = {
@@ -39,6 +41,7 @@ class JarvisScreenReader:
         return screen_graph
 
     async def _read_active_app(self, hwnd: int) -> Dict[str, Any]:
+        print(f"[TRACE] core.system.screen_reader.JarvisScreenReader._read_active_app: enter", file=sys.stderr, flush=True)
         if not hwnd:
             return {}
         try:
@@ -54,9 +57,11 @@ class JarvisScreenReader:
                 "rect": {"x": rect[0], "y": rect[1], "w": rect[2]-rect[0], "h": rect[3]-rect[1]}
             }
         except Exception as e:
+            print(f"[TRACE] core.system.screen_reader.JarvisScreenReader._read_active_app: except {str(e)[:80]}", file=sys.stderr, flush=True)
             return {"error": str(e)}
 
     async def _read_window_stack(self) -> List[Dict[str, Any]]:
+        print(f"[TRACE] core.system.screen_reader.JarvisScreenReader._read_window_stack: enter", file=sys.stderr, flush=True)
         windows = []
         def enum_win(hwnd, extra):
             if win32gui.IsWindowVisible(hwnd):
@@ -73,15 +78,18 @@ class JarvisScreenReader:
                             "rect": {"x": rect[0], "y": rect[1], "w": rect[2]-rect[0], "h": rect[3]-rect[1]}
                         })
                     except Exception:
+                        print(f"[TRACE] core.system.screen_reader.JarvisScreenReader._read_window_stack.enum_win: except Exception", file=sys.stderr, flush=True)
                         pass
         try:
             win32gui.EnumWindows(enum_win, None)
         except Exception:
+            print(f"[TRACE] core.system.screen_reader.JarvisScreenReader._read_window_stack: except Exception", file=sys.stderr, flush=True)
             pass
         return windows
 
     async def _read_accessibility_tree(self, hwnd: int) -> List[Dict[str, Any]]:
         """Traverse child controls to extract semantic UI components recursively."""
+        print(f"[TRACE] core.system.screen_reader.JarvisScreenReader._read_accessibility_tree: enter", file=sys.stderr, flush=True)
         children = []
         if not hwnd:
             return children
@@ -98,16 +106,19 @@ class JarvisScreenReader:
                     "rect": {"x": rect[0], "y": rect[1], "w": rect[2]-rect[0], "h": rect[3]-rect[1]}
                 })
             except Exception:
+                print(f"[TRACE] core.system.screen_reader.JarvisScreenReader._read_accessibility_tree.enum_child: except Exception", file=sys.stderr, flush=True)
                 pass
         
         try:
             win32gui.EnumChildWindows(hwnd, enum_child, None)
         except Exception:
+            print(f"[TRACE] core.system.screen_reader.JarvisScreenReader._read_accessibility_tree: except Exception", file=sys.stderr, flush=True)
             pass
         return children
 
     async def _read_all_text(self, hwnd: int) -> List[str]:
         """Compile all structural texts from controls."""
+        print(f"[TRACE] core.system.screen_reader.JarvisScreenReader._read_all_text: enter", file=sys.stderr, flush=True)
         tree = await self._read_accessibility_tree(hwnd)
         texts = []
         for elem in tree:
@@ -118,6 +129,7 @@ class JarvisScreenReader:
 
     async def _read_web_content(self) -> Dict[str, Any]:
         """Connect to Chrome/Edge via Chrome DevTools Protocol to extract browser DOM."""
+        print(f"[TRACE] core.system.screen_reader.JarvisScreenReader._read_web_content: enter", file=sys.stderr, flush=True)
         active_hwnd = win32gui.GetForegroundWindow()
         if not active_hwnd:
             return {"status": "no_active_window"}
@@ -125,6 +137,7 @@ class JarvisScreenReader:
         try:
             active_title = win32gui.GetWindowText(active_hwnd).lower()
         except Exception:
+            print(f"[TRACE] core.system.screen_reader.JarvisScreenReader._read_web_content: except Exception", file=sys.stderr, flush=True)
             return {"status": "cannot_read_window_title"}
             
         if not any(b in active_title for b in ["chrome", "edge", "chromium"]):
@@ -200,11 +213,14 @@ class JarvisScreenReader:
                             "interactive_elements": result_payload.get("elements", [])
                         }
         except aiohttp.ClientConnectionError:
+            print(f"[TRACE] core.system.screen_reader.JarvisScreenReader._read_web_content: except ClientConnectionError", file=sys.stderr, flush=True)
             return {"status": "cdp_not_available", "hint": "Launch browser with --remote-debugging-port=9222"}
         except Exception as e:
+            print(f"[TRACE] core.system.screen_reader.JarvisScreenReader._read_web_content: except {str(e)[:80]}", file=sys.stderr, flush=True)
             return {"status": "error", "message": str(e)}
 
     async def _synthesize_summary(self, graph: Dict[str, Any]) -> str:
+        print(f"[TRACE] core.system.screen_reader.JarvisScreenReader._synthesize_summary: enter", file=sys.stderr, flush=True)
         active = graph["active_app"]
         controls = [f"{c['class']}: '{c['text']}'" for c in graph["native_ui"][:30] if c.get("text")]
         
@@ -238,4 +254,5 @@ Provide a single paragraph detailing:
             response = call_llm(msg)
             return response.get("content", "").strip()
         except Exception as e:
+            print(f"[TRACE] core.system.screen_reader.JarvisScreenReader._synthesize_summary: except {str(e)[:80]}", file=sys.stderr, flush=True)
             return f"Summary synthesis failed: {e}"
