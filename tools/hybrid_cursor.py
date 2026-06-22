@@ -59,6 +59,7 @@ def _setup_tesseract():
                     pytesseract.tesseract_cmd = tess_path
         return pytesseract
     except ImportError:
+        print(f"[TRACE] tools.hybrid_cursor._setup_tesseract: except ImportError", file=sys.stderr, flush=True)
         return None
 
 
@@ -76,6 +77,7 @@ def _layer1_graph_focus(window_hint: str, view_session=None) -> tuple:
         success=True only when the correct window is confirmed as active.
         window_node contains {title, x, y, w, h, depth} for use by Layer 2b.
     """
+    print(f"[TRACE] tools.hybrid_cursor._layer1_graph_focus: enter", file=sys.stderr, flush=True)
     from tools.windows import get_3d_window_graph
     from tools.desktop_automation import desktop_focus_window, desktop_get_active_window
 
@@ -106,6 +108,7 @@ def _layer1_graph_focus(window_hint: str, view_session=None) -> tuple:
             return False, f"Focus attempted but active window is: {active}", None
 
     except Exception as exc:
+        print(f"[TRACE] tools.hybrid_cursor._layer1_graph_focus: except {str(exc)[:80]}", file=sys.stderr, flush=True)
         logger.error("[HybridCursor] Layer 1 exception: %s", exc)
         return False, f"Layer 1 exception: {exc}", None
 
@@ -139,9 +142,11 @@ def _layer2_mouse_braille(target: str, window_node: dict, view_session=None) -> 
     Returns:
         (success: bool, message: str)
     """
+    print(f"[TRACE] tools.hybrid_cursor._layer2_mouse_braille: enter", file=sys.stderr, flush=True)
     try:
         import uiautomation as auto
     except ImportError:
+        print(f"[TRACE] tools.hybrid_cursor._layer2_mouse_braille: except ImportError", file=sys.stderr, flush=True)
         return False, "uiautomation not installed — run: pip install uiautomation"
 
     from tools.desktop_automation import desktop_smooth_click
@@ -158,6 +163,7 @@ def _layer2_mouse_braille(target: str, window_node: dict, view_session=None) -> 
     x_end   = wx + ww - 5
 
     def probe_grid(step: int, y_end: int) -> tuple:
+        print(f"[TRACE] tools.hybrid_cursor._layer2_mouse_braille.probe_grid: enter", file=sys.stderr, flush=True)
         for py in range(y_start, y_end, step):
             for px in range(x_start, x_end, step):
                 try:
@@ -206,6 +212,7 @@ def _layer2_mouse_braille(target: str, window_node: dict, view_session=None) -> 
                     if view_session is not None:
                         view_session.add_probe(px, py, hit=False)
                 except Exception:
+                    print(f"[TRACE] tools.hybrid_cursor._layer2_mouse_braille.probe_grid: except Exception", file=sys.stderr, flush=True)
                     continue
         return False, None
 
@@ -239,6 +246,7 @@ def _layer3_ocr(target: str, view_session=None, window_bounds=None) -> tuple:
     Returns:
         (success: bool, message: str)
     """
+    print(f"[TRACE] tools.hybrid_cursor._layer3_ocr: enter", file=sys.stderr, flush=True)
     pytesseract = _setup_tesseract()
     if pytesseract is None:
         return False, "pytesseract not installed — run: pip install pytesseract"
@@ -322,6 +330,7 @@ def _layer3_ocr(target: str, view_session=None, window_bounds=None) -> tuple:
         return False, f"text '{target}' not found on screen (multi-word search)"
 
     except Exception as exc:
+        print(f"[TRACE] tools.hybrid_cursor._layer3_ocr: except {str(exc)[:80]}", file=sys.stderr, flush=True)
         logger.error("[HybridCursor] Layer 3 exception: %s", exc)
         return False, f"Layer 3 exception: {exc}"
 
@@ -336,6 +345,7 @@ def _check_text_on_screen(text: str, min_conf: int = 40) -> tuple:
     Returns (found: bool, location_desc: str).
     Does NOT click anything.
     """
+    print(f"[TRACE] tools.hybrid_cursor._check_text_on_screen: enter", file=sys.stderr, flush=True)
     pytesseract = _setup_tesseract()
     if pytesseract is None:
         return False, "pytesseract unavailable"
@@ -356,6 +366,7 @@ def _check_text_on_screen(text: str, min_conf: int = 40) -> tuple:
                 return True, f"found '{tok}' at ({cx},{cy}) conf={data['conf'][i]}"
         return False, f"'{text}' not visible on screen"
     except Exception as exc:
+        print(f"[TRACE] tools.hybrid_cursor._check_text_on_screen: except {str(exc)[:80]}", file=sys.stderr, flush=True)
         return False, f"OCR check error: {exc}"
 
 
@@ -382,6 +393,7 @@ def _verify_outcome(
     Returns:
         (success: bool, message: str)
     """
+    print(f"[TRACE] tools.hybrid_cursor._verify_outcome: enter", file=sys.stderr, flush=True)
     from core.system.screen_imprint import ScreenImprintGraph
 
     imprinter = ScreenImprintGraph()
@@ -469,6 +481,7 @@ def hybrid_locate_click(
         A human-readable trace string showing which layers ran, what each
         found, verification results, and the final success/failure status.
     """
+    print(f"[TRACE] tools.hybrid_cursor.hybrid_locate_click: enter", file=sys.stderr, flush=True)
     if not target or not target.strip():
         return "ERROR: hybrid_locate_click requires a non-empty 'target' parameter"
 
@@ -492,6 +505,7 @@ def hybrid_locate_click(
                 _snap = ScreenImprintGraph()
                 pre_click_imprint = _snap.imprint()["imprint"]
             except Exception as _e:
+                print(f"[TRACE] tools.hybrid_cursor.hybrid_locate_click: except {str(_e)[:80]}", file=sys.stderr, flush=True)
                 logger.warning("[HybridCursor] Pre-click imprint failed: %s", _e)
 
         # ---------------------------------------------------------------- #

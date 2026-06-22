@@ -27,9 +27,11 @@ def desktop_get_ui_tree(max_depth: int = 8, search_query: str = None) -> str:
     Returns the interactive semantic UI tree of the focused desktop window.
     Saves a cached mapping to scratch/desktop_ui_cache.json so elements can be clicked by index.
     """
+    print(f"[TRACE] tools.desktop_ui_tree.desktop_get_ui_tree: enter", file=sys.stderr, flush=True)
     try:
         import uiautomation as auto
     except ImportError:
+        print(f"[TRACE] tools.desktop_ui_tree.desktop_get_ui_tree: except ImportError", file=sys.stderr, flush=True)
         return "ERROR: 'uiautomation' library is not available."
 
     try:
@@ -100,6 +102,7 @@ def desktop_get_ui_tree(max_depth: int = 8, search_query: str = None) -> str:
             with open(CACHE_FILE, "w", encoding="utf-8") as f:
                 json.dump(elements, f, indent=2)
         except Exception as e:
+            print(f"[TRACE] tools.desktop_ui_tree.desktop_get_ui_tree: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.warning(f"Failed to write UI cache file: {e}")
 
         # Construct readable string for LLM
@@ -115,6 +118,7 @@ def desktop_get_ui_tree(max_depth: int = 8, search_query: str = None) -> str:
         return "\n".join(output)
 
     except Exception as e:
+        print(f"[TRACE] tools.desktop_ui_tree.desktop_get_ui_tree: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.error(f"Failed to get active window UI tree: {e}")
         return f"ERROR: {e}"
 
@@ -124,6 +128,7 @@ def desktop_interact_with_element(index: int, action: str = "click", text: str =
     Looks up a cached control by index from scratch/desktop_ui_cache.json
     and performs a mouse click, hover, right_click, or types text into it.
     """
+    print(f"[TRACE] tools.desktop_ui_tree.desktop_interact_with_element: enter", file=sys.stderr, flush=True)
     if not os.path.exists(CACHE_FILE):
         return "ERROR: No active UI cache found. Call desktop_get_ui_tree first."
 
@@ -131,6 +136,7 @@ def desktop_interact_with_element(index: int, action: str = "click", text: str =
         with open(CACHE_FILE, "r", encoding="utf-8") as f:
             elements = json.load(f)
     except Exception as e:
+        print(f"[TRACE] tools.desktop_ui_tree.desktop_interact_with_element: except {str(e)[:80]}", file=sys.stderr, flush=True)
         return f"ERROR: Failed to read UI cache: {e}"
 
     # Search for element index
@@ -167,6 +173,7 @@ def desktop_interact_with_element(index: int, action: str = "click", text: str =
                             f"({target['role']} '{target['name']}') -> {vmsg}")
                 virtual_note = f"[physical-fallback: {vmsg[:120]}] "
         except Exception as e:
+            print(f"[TRACE] tools.desktop_ui_tree.desktop_interact_with_element: except {str(e)[:80]}", file=sys.stderr, flush=True)
             virtual_note = f"[physical-fallback: virtual input error {e}] "
 
     try:
@@ -212,5 +219,6 @@ def desktop_interact_with_element(index: int, action: str = "click", text: str =
             return f"ERROR: Unknown action type '{action}'."
             
     except Exception as e:
+        print(f"[TRACE] tools.desktop_ui_tree.desktop_interact_with_element: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.error(f"Failed to interact with element {index}: {e}")
         return f"ERROR: {e}"

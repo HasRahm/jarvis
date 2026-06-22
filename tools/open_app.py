@@ -81,6 +81,7 @@ def _window_open(app_name: str) -> bool:
 
 def _find_open_window(app_name: str) -> dict | None:
     """Return the first visible window dict whose title contains the app name, else None."""
+    print(f"[TRACE] tools.open_app._find_open_window: enter", file=sys.stderr, flush=True)
     try:
         from tools.windows import get_window_stack
         needle = _norm(app_name)
@@ -88,6 +89,7 @@ def _find_open_window(app_name: str) -> dict | None:
             if needle in (w.get("title", "") or "").lower():
                 return w
     except Exception as e:
+        print(f"[TRACE] tools.open_app._find_open_window: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[open_app] window scan failed: {e}")
     return None
 
@@ -98,6 +100,7 @@ def _has_unsaved_marker(title: str) -> bool:
     Typing into such a window risks destroying the user's unsaved work, so open_app must not
     silently reuse it. (e.g. Notepad shows '*Untitled - Notepad'.)
     """
+    print(f"[TRACE] tools.open_app._has_unsaved_marker: enter", file=sys.stderr, flush=True)
     t = (title or "").strip()
     return t.startswith("*") or t.startswith("●") or t.startswith("•")
 
@@ -111,6 +114,7 @@ def _get_start_apps() -> list[dict]:
 
     Returns a list of {"name", "appid"}. Cached per process. [] on failure.
     """
+    print(f"[TRACE] tools.open_app._get_start_apps: enter", file=sys.stderr, flush=True)
     global _start_apps_cache
     if _start_apps_cache is not None:
         return _start_apps_cache
@@ -133,12 +137,14 @@ def _get_start_apps() -> list[dict]:
                 for d in data if d.get("Name") and d.get("AppID")
             ]
     except Exception as e:
+        print(f"[TRACE] tools.open_app._get_start_apps: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[open_app] Get-StartApps failed: {e}")
     return _start_apps_cache
 
 
 def _find_in_start_panel(app_name: str) -> str | None:
     """Return an AppsFolder launch AppID for the best Start-panel name match, or None."""
+    print(f"[TRACE] tools.open_app._find_in_start_panel: enter", file=sys.stderr, flush=True)
     key = _norm(app_name)
     apps = _get_start_apps()
     # Exact, then startswith, then substring.
@@ -153,6 +159,7 @@ def _find_in_start_panel(app_name: str) -> str | None:
 
 def _find_shortcut(app_name: str) -> str | None:
     """Search taskbar-pinned and Start-Menu .lnk shortcuts for a name match."""
+    print(f"[TRACE] tools.open_app._find_shortcut: enter", file=sys.stderr, flush=True)
     key = _norm(app_name)
     if sys.platform != "win32":
         return None
@@ -179,6 +186,7 @@ def find_app_launch(app_name: str) -> dict | None:
     Order: PATH/known map -> Start panel (Get-StartApps) -> taskbar/Start-Menu .lnk.
     Returns {"method", "argv"|"appid"|"lnk"} or None if nothing found.
     """
+    print(f"[TRACE] tools.open_app.find_app_launch: enter", file=sys.stderr, flush=True)
     key = _norm(app_name)
 
     # 1. Known map / PATH
@@ -204,6 +212,7 @@ def find_app_launch(app_name: str) -> dict | None:
 
 def _launch_native(app_name: str) -> tuple[bool, str]:
     """Attempt to launch the app via the full discovery chain. Returns (attempted, detail)."""
+    print(f"[TRACE] tools.open_app._launch_native: enter", file=sys.stderr, flush=True)
     found = find_app_launch(app_name)
     if not found:
         return False, f"'{app_name}' not found on PATH, Start panel, taskbar, or Start Menu"
@@ -223,12 +232,14 @@ def _launch_native(app_name: str) -> tuple[bool, str]:
             os.startfile(found["lnk"])
             return True, f"launched via shortcut {os.path.basename(found['lnk'])}"
     except Exception as e:
+        print(f"[TRACE] tools.open_app._launch_native: except {str(e)[:80]}", file=sys.stderr, flush=True)
         return False, f"launch failed: {e}"
     return False, f"no launch method for '{app_name}'"
 
 
 def _open_in_browser(app_name: str) -> str:
     """Open the web app (or a search for it) in the user's real default browser."""
+    print(f"[TRACE] tools.open_app._open_in_browser: enter", file=sys.stderr, flush=True)
     key = _norm(app_name)
     url = _WEB_APP_URLS.get(key)
     fallback_search = False
@@ -243,6 +254,7 @@ def _open_in_browser(app_name: str) -> str:
             import webbrowser
             webbrowser.open(url)
     except Exception as e:
+        print(f"[TRACE] tools.open_app._open_in_browser: except {str(e)[:80]}", file=sys.stderr, flush=True)
         return f"[open_app] browser fallback failed for '{app_name}': {e}"
 
     if fallback_search:
@@ -260,6 +272,7 @@ def open_app(app_name: str, prefer: str = "auto") -> str:
       "native" — only check window then native launch (no web fallback)
       "web"    — go straight to the browser web app
     """
+    print(f"[TRACE] tools.open_app.open_app: enter", file=sys.stderr, flush=True)
     app_name = (app_name or "").strip()
     if not app_name:
         return "[open_app] no app_name provided."
@@ -287,6 +300,7 @@ def open_app(app_name: str, prefer: str = "auto") -> str:
                 res = desktop_focus_window(app_name)
                 return f"[open_app] '{app_name}' was already open — focused existing window. ({res})"
             except Exception as e:
+                print(f"[TRACE] tools.open_app.open_app: except {str(e)[:80]}", file=sys.stderr, flush=True)
                 return f"[open_app] '{app_name}' already open but focus failed: {e}"
     else:
         trace.append("not currently open")
@@ -305,6 +319,7 @@ def open_app(app_name: str, prefer: str = "auto") -> str:
                     from tools.desktop_automation import desktop_focus_window
                     desktop_focus_window(app_name)
                 except Exception:
+                    print(f"[TRACE] tools.open_app.open_app: except Exception", file=sys.stderr, flush=True)
                     pass
                 return f"[open_app] launched native '{app_name}' and confirmed its window.{_warn} ({' | '.join(trace)})"
             time.sleep(0.4)
@@ -339,8 +354,10 @@ def open_app(app_name: str, prefer: str = "auto") -> str:
                 trace.append(f"browser: {res['url']}")
                 return f"[open_app] {res.get('note')} ({' | '.join(trace)})"
             except Exception as e:
+                print(f"[TRACE] tools.open_app.open_app: except {str(e)[:80]}", file=sys.stderr, flush=True)
                 trace.append(f"browser open failed: {e}")
     except Exception as e:
+        print(f"[TRACE] tools.open_app.open_app: except {str(e)[:80]}", file=sys.stderr, flush=True)
         trace.append(f"resolver skipped: {e}")
 
     # Step 3 — generic web fallback (known web app URL or DuckDuckGo search)

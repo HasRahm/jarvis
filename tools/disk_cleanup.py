@@ -9,6 +9,7 @@ Stages:
 All deletions are gated: never_touch_check() is called before any removal.
 safe_clean(dry_run=True) is the default — no actual deletions without opt-in.
 """
+import sys
 
 import os
 import glob
@@ -52,6 +53,7 @@ def never_touch_check(path: str) -> bool:
     Always call this before deleting anything.
     """
     # Normalize slashes to match current OS
+    print(f"[TRACE] tools.disk_cleanup.never_touch_check: enter", file=sys.stderr, flush=True)
     normalized_path = path.replace("\\", "/").replace("/", os.sep)
     norm = os.path.abspath(normalized_path).lower()
     
@@ -76,6 +78,7 @@ def never_touch_check(path: str) -> bool:
 
 def _dir_size_bytes(path: str) -> int:
     """Return total size of a directory tree in bytes (0 if inaccessible)."""
+    print(f"[TRACE] tools.disk_cleanup._dir_size_bytes: enter", file=sys.stderr, flush=True)
     total = 0
     try:
         for dirpath, _dirs, files in os.walk(path):
@@ -83,8 +86,10 @@ def _dir_size_bytes(path: str) -> int:
                 try:
                     total += os.path.getsize(os.path.join(dirpath, f))
                 except OSError:
+                    print(f"[TRACE] tools.disk_cleanup._dir_size_bytes: except OSError", file=sys.stderr, flush=True)
                     pass
     except (PermissionError, OSError):
+        print(f"[TRACE] tools.disk_cleanup._dir_size_bytes: except ?", file=sys.stderr, flush=True)
         pass
     return total
 
@@ -98,6 +103,7 @@ def _file_size_mb(path: str) -> float:
     try:
         return round(os.path.getsize(path) / (1024 * 1024), 2)
     except OSError:
+        print(f"[TRACE] tools.disk_cleanup._file_size_mb: except OSError", file=sys.stderr, flush=True)
         return 0.0
 
 
@@ -106,6 +112,7 @@ def scan() -> dict:
 
     Returns a dict with keys in both bytes and MB for complete frontend compatibility.
     """
+    print(f"[TRACE] tools.disk_cleanup.scan: enter", file=sys.stderr, flush=True)
     temp_bytes = (
         _dir_size_bytes(r"C:\Windows\Temp") +
         _dir_size_bytes(os.path.expandvars(r"%LOCALAPPDATA%\Temp"))
@@ -126,6 +133,7 @@ def scan() -> dict:
                 try:
                     jarvis_logs_bytes += os.path.getsize(os.path.join(logs_dir, fname))
                 except OSError:
+                    print(f"[TRACE] tools.disk_cleanup.scan: except OSError", file=sys.stderr, flush=True)
                     pass
 
     user_downloads_bytes = _dir_size_bytes(os.path.expandvars(r"%USERPROFILE%\Downloads"))
@@ -160,6 +168,7 @@ def _safe_remove(path: str, dry_run: bool) -> int:
 
     Returns bytes freed (0 on dry_run or failure).
     """
+    print(f"[TRACE] tools.disk_cleanup._safe_remove: enter", file=sys.stderr, flush=True)
     if never_touch_check(path):
         logger.warning(f"[cleanup] Blocked never-touch path: {path}")
         return 0
@@ -180,6 +189,7 @@ def _safe_remove(path: str, dry_run: bool) -> int:
                 shutil.rmtree(path, ignore_errors=True)
         return size
     except (PermissionError, OSError) as e:
+        print(f"[TRACE] tools.disk_cleanup._safe_remove: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.debug(f"[cleanup] Could not remove {path}: {e}")
         return 0
 
@@ -201,6 +211,7 @@ def _clean_dir_contents(directory: str, dry_run: bool) -> tuple[int, int]:
 
     Returns (files_deleted, bytes_freed). Silently skips on PermissionError.
     """
+    print(f"[TRACE] tools.disk_cleanup._clean_dir_contents: enter", file=sys.stderr, flush=True)
     files_deleted = 0
     bytes_freed = 0
     if not os.path.isdir(directory):
@@ -208,6 +219,7 @@ def _clean_dir_contents(directory: str, dry_run: bool) -> tuple[int, int]:
     try:
         entries = list(os.scandir(directory))
     except (PermissionError, OSError) as e:
+        print(f"[TRACE] tools.disk_cleanup._clean_dir_contents: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.debug(f"[cleanup] Cannot scan {directory}: {e}")
         return 0, 0
     for entry in entries:
@@ -231,11 +243,13 @@ def safe_clean(dry_run: bool = True) -> dict:
         dry_run        — echoes the flag
         targets        — list of cleaned paths (for logging)
     """
+    print(f"[TRACE] tools.disk_cleanup.safe_clean: enter", file=sys.stderr, flush=True)
     total_files = 0
     total_bytes = 0
     targets = []
 
     def _clean(path):
+        print(f"[TRACE] tools.disk_cleanup.safe_clean._clean: enter", file=sys.stderr, flush=True)
         nonlocal total_files, total_bytes
         if not os.path.exists(path):
             return
@@ -299,6 +313,7 @@ def _days_since(path: str) -> int:
         mtime = os.path.getmtime(path)
         return (datetime.now() - datetime.fromtimestamp(mtime)).days
     except OSError:
+        print(f"[TRACE] tools.disk_cleanup._days_since: except OSError", file=sys.stderr, flush=True)
         return 0
 
 
@@ -312,11 +327,13 @@ def _has_recent_git_activity(directory: str, days: int = 30) -> bool:
         )
         return bool(result.stdout.strip())
     except Exception:
+        print(f"[TRACE] tools.disk_cleanup._has_recent_git_activity: except Exception", file=sys.stderr, flush=True)
         return False  # if we can't check, assume active
 
 
 def _ollama_suggest(description: str) -> str:
     """Ask Gemma4 for a one-sentence keep/delete suggestion. Falls back gracefully."""
+    print(f"[TRACE] tools.disk_cleanup._ollama_suggest: enter", file=sys.stderr, flush=True)
     if os.environ.get("JARVIS_CI") == "true":
         return "CI mode: no AI suggestion."
     try:
@@ -335,6 +352,7 @@ def _ollama_suggest(description: str) -> str:
         if resp.ok:
             return resp.json().get("response", "").strip()
     except Exception as e:
+        print(f"[TRACE] tools.disk_cleanup._ollama_suggest: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.debug(f"[cleanup] Ollama suggestion failed: {e}")
     return "Could not get AI suggestion."
 
@@ -351,6 +369,7 @@ def judgment_scan() -> list[dict]:
         ai_suggestion — one-sentence AI keep/delete suggestion
         safe_to_skip — True if never_touch_check() blocks this path
     """
+    print(f"[TRACE] tools.disk_cleanup.judgment_scan: enter", file=sys.stderr, flush=True)
     candidates = []
 
     # ── A. Large files (>500 MB) in user home, excluding never-touch ─────────
@@ -378,6 +397,7 @@ def judgment_scan() -> list[dict]:
                 try:
                     size_bytes = os.path.getsize(fpath)
                 except OSError:
+                    print(f"[TRACE] tools.disk_cleanup.judgment_scan: except OSError", file=sys.stderr, flush=True)
                     continue
                 size_mb = size_bytes / (1024 * 1024)
                 if size_mb >= _JUDGMENT_LARGE_MB:
@@ -407,6 +427,7 @@ def judgment_scan() -> list[dict]:
                         else round(entry.stat().st_size / (1024 * 1024), 1)
                     )
                 except OSError:
+                    print(f"[TRACE] tools.disk_cleanup.judgment_scan: except OSError", file=sys.stderr, flush=True)
                     size_mb = 0.0
                 if size_mb < 1 and age < 180:
                     continue  # skip tiny old files unless really old
@@ -483,6 +504,7 @@ def delete_judgment_item(path: str) -> dict:
     Returns {deleted: bool, mb_freed: float, error: str|None}.
     Never deletes never-touch paths.
     """
+    print(f"[TRACE] tools.disk_cleanup.delete_judgment_item: enter", file=sys.stderr, flush=True)
     if never_touch_check(path):
         return {"deleted": False, "mb_freed": 0.0, "error": "Path is in never-touch list."}
     try:
@@ -501,5 +523,6 @@ def delete_judgment_item(path: str) -> dict:
         logger.info(f"[cleanup] Deleted: {path} ({size / (1024*1024):.1f} MB)")
         return {"deleted": True, "mb_freed": round(size / (1024 * 1024), 2), "error": None}
     except Exception as e:
+        print(f"[TRACE] tools.disk_cleanup.delete_judgment_item: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.error(f"[cleanup] Failed to delete {path}: {e}")
         return {"deleted": False, "mb_freed": 0.0, "error": str(e)}

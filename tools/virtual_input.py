@@ -1,3 +1,4 @@
+import sys
 # tools/virtual_input.py
 """
 Virtual Input — act on UI elements WITHOUT moving the physical mouse (Phase 24)
@@ -40,6 +41,7 @@ def select_strategies(role: str, action: str) -> list:
     "physical" is a sentinel meaning: caller should fall back to a real
     pyautogui click/type — it is never executed by this module.
     """
+    print(f"[TRACE] tools.virtual_input.select_strategies: enter", file=sys.stderr, flush=True)
     role = (role or "").replace("Control", "").strip()
     action = (action or "click").lower()
 
@@ -73,6 +75,7 @@ def score_element(el: dict, description: str) -> float:
     Token-overlap ratio over name + auto_id, plus a bonus for fillable roles.
     Pure function — used by smart_fill to pick the best graph match.
     """
+    print(f"[TRACE] tools.virtual_input.score_element: enter", file=sys.stderr, flush=True)
     if not el.get("is_enabled", True):
         return 0.0
     desc_tokens = {t for t in description.lower().split() if len(t) > 1}
@@ -97,9 +100,11 @@ def resolve_control(element: dict):
     AutomationId still matches — detects stale caches (window moved/changed).
     Returns the Control, or None when unavailable/stale.
     """
+    print(f"[TRACE] tools.virtual_input.resolve_control: enter", file=sys.stderr, flush=True)
     try:
         import uiautomation as auto
     except ImportError:
+        print(f"[TRACE] tools.virtual_input.resolve_control: except ImportError", file=sys.stderr, flush=True)
         return None
     try:
         cx = element["x"] + element["w"] // 2
@@ -132,6 +137,7 @@ def resolve_control(element: dict):
             return ctrl  # nothing to verify against — trust the position
         return None
     except Exception as exc:
+        print(f"[TRACE] tools.virtual_input.resolve_control: except {str(exc)[:80]}", file=sys.stderr, flush=True)
         logger.warning("[VirtualInput] resolve_control failed: %s", exc)
         return None
 
@@ -201,11 +207,13 @@ def execute_strategy(ctrl, strategy: str, text: str = None) -> tuple:
 
         return False, f"unknown strategy '{strategy}'"
     except Exception as exc:
+        print(f"[TRACE] tools.virtual_input.execute_strategy: except {str(exc)[:80]}", file=sys.stderr, flush=True)
         return False, f"{strategy}: {type(exc).__name__}: {exc}"
 
 
 def _escape_sendkeys(text: str) -> str:
     """Escape uiautomation SendKeys special characters in literal text."""
+    print(f"[TRACE] tools.virtual_input._escape_sendkeys: enter", file=sys.stderr, flush=True)
     out = []
     for ch in text:
         if ch in "{}()+^%~":
@@ -223,6 +231,7 @@ def virtual_interact(element: dict, action: str = "click", text: str = None,
     True the CALLER should perform the physical click/type — pyautogui is
     deliberately kept out of this module.
     """
+    print(f"[TRACE] tools.virtual_input.virtual_interact: enter", file=sys.stderr, flush=True)
     from tools import agent_cursor
 
     trace = []
@@ -270,6 +279,7 @@ def smart_fill(field_description: str, text: str, window_hint: str = None,
     5. Verify by OCR that the text appears (soft check — password/canvas
        fields legitimately won't show it).
     """
+    print(f"[TRACE] tools.virtual_input.smart_fill: enter", file=sys.stderr, flush=True)
     if not field_description or not field_description.strip():
         return "ERROR: smart_fill requires a non-empty 'field_description'"
     if text is None:
@@ -293,6 +303,7 @@ def smart_fill(field_description: str, text: str, window_hint: str = None,
             from tools.windows import get_3d_window_graph
             session.add_window_graph(get_3d_window_graph())
         except Exception:
+            print(f"[TRACE] tools.virtual_input.smart_fill: except Exception", file=sys.stderr, flush=True)
             pass
 
     # ── 2. graph locate ────────────────────────────────────────────────────
@@ -322,6 +333,7 @@ def smart_fill(field_description: str, text: str, window_hint: str = None,
         else:
             trace.append(f"Graph locate: tree failed — {tree_result[:100]}")
     except Exception as exc:
+        print(f"[TRACE] tools.virtual_input.smart_fill: except {str(exc)[:80]}", file=sys.stderr, flush=True)
         trace.append(f"Graph locate: exception — {exc}")
 
     typed = False
@@ -342,6 +354,7 @@ def smart_fill(field_description: str, text: str, window_hint: str = None,
                 trace.append(f"Physical fallback: clicked ({cx},{cy}) + typed")
                 typed = True
             except Exception as exc:
+                print(f"[TRACE] tools.virtual_input.smart_fill: except {str(exc)[:80]}", file=sys.stderr, flush=True)
                 trace.append(f"Physical fallback: FAILED — {exc}")
 
     # ── 4. vision fallback (no graph match) ────────────────────────────────
@@ -357,6 +370,7 @@ def smart_fill(field_description: str, text: str, window_hint: str = None,
                 trace.append("Vision fallback: typed after visual click")
                 typed = True
         except Exception as exc:
+            print(f"[TRACE] tools.virtual_input.smart_fill: except {str(exc)[:80]}", file=sys.stderr, flush=True)
             trace.append(f"Vision fallback: FAILED — {exc}")
 
     if not typed:
@@ -371,6 +385,7 @@ def smart_fill(field_description: str, text: str, window_hint: str = None,
         found, loc = _check_text_on_screen(snippet)
         trace.append(f"Verify (OCR '{snippet}'): {'OK — ' + loc if found else 'not visible (may be masked/canvas — soft check)'}")
     except Exception as exc:
+        print(f"[TRACE] tools.virtual_input.smart_fill: except {str(exc)[:80]}", file=sys.stderr, flush=True)
         trace.append(f"Verify: skipped — {exc}")
 
     # ── 6. optional Enter ──────────────────────────────────────────────────
@@ -380,6 +395,7 @@ def smart_fill(field_description: str, text: str, window_hint: str = None,
             desktop_press_keys(["enter"])
             trace.append("Pressed Enter")
         except Exception as exc:
+            print(f"[TRACE] tools.virtual_input.smart_fill: except {str(exc)[:80]}", file=sys.stderr, flush=True)
             trace.append(f"Enter failed: {exc}")
 
     session.add_note("\n".join(trace))

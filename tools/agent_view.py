@@ -1,3 +1,4 @@
+import sys
 # tools/agent_view.py
 """
 Agent View — annotated screenshots of what the agent "sees" (Phase 24)
@@ -46,6 +47,7 @@ def view_enabled() -> bool:
 
 def _capture_screen():
     """Full-screen PIL image, with the agent cursor overlay hidden."""
+    print(f"[TRACE] tools.agent_view._capture_screen: enter", file=sys.stderr, flush=True)
     import mss
     from PIL import Image
     from tools.agent_cursor import cursor_hidden
@@ -77,6 +79,7 @@ class AgentViewSession:
             self.img = base_image if base_image is not None else _capture_screen()
             self._draw = ImageDraw.Draw(self.img)
         except Exception as exc:
+            print(f"[TRACE] tools.agent_view.AgentViewSession.__init__: except {str(exc)[:80]}", file=sys.stderr, flush=True)
             logger.warning("[AgentView] capture failed, session disabled: %s", exc)
             self.img = None
 
@@ -84,6 +87,7 @@ class AgentViewSession:
 
     def add_window_graph(self, graph: dict) -> None:
         """Draw window rectangles with title+depth labels and occluded regions."""
+        print(f"[TRACE] tools.agent_view.AgentViewSession.add_window_graph: enter", file=sys.stderr, flush=True)
         if self.img is None:
             return
         try:
@@ -107,16 +111,19 @@ class AgentViewSession:
                             f"occluded by {occ.get('blocking_window','')[:24]}",
                             COLOR_OCCLUSION)
         except Exception as exc:
+            print(f"[TRACE] tools.agent_view.AgentViewSession.add_window_graph: except {str(exc)[:80]}", file=sys.stderr, flush=True)
             logger.warning("[AgentView] add_window_graph failed: %s", exc)
 
     def add_probe(self, x: int, y: int, hit: bool = False) -> None:
         """Record one mouse-braille ControlFromPoint probe (drawn at save)."""
+        print(f"[TRACE] tools.agent_view.AgentViewSession.add_probe: enter", file=sys.stderr, flush=True)
         if self.img is None:
             return
         self._probes.append((x, y, hit))
 
     def add_match_box(self, x: int, y: int, w: int, h: int, label: str = "") -> None:
         """Highlight the element the agent matched and is about to act on."""
+        print(f"[TRACE] tools.agent_view.AgentViewSession.add_match_box: enter", file=sys.stderr, flush=True)
         if self.img is None:
             return
         try:
@@ -124,10 +131,12 @@ class AgentViewSession:
             if label:
                 self._label(x, max(0, y - 14), f"MATCH: {label[:40]}", COLOR_MATCH)
         except Exception as exc:
+            print(f"[TRACE] tools.agent_view.AgentViewSession.add_match_box: except {str(exc)[:80]}", file=sys.stderr, flush=True)
             logger.warning("[AgentView] add_match_box failed: %s", exc)
 
     def add_ocr_words(self, tess_data: dict, min_conf: int = 30) -> None:
         """Draw pytesseract word boxes colored by confidence."""
+        print(f"[TRACE] tools.agent_view.AgentViewSession.add_ocr_words: enter", file=sys.stderr, flush=True)
         if self.img is None:
             return
         try:
@@ -144,6 +153,7 @@ class AgentViewSession:
                          else COLOR_OCR_HIGH)
                 self._draw.rectangle([x, y, x + w, y + h], outline=color, width=1)
         except Exception as exc:
+            print(f"[TRACE] tools.agent_view.AgentViewSession.add_ocr_words: except {str(exc)[:80]}", file=sys.stderr, flush=True)
             logger.warning("[AgentView] add_ocr_words failed: %s", exc)
 
     def add_vision_crop(self, crop_box: tuple, result_xy: tuple = None, note: str = "") -> None:
@@ -152,6 +162,7 @@ class AgentViewSession:
         crop_box:  (x, y, w, h) in screen coords.
         result_xy: (x, y) in screen coords, or None when the model found nothing.
         """
+        print(f"[TRACE] tools.agent_view.AgentViewSession.add_vision_crop: enter", file=sys.stderr, flush=True)
         if self.img is None:
             return
         try:
@@ -168,10 +179,12 @@ class AgentViewSession:
             if note:
                 self._notes.append(f"vision: {note}")
         except Exception as exc:
+            print(f"[TRACE] tools.agent_view.AgentViewSession.add_vision_crop: except {str(exc)[:80]}", file=sys.stderr, flush=True)
             logger.warning("[AgentView] add_vision_crop failed: %s", exc)
 
     def add_note(self, text: str) -> None:
         """Append a line to the footer text strip."""
+        print(f"[TRACE] tools.agent_view.AgentViewSession.add_note: enter", file=sys.stderr, flush=True)
         if self.img is None:
             return
         self._notes.append(text)
@@ -183,6 +196,7 @@ class AgentViewSession:
 
         Returns the saved path, or None when the session is disabled.
         """
+        print(f"[TRACE] tools.agent_view.AgentViewSession.save: enter", file=sys.stderr, flush=True)
         if self.img is None:
             return None
         try:
@@ -227,10 +241,12 @@ class AgentViewSession:
             logger.info("[AgentView] saved %s", path)
             return path
         except Exception as exc:
+            print(f"[TRACE] tools.agent_view.AgentViewSession.save: except {str(exc)[:80]}", file=sys.stderr, flush=True)
             logger.warning("[AgentView] save failed: %s", exc)
             return None
 
     def _label(self, x: int, y: int, text: str, color: tuple) -> None:
+        print(f"[TRACE] tools.agent_view.AgentViewSession._label: enter", file=sys.stderr, flush=True)
         from PIL import ImageFont
         font = ImageFont.load_default()
         self._draw.text((x, y), text, fill=color, font=font)
@@ -247,8 +263,10 @@ def _prune_old_files() -> None:
             try:
                 os.remove(os.path.join(AGENT_VIEW_DIR, old))
             except OSError:
+                print(f"[TRACE] tools.agent_view._prune_old_files: except OSError", file=sys.stderr, flush=True)
                 pass
     except Exception:
+        print(f"[TRACE] tools.agent_view._prune_old_files: except Exception", file=sys.stderr, flush=True)
         pass
 
 
@@ -258,6 +276,7 @@ def _prune_old_files() -> None:
 
 def agent_view_tool(action: str = "latest", open_file: bool = False) -> str:
     """Manage the agent-view recorder. Actions: latest | on | off | status."""
+    print(f"[TRACE] tools.agent_view.agent_view_tool: enter", file=sys.stderr, flush=True)
     action = (action or "latest").lower()
 
     if action == "on":
@@ -283,6 +302,7 @@ def agent_view_tool(action: str = "latest", open_file: bool = False) -> str:
             try:
                 os.startfile(path)  # noqa — Windows only, by design
             except Exception as exc:
+                print(f"[TRACE] tools.agent_view.agent_view_tool: except {str(exc)[:80]}", file=sys.stderr, flush=True)
                 return f"Latest: {path} (could not open: {exc})"
         return f"Latest agent view: {path}"
     return f"ERROR: unknown agent_view action '{action}' (use latest|on|off|status)"

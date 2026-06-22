@@ -15,6 +15,7 @@ JARVIS_SANDBOX_MODE values:
     docker  — run inside the docker-compose sandbox container
     e2b     — run in an ephemeral E2B cloud Linux sandbox
 """
+import sys
 
 import os
 import logging
@@ -34,6 +35,7 @@ def create_sandbox(task_id: str) -> object | None:
     - e2b_code_interpreter package not installed
     - E2B API call fails (fallback to local gracefully)
     """
+    print(f"[TRACE] tools.sandbox.create_sandbox: enter", file=sys.stderr, flush=True)
     if _SANDBOX_MODE != "e2b" or os.environ.get("JARVIS_CI") == "true":
         return None
 
@@ -43,9 +45,11 @@ def create_sandbox(task_id: str) -> object | None:
         logger.info(f"[sandbox] E2B sandbox created for task {task_id}: {sbx.sandbox_id}")
         return sbx
     except ImportError:
+        print(f"[TRACE] tools.sandbox.create_sandbox: except ImportError", file=sys.stderr, flush=True)
         logger.warning("[sandbox] e2b_code_interpreter not installed. Falling back to local execution.")
         return None
     except Exception as e:
+        print(f"[TRACE] tools.sandbox.create_sandbox: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[sandbox] E2B create failed for task {task_id}: {e}. Falling back to local.")
         return None
 
@@ -56,12 +60,14 @@ def destroy_sandbox(sandbox: object | None, task_id: str) -> None:
 
     Safe to call with sandbox=None (no-op).
     """
+    print(f"[TRACE] tools.sandbox.destroy_sandbox: enter", file=sys.stderr, flush=True)
     if sandbox is None:
         return
     try:
         sandbox.kill()
         logger.info(f"[sandbox] E2B sandbox destroyed for task {task_id}")
     except Exception as e:
+        print(f"[TRACE] tools.sandbox.destroy_sandbox: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[sandbox] E2B destroy failed for task {task_id}: {e}")
 
 
@@ -73,12 +79,14 @@ def run_in_sandbox(sandbox: object | None, command: str, cwd: str = "/home/user"
     call fails. Returns empty string when sandbox is None (caller should
     fall through to local execution).
     """
+    print(f"[TRACE] tools.sandbox.run_in_sandbox: enter", file=sys.stderr, flush=True)
     if sandbox is None:
         return ""
     try:
         result = sandbox.commands.run(command, cwd=cwd)
         return (result.stdout or "") + (result.stderr or "")
     except Exception as e:
+        print(f"[TRACE] tools.sandbox.run_in_sandbox: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[sandbox] E2B command failed: {e}")
         return f"E2B error: {e}"
 
@@ -91,6 +99,7 @@ def write_files_to_sandbox(sandbox: object | None, files: dict, base: str = "/ho
     sandbox before executing them. Returns True on success, False on any failure
     (including sandbox=None, so the caller can fall back to local checks).
     """
+    print(f"[TRACE] tools.sandbox.write_files_to_sandbox: enter", file=sys.stderr, flush=True)
     if sandbox is None or not files:
         return False
     try:
@@ -99,5 +108,6 @@ def write_files_to_sandbox(sandbox: object | None, files: dict, base: str = "/ho
             sandbox.files.write(dest, content if isinstance(content, str) else str(content))
         return True
     except Exception as e:
+        print(f"[TRACE] tools.sandbox.write_files_to_sandbox: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[sandbox] E2B file write failed: {e}")
         return False

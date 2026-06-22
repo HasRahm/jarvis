@@ -1,3 +1,4 @@
+import sys
 # tools/agent_cursor.py
 """
 Agent Cursor — a visible overlay ring showing where the agent is acting (Phase 24)
@@ -92,6 +93,7 @@ class AgentCursor:
             state = {"target": None, "steps_left": 0, "pulse_left": 0}
 
             def poll():
+                print(f"[TRACE] tools.agent_cursor.AgentCursor._tk_main.poll: enter", file=sys.stderr, flush=True)
                 try:
                     while True:
                         cmd = self._cmds.get_nowait()
@@ -114,6 +116,7 @@ class AgentCursor:
                             root.destroy()
                             return
                 except queue.Empty:
+                    print(f"[TRACE] tools.agent_cursor.AgentCursor._tk_main.poll: except Empty", file=sys.stderr, flush=True)
                     pass
 
                 # animation step
@@ -138,11 +141,13 @@ class AgentCursor:
             root.after(16, poll)
             root.mainloop()
         except Exception as exc:
+            print(f"[TRACE] tools.agent_cursor.AgentCursor._tk_main: except {str(exc)[:80]}", file=sys.stderr, flush=True)
             logger.warning("[AgentCursor] tk thread failed: %s — overlay disabled", exc)
             self._broken = True
             self._ready.set()
 
     def _place(self, root, x: int, y: int) -> None:
+        print(f"[TRACE] tools.agent_cursor.AgentCursor._place: enter", file=sys.stderr, flush=True)
         self._pos = (x, y)
         root.geometry(f"+{x - _SIZE // 2}+{y - _SIZE // 2}")
 
@@ -162,6 +167,7 @@ class AgentCursor:
             style |= WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
             ctypes.windll.user32.SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style)
         except Exception as exc:
+            print(f"[TRACE] tools.agent_cursor.AgentCursor._make_clickthrough: except {str(exc)[:80]}", file=sys.stderr, flush=True)
             logger.warning("[AgentCursor] click-through style failed: %s", exc)
 
 
@@ -175,6 +181,7 @@ _lock = threading.Lock()
 
 def _get() -> AgentCursor | None:
     """Lazily start the overlay; None when disabled or broken."""
+    print(f"[TRACE] tools.agent_cursor._get: enter", file=sys.stderr, flush=True)
     global _instance
     if not cursor_enabled():
         return None
@@ -183,6 +190,7 @@ def _get() -> AgentCursor | None:
             try:
                 _instance = AgentCursor()
             except Exception as exc:
+                print(f"[TRACE] tools.agent_cursor._get: except {str(exc)[:80]}", file=sys.stderr, flush=True)
                 logger.warning("[AgentCursor] failed to start: %s", exc)
                 return None
         return None if _instance._broken else _instance
@@ -190,6 +198,7 @@ def _get() -> AgentCursor | None:
 
 def move_to(x: int, y: int, animate: bool = True) -> None:
     """Move the overlay ring to (x, y). No-op when the cursor is disabled."""
+    print(f"[TRACE] tools.agent_cursor.move_to: enter", file=sys.stderr, flush=True)
     inst = _get()
     if inst:
         inst.send("move", int(x), int(y), animate)
@@ -197,24 +206,28 @@ def move_to(x: int, y: int, animate: bool = True) -> None:
 
 def pulse() -> None:
     """Flash the ring — call right before a click/invoke."""
+    print(f"[TRACE] tools.agent_cursor.pulse: enter", file=sys.stderr, flush=True)
     inst = _get()
     if inst:
         inst.send("pulse")
 
 
 def hide() -> None:
+    print(f"[TRACE] tools.agent_cursor.hide: enter", file=sys.stderr, flush=True)
     global _instance
     if _instance and not _instance._broken:
         _instance.send("hide")
 
 
 def show() -> None:
+    print(f"[TRACE] tools.agent_cursor.show: enter", file=sys.stderr, flush=True)
     inst = _get()
     if inst:
         inst.send("show")
 
 
 def shutdown() -> None:
+    print(f"[TRACE] tools.agent_cursor.shutdown: enter", file=sys.stderr, flush=True)
     global _instance
     with _lock:
         if _instance and not _instance._broken:
@@ -226,6 +239,7 @@ def shutdown() -> None:
 def cursor_hidden():
     """Hide the ring during screen captures so it never appears in screenshots,
     OCR, vision-model input, or imprint deltas. No-op when the cursor is off."""
+    print(f"[TRACE] tools.agent_cursor.cursor_hidden: enter", file=sys.stderr, flush=True)
     global _instance
     active = _instance is not None and not _instance._broken and cursor_enabled()
     if active:
@@ -245,6 +259,7 @@ def cursor_hidden():
 
 def agent_cursor_tool(action: str = "status") -> str:
     """Control the visible agent-cursor overlay. Actions: on | off | status."""
+    print(f"[TRACE] tools.agent_cursor.agent_cursor_tool: enter", file=sys.stderr, flush=True)
     action = (action or "status").lower()
     if action == "on":
         os.environ["JARVIS_AGENT_CURSOR"] = "1"

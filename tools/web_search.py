@@ -12,6 +12,7 @@ Backend priority:
 Returns a compact numbered list of {title, url, snippet}. Never raises — on any
 failure it returns a descriptive string so the model can pick another approach.
 """
+import sys
 
 import os
 import re
@@ -33,6 +34,7 @@ _TIMEOUT = 15.0
 
 def web_search(query: str, max_results: int = 5) -> str:
     """Search the web for current information. Returns a numbered result list as a string."""
+    print(f"[TRACE] tools.web_search.web_search: enter", file=sys.stderr, flush=True)
     query = (query or "").strip()
     if not query:
         return "[web_search] empty query."
@@ -47,6 +49,7 @@ def web_search(query: str, max_results: int = 5) -> str:
         else:
             results = _search_duckduckgo(query, max_results)
     except Exception as e:
+        print(f"[TRACE] tools.web_search.web_search: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[web_search] backend failed: {e}")
         return f"[web_search] unavailable: {e}"
 
@@ -77,6 +80,7 @@ class _DDGParser(HTMLParser):
         self._cur_snippet_parts = []
 
     def handle_starttag(self, tag, attrs):
+        print(f"[TRACE] tools.web_search._DDGParser.handle_starttag: enter", file=sys.stderr, flush=True)
         d = dict(attrs)
         cls = d.get("class", "")
         if tag == "a" and "result__a" in cls:
@@ -121,6 +125,7 @@ class _DDGParser(HTMLParser):
 
 
 def _search_duckduckgo(query: str, max_results: int) -> list[dict]:
+    print(f"[TRACE] tools.web_search._search_duckduckgo: enter", file=sys.stderr, flush=True)
     resp = httpx.get(
         "https://html.duckduckgo.com/html/",
         params={"q": query},
@@ -137,6 +142,7 @@ def _search_duckduckgo(query: str, max_results: int) -> list[dict]:
 # ── Tavily (optional, keyed) ─────────────────────────────────────────────────
 
 def _search_tavily(query: str, max_results: int) -> list[dict]:
+    print(f"[TRACE] tools.web_search._search_tavily: enter", file=sys.stderr, flush=True)
     resp = httpx.post(
         "https://api.tavily.com/search",
         json={
@@ -157,6 +163,7 @@ def _search_tavily(query: str, max_results: int) -> list[dict]:
 # ── Brave (optional, keyed) ──────────────────────────────────────────────────
 
 def _search_brave(query: str, max_results: int) -> list[dict]:
+    print(f"[TRACE] tools.web_search._search_brave: enter", file=sys.stderr, flush=True)
     resp = httpx.get(
         "https://api.search.brave.com/res/v1/web/search",
         params={"q": query, "count": max_results},

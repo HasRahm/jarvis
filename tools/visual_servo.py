@@ -1,3 +1,4 @@
+import sys
 import os
 import time
 import logging
@@ -11,6 +12,7 @@ pyautogui = None
 ImageGrab = None
 
 def _lazy_load():
+    print(f"[TRACE] tools.visual_servo._lazy_load: enter", file=sys.stderr, flush=True)
     global cv2, pyautogui, ImageGrab
     if cv2 is None:
         try:
@@ -24,11 +26,13 @@ def _lazy_load():
             pyautogui.FAILSAFE = True
             pyautogui.PAUSE = 0.01
         except ImportError as e:
+            print(f"[TRACE] tools.visual_servo._lazy_load: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.warning(f"Failed to import graphical automation libraries: {e}")
             raise
 
 def is_graphical_env_available() -> bool:
     """Check if we have an active OS display context and required libraries are installed."""
+    print(f"[TRACE] tools.visual_servo.is_graphical_env_available: enter", file=sys.stderr, flush=True)
     if os.environ.get("JARVIS_CI") == "true":
         return False
     try:
@@ -37,6 +41,7 @@ def is_graphical_env_available() -> bool:
         screenshot = ImageGrab.grab(bbox=(0, 0, 10, 10))
         return screenshot is not None
     except Exception:
+        print(f"[TRACE] tools.visual_servo.is_graphical_env_available: except Exception", file=sys.stderr, flush=True)
         return False
 
 def visual_servo_click(target_template_path: str, timeout_sec: float = 5.0, Kp: float = 0.3) -> bool:
@@ -44,6 +49,7 @@ def visual_servo_click(target_template_path: str, timeout_sec: float = 5.0, Kp: 
     Perform closed-loop visual servo cursor tracking to locate and smoothly click a visual template.
     Continues to dynamically course-correct cursor movement in real-time as the target shifts.
     """
+    print(f"[TRACE] tools.visual_servo.visual_servo_click: enter", file=sys.stderr, flush=True)
     if not is_graphical_env_available():
         logger.warning("[VISUAL SERVO] Graphical interface not available (CI/headless mode). Falling back to direct action.")
         return True
@@ -117,6 +123,7 @@ def visual_servo_click(target_template_path: str, timeout_sec: float = 5.0, Kp: 
                             logger.info(f"[VISUAL SERVO] Clamping target ({target_x}, {target_y}) to active window '{active_win.title}' bounds: ({clamped_x}, {clamped_y})")
                             target_x, target_y = clamped_x, clamped_y
             except Exception as e:
+                print(f"[TRACE] tools.visual_servo.visual_servo_click: except {str(e)[:80]}", file=sys.stderr, flush=True)
                 logger.debug(f"[VISUAL SERVO] Active window clamping error: {e}")
 
             # 3. Get current physical mouse cursor position
@@ -156,5 +163,6 @@ def visual_servo_click(target_template_path: str, timeout_sec: float = 5.0, Kp: 
         return False
 
     except Exception as exc:
+        print(f"[TRACE] tools.visual_servo.visual_servo_click: except {str(exc)[:80]}", file=sys.stderr, flush=True)
         logger.error(f"[VISUAL SERVO] Operational error occurred: {exc}")
         return False
