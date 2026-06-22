@@ -5,6 +5,7 @@ Persists learned_preferences.json atomically under agents_md_lock.
 All GBrain calls are lazy-imported; never imported at module level from brain/*.
 Safe to import in any environment including CI.
 """
+import sys
 
 import os
 import json
@@ -27,6 +28,7 @@ DEFAULT_PREFS = {
 
 def load_preferences() -> dict:
     """Read learned_preferences.json; return defaults if missing or corrupt."""
+    print(f"[TRACE] agents.adaptive_router.load_preferences: enter", file=sys.stderr, flush=True)
     if not os.path.exists(_PREFS_PATH):
         return dict(DEFAULT_PREFS)
     try:
@@ -37,6 +39,7 @@ def load_preferences() -> dict:
             data.setdefault(k, v)
         return data
     except Exception as e:
+        print(f"[TRACE] agents.adaptive_router.load_preferences: except {str(e)[:80]}", file=sys.stderr, flush=True)
         logger.warning(f"[adaptive_router] Could not load preferences: {e}. Using defaults.")
         return dict(DEFAULT_PREFS)
 
@@ -48,6 +51,7 @@ def record_model_outcome(role: str, model: str, success: bool):
 
     Thread-safe: acquires agents_md_lock on the preferences file.
     """
+    print(f"[TRACE] agents.adaptive_router.record_model_outcome: enter", file=sys.stderr, flush=True)
     from core.orchestrator.distributed_sync import agents_md_lock
 
     os.makedirs(os.path.dirname(_PREFS_PATH), exist_ok=True)
@@ -100,6 +104,7 @@ def get_adaptive_model(role: str) -> str | None:
     Return the learned best model for a role, or None if insufficient data.
     Always returns None under JARVIS_CI=true (keeps CI fully offline).
     """
+    print(f"[TRACE] agents.adaptive_router.get_adaptive_model: enter", file=sys.stderr, flush=True)
     if os.environ.get("JARVIS_CI") == "true":
         return None
     return load_preferences().get("routing_overrides", {}).get(role)
@@ -110,6 +115,7 @@ def compute_daily_summary(prefs: dict) -> str:
     Return a CP1252-safe ASCII summary of model scores for GBrain storage.
     Used by scripts/dream_analyze.py nightly.
     """
+    print(f"[TRACE] agents.adaptive_router.compute_daily_summary: enter", file=sys.stderr, flush=True)
     lines = [
         f"Jarvis Adaptive Router - Daily Summary ({datetime.now().strftime('%Y-%m-%d')})"
     ]

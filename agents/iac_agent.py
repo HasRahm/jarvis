@@ -3,6 +3,7 @@ IaC Agent — specializes in system configuration, directory provisioning, and l
 
 Dynamically loaded model from MODEL_ROUTER.
 """
+import sys
 
 import json
 import logging
@@ -65,6 +66,7 @@ class IacAgent(BaseAgent):
 
     def run(self, task: str) -> dict:
         """Execute an IaC infrastructure provisioning task."""
+        print(f"[TRACE] agents.iac_agent.IacAgent.run: enter", file=sys.stderr, flush=True)
         self.update_status("WORKING", "Provisioning system infrastructure")
         self.append_log(f"Started IaC Task: {task}")
 
@@ -111,6 +113,7 @@ class IacAgent(BaseAgent):
             }
 
         except Exception as e:
+            print(f"[TRACE] agents.iac_agent.IacAgent.run: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.exception("[iac] Provisioning run failed")
             self.append_log(f"IaC failed: {str(e)}")
             self.update_status("IDLE", f"Failed: {str(e)}")

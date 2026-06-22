@@ -5,6 +5,7 @@ Uses gpt-5.4 via the OpenAI SDK.
 Includes a verification pass with gemini-3.5-flash to catch
 hallucinated test assertions (reasoning models hallucinate at >10%).
 """
+import sys
 
 import json
 import logging
@@ -118,11 +119,13 @@ class QAAgent(BaseAgent):
 
             return json.loads(clean)
         except Exception as e:
+            print(f"[TRACE] agents.qa_agent.QAAgent._verify_with_flash_lite: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.warning(f"[qa] Verification pass failed: {e}. Proceeding without verification.")
             return {"verified": True, "removed_issues": [], "notes": "Verification skipped"}
 
     def verify_ui_layout_visually(self, screenshot_path: str, html_context: str) -> dict:
         """Verify the UI layout visually using Gemini-3.5-flash, with escalation to Gemini-3.1-pro-preview if confidence < 0.8."""
+        print(f"[TRACE] agents.qa_agent.QAAgent.verify_ui_layout_visually: enter", file=sys.stderr, flush=True)
         import base64
         import json
         import os
@@ -215,11 +218,13 @@ Source HTML context for structure:
                 
             return res
         except Exception as e:
+            print(f"[TRACE] agents.qa_agent.QAAgent.verify_ui_layout_visually: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.warning(f"Visual layout verifier failed: {e}. Defaulting to safe pass.")
             return {"passed": True, "issues": [], "confidence": 1.0, "notes": f"Fallback due to error: {e}"}
 
     def run(self, task: str) -> dict:
         """Execute a QA/review task."""
+        print(f"[TRACE] agents.qa_agent.QAAgent.run: enter", file=sys.stderr, flush=True)
         self.update_status("WORKING", "Reviewing code")
         self.append_log(f"Started QA: {task}")
 
@@ -284,11 +289,13 @@ Source HTML context for structure:
             }
 
         except json.JSONDecodeError as e:
+            print(f"[TRACE] agents.qa_agent.QAAgent.run: except {str(e)[:80]}", file=sys.stderr, flush=True)
             self.update_status("ERROR", "Invalid JSON response")
             self.append_log(f"ERROR: Model returned invalid JSON: {e}")
             return {"status": "error", "output": f"JSON parse error: {e}", "files": []}
 
         except Exception as e:
+            print(f"[TRACE] agents.qa_agent.QAAgent.run: except {str(e)[:80]}", file=sys.stderr, flush=True)
             self.update_status("ERROR", str(e)[:50])
             self.append_log(f"ERROR: {e}")
             return {"status": "error", "output": str(e), "files": []}

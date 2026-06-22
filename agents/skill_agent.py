@@ -8,6 +8,7 @@ A skill's SKILL.md body becomes the system persona. We wrap it with a standard O
 file-producing skills (scaffolders, builders) emit `files` we can write + verify, while analysis
 skills (reviewers, auditors) return `notes` and the verification spine simply no-ops (no files).
 """
+import sys
 
 import os
 import re
@@ -54,6 +55,7 @@ class SkillAgent(BaseAgent):
             self.provider = get_provider(self.model)
             self.api_key = get_api_key(self.provider)
         except Exception as e:
+            print(f"[TRACE] agents.skill_agent.SkillAgent.__init__: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.warning(f"[skill:{skill_name}] model routing fell back to default: {e}")
 
         # Load the skill persona (SKILL.md body) — resolves anywhere under skills/, incl. external/.
@@ -61,11 +63,13 @@ class SkillAgent(BaseAgent):
             from core.system.skills import SkillsEngine
             self._skill_body = SkillsEngine().get_skill_content(skill_name)
         except Exception as e:
+            print(f"[TRACE] agents.skill_agent.SkillAgent.__init__: except {str(e)[:80]}", file=sys.stderr, flush=True)
             logger.warning(f"[skill:{skill_name}] could not load skill body: {e}")
             self._skill_body = f"You are the '{skill_name}' specialist agent."
 
     def run(self, task: str) -> dict:
         """Execute the task using the skill persona; write any produced files; return result dict."""
+        print(f"[TRACE] agents.skill_agent.SkillAgent.run: enter", file=sys.stderr, flush=True)
         self.update_status("WORKING", f"Running skill {self.skill_name}")
         self.append_log(f"Started skill '{self.skill_name}': {task}")
 
@@ -102,6 +106,7 @@ class SkillAgent(BaseAgent):
             }
 
         except Exception as e:
+            print(f"[TRACE] agents.skill_agent.SkillAgent.run: except {str(e)[:80]}", file=sys.stderr, flush=True)
             self.update_status("ERROR", str(e)[:50])
             self.append_log(f"ERROR in skill '{self.skill_name}': {e}")
             return {"status": "error", "output": str(e), "files": [], "skill": self.skill_name}
