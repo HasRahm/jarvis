@@ -4,6 +4,7 @@ Uses a 4-dimensional classification matrix to determine execution domain, comple
 required context, and verification method before delegating any work.
 """
 import sys
+from core.trace import trace as _jtrace
 
 CLASSIFICATION_PROMPT = """
 You are the Chief Orchestrator of Jarvis OS.
@@ -96,7 +97,7 @@ def _heuristic(task: str) -> dict:
     """Fast keyword classifier — used as the CI mock and as a fallback when the LLM call fails
     or returns garbage. Token-boundary matching (NOT substring — 'api' must not match 'capital').
     Deterministic, zero-cost."""
-    print(f"[TRACE] core.orchestrator.task_classifier._heuristic: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.task_classifier._heuristic: enter")
     import re
     t = (task or "").lower()
     toks = set(re.findall(r"[a-z0-9]+", t))
@@ -137,7 +138,7 @@ def classify(task: str) -> dict:
 
     Uses the chief-orchestrator model (Kimi K2.6) when available; CI-safe (heuristic mock under
     JARVIS_CI) and never raises (falls back to the heuristic on any failure)."""
-    print(f"[TRACE] core.orchestrator.task_classifier.classify: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.task_classifier.classify: enter")
     if os.environ.get("JARVIS_CI") == "true":
         return _heuristic(task)
     try:
@@ -164,6 +165,6 @@ def classify(task: str) -> dict:
                 result["domain"] = dom
                 return result
     except Exception as e:
-        print(f"[TRACE] core.orchestrator.task_classifier.classify: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.orchestrator.task_classifier.classify: except {str(e)[:80]}")
         logger.warning(f"[task_classifier] classify failed ({e}); using heuristic")
     return _heuristic(task)

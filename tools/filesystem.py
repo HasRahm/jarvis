@@ -1,4 +1,5 @@
 import sys
+from core.trace import trace as _jtrace
 import os
 
 # ---------------------------------------------------------------------------
@@ -11,14 +12,14 @@ import os
 
 
 def _jail_root() -> str | None:
-    print(f"[TRACE] tools.filesystem._jail_root: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.filesystem._jail_root: enter")
     root = os.environ.get("JARVIS_WORKSPACE_JAIL", "").strip()
     return os.path.realpath(root) if root else None
 
 
 def _check_path_allowed(path: str) -> tuple[bool, str]:
     """When a jail is configured, confirm `path` resolves inside it (blocks .. traversal)."""
-    print(f"[TRACE] tools.filesystem._check_path_allowed: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.filesystem._check_path_allowed: enter")
     root = _jail_root()
     if not root:
         return True, ""
@@ -27,7 +28,7 @@ def _check_path_allowed(path: str) -> tuple[bool, str]:
     try:
         inside = os.path.commonpath([resolved, root]) == root
     except ValueError:
-        print(f"[TRACE] tools.filesystem._check_path_allowed: except ValueError", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.filesystem._check_path_allowed: except ValueError")
         inside = False
     if inside:
         return True, ""
@@ -37,7 +38,7 @@ def _check_path_allowed(path: str) -> tuple[bool, str]:
 
 def read_file(path: str) -> str:
     """Read the contents of a file at the given path"""
-    print(f"[TRACE] tools.filesystem.read_file: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.filesystem.read_file: enter")
     ok, reason = _check_path_allowed(path)
     if not ok:
         return f"Error reading file {path}: {reason}"
@@ -45,12 +46,12 @@ def read_file(path: str) -> str:
         with open(path, 'r', encoding='utf-8') as f:
             return f.read()
     except Exception as e:
-        print(f"[TRACE] tools.filesystem.read_file: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.filesystem.read_file: except {str(e)[:80]}")
         return f"Error reading file {path}: {str(e)}"
 
 def write_file(path: str, content: str) -> str:
     """Write content to a file, creating it if it does not exist"""
-    print(f"[TRACE] tools.filesystem.write_file: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.filesystem.write_file: enter")
     ok, reason = _check_path_allowed(path)
     if not ok:
         return f"Error writing to file {path}: {reason}"
@@ -61,12 +62,12 @@ def write_file(path: str, content: str) -> str:
             f.write(content)
         return f"Successfully wrote to {path}"
     except Exception as e:
-        print(f"[TRACE] tools.filesystem.write_file: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.filesystem.write_file: except {str(e)[:80]}")
         return f"Error writing to file {path}: {str(e)}"
 
 def list_dir(path: str) -> str:
     """List files and directories at a path"""
-    print(f"[TRACE] tools.filesystem.list_dir: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.filesystem.list_dir: enter")
     ok, reason = _check_path_allowed(path)
     if not ok:
         return f"Error listing directory {path}: {reason}"
@@ -79,5 +80,5 @@ def list_dir(path: str) -> str:
             result.append(f"{'[DIR]' if is_dir else '[FILE]'} {item}")
         return "\n".join(result)
     except Exception as e:
-        print(f"[TRACE] tools.filesystem.list_dir: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.filesystem.list_dir: except {str(e)[:80]}")
         return f"Error listing directory {path}: {str(e)}"

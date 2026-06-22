@@ -1,4 +1,5 @@
 import sys
+from core.trace import trace as _jtrace
 import os
 import json
 import logging
@@ -21,7 +22,7 @@ class PluginLoader:
         self._load_plugins()
 
     def _load_plugins(self):
-        print(f"[TRACE] core.system.plugin_loader.PluginLoader._load_plugins: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.plugin_loader.PluginLoader._load_plugins: enter")
         if not os.path.exists(self.plugin_file):
             logger.info("No jarvis.plugin.json manifest found. Operating with core defaults.")
             return
@@ -66,7 +67,7 @@ class PluginLoader:
                         else:
                             logger.warning(f"Plugin tool {p} is missing TOOL_DEFINITIONS or dispatch function")
                     except Exception as e:
-                        print(f"[TRACE] core.system.plugin_loader.PluginLoader._load_plugins: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                        _jtrace(f"[TRACE] core.system.plugin_loader.PluginLoader._load_plugins: except {str(e)[:80]}")
                         logger.error(f"Failed to load plugin tool {p}: {e}")
                 else:
                     logger.warning(f"Plugin tool file not found: {abs_path}")
@@ -82,7 +83,7 @@ class PluginLoader:
                 logger.info(f"Registered plugin MCP servers: {self.mcp_servers}")
 
         except Exception as e:
-            print(f"[TRACE] core.system.plugin_loader.PluginLoader._load_plugins: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.plugin_loader.PluginLoader._load_plugins: except {str(e)[:80]}")
             logger.error(f"Failed to parse plugin manifest: {e}")
 
 # Global plugin loader instance

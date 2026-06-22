@@ -1,5 +1,6 @@
 import os
 import sys
+from core.trace import trace as _jtrace
 import time
 import random
 import logging
@@ -15,13 +16,13 @@ def _setup_dpi_awareness():
             ctypes.windll.shcore.SetProcessDpiAwareness(2)
             logger.info("[DESKTOP] Per-Monitor DPI awareness set successfully.")
         except Exception:
-            print(f"[TRACE] tools.desktop_automation._setup_dpi_awareness: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.desktop_automation._setup_dpi_awareness: except Exception")
             try:
                 # Fallback to SetProcessDPIAware (Windows Vista+)
                 ctypes.windll.user32.SetProcessDPIAware()
                 logger.info("[DESKTOP] Standard DPI awareness set successfully.")
             except Exception as e:
-                print(f"[TRACE] tools.desktop_automation._setup_dpi_awareness: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] tools.desktop_automation._setup_dpi_awareness: except {str(e)[:80]}")
                 logger.warning(f"[DESKTOP] Failed to set DPI awareness: {e}")
 
 _setup_dpi_awareness()
@@ -38,7 +39,7 @@ _pyautogui = None
 _gw = None
 
 def _get_pyautogui():
-    print(f"[TRACE] tools.desktop_automation._get_pyautogui: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.desktop_automation._get_pyautogui: enter")
     global _pyautogui
     if _pyautogui is None and os.environ.get("JARVIS_CI") != "true":
         try:
@@ -47,26 +48,26 @@ def _get_pyautogui():
             pyautogui.PAUSE = 0.01
             _pyautogui = pyautogui
         except (ImportError, KeyError, Exception) as e:
-            print(f"[TRACE] tools.desktop_automation._get_pyautogui: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.desktop_automation._get_pyautogui: except {str(e)[:80]}")
             logger.warning(f"Could not import pyautogui: {e}. GUI automation features will be disabled.")
     return _pyautogui
 
 def _get_gw():
-    print(f"[TRACE] tools.desktop_automation._get_gw: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.desktop_automation._get_gw: enter")
     global _gw
     if _gw is None and os.environ.get("JARVIS_CI") != "true":
         try:
             import pygetwindow as gw
             _gw = gw
         except (ImportError, NotImplementedError, Exception):
-            print(f"[TRACE] tools.desktop_automation._get_gw: except ?", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.desktop_automation._get_gw: except ?")
             pass
     return _gw
 
 
 def desktop_smooth_click(x: int, y: int, duration: float = 0.4, window_bounds: dict = None) -> str:
     """Moves mouse smoothly from current position to (x, y) and performs a click."""
-    print(f"[TRACE] tools.desktop_automation.desktop_smooth_click: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.desktop_automation.desktop_smooth_click: enter")
     pyautogui = _get_pyautogui()
     if not pyautogui: return "ERROR: pyautogui not installed"
 
@@ -125,7 +126,7 @@ def desktop_smooth_click(x: int, y: int, duration: float = 0.4, window_bounds: d
                         desktop_focus_window(target_title)
                         time.sleep(0.2)
         except Exception as err:
-            print(f"[TRACE] tools.desktop_automation.desktop_smooth_click: except {str(err)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.desktop_automation.desktop_smooth_click: except {str(err)[:80]}")
             logger.debug(f"[TRACKER] Window tracking exception: {err}")
 
     # Clamp coordinates to the target window bounds if provided
@@ -149,7 +150,7 @@ def desktop_smooth_click(x: int, y: int, duration: float = 0.4, window_bounds: d
                       f"  </coordinate_clamping>")
                 x, y = clamped_x, clamped_y
         except Exception as e:
-            print(f"[TRACE] tools.desktop_automation.desktop_smooth_click: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.desktop_automation.desktop_smooth_click: except {str(e)[:80]}")
             logger.debug(f"Could not clamp to target window bounds: {e}")
 
     try:
@@ -158,7 +159,7 @@ def desktop_smooth_click(x: int, y: int, duration: float = 0.4, window_bounds: d
         agent_cursor.move_to(x, y)
         agent_cursor.pulse()
     except Exception:
-        print(f"[TRACE] tools.desktop_automation.desktop_smooth_click: except Exception", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.desktop_automation.desktop_smooth_click: except Exception")
         pass
     try:
         start_x, start_y = pyautogui.position()
@@ -180,13 +181,13 @@ def desktop_smooth_click(x: int, y: int, duration: float = 0.4, window_bounds: d
         pyautogui.click()
         return f"Successfully glided and clicked at ({x}, {y})"
     except Exception as e:
-        print(f"[TRACE] tools.desktop_automation.desktop_smooth_click: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.desktop_automation.desktop_smooth_click: except {str(e)[:80]}")
         logger.error(f"Failed to smooth click at ({x}, {y}): {e}")
         return f"ERROR: {e}"
 
 def desktop_type_text(text: str) -> str:
     """Types out text with a realistic human cadence and punctuation pauses."""
-    print(f"[TRACE] tools.desktop_automation.desktop_type_text: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.desktop_automation.desktop_type_text: enter")
     pyautogui = _get_pyautogui()
     if not pyautogui: return "ERROR: pyautogui not installed"
     try:
@@ -201,13 +202,13 @@ def desktop_type_text(text: str) -> str:
                 time.sleep(random.uniform(0.25, 0.45))
         return f"Successfully typed: '{text[:30]}...'"
     except Exception as e:
-        print(f"[TRACE] tools.desktop_automation.desktop_type_text: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.desktop_automation.desktop_type_text: except {str(e)[:80]}")
         logger.error(f"Failed to type text: {e}")
         return f"ERROR: {e}"
 
 def desktop_press_keys(keys: list) -> str:
     """Presses a single key or executes a hotkey combinations (e.g. ['ctrl', 'n'] or ['enter'])."""
-    print(f"[TRACE] tools.desktop_automation.desktop_press_keys: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.desktop_automation.desktop_press_keys: enter")
     pyautogui = _get_pyautogui()
     if not pyautogui: return "ERROR: pyautogui not installed"
     try:
@@ -218,13 +219,13 @@ def desktop_press_keys(keys: list) -> str:
             pyautogui.hotkey(*keys)
         return f"Successfully pressed keys: {keys}"
     except Exception as e:
-        print(f"[TRACE] tools.desktop_automation.desktop_press_keys: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.desktop_automation.desktop_press_keys: except {str(e)[:80]}")
         logger.error(f"Failed to press keys {keys}: {e}")
         return f"ERROR: {e}"
 
 def desktop_scroll(amount: int, steps: int = 5) -> str:
     """Scrolls the mouse wheel smoothly over multiple small steps."""
-    print(f"[TRACE] tools.desktop_automation.desktop_scroll: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.desktop_automation.desktop_scroll: enter")
     pyautogui = _get_pyautogui()
     if not pyautogui: return "ERROR: pyautogui not installed"
     try:
@@ -235,13 +236,13 @@ def desktop_scroll(amount: int, steps: int = 5) -> str:
             time.sleep(0.08)
         return f"Successfully scrolled by {amount}"
     except Exception as e:
-        print(f"[TRACE] tools.desktop_automation.desktop_scroll: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.desktop_automation.desktop_scroll: except {str(e)[:80]}")
         logger.error(f"Failed to scroll: {e}")
         return f"ERROR: {e}"
 
 def desktop_get_active_window() -> str:
     """Returns the title of the currently active focused window in the foreground."""
-    print(f"[TRACE] tools.desktop_automation.desktop_get_active_window: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.desktop_automation.desktop_get_active_window: enter")
     gw = _get_gw()
     if not gw: return "ERROR: pygetwindow not available"
     try:
@@ -251,13 +252,13 @@ def desktop_get_active_window() -> str:
         clean_title = active_win.title.encode('ascii', errors='replace').decode('ascii')
         return f"Active Window: '{clean_title}'"
     except Exception as e:
-        print(f"[TRACE] tools.desktop_automation.desktop_get_active_window: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.desktop_automation.desktop_get_active_window: except {str(e)[:80]}")
         logger.error(f"Failed to get active window: {e}")
         return f"ERROR: {e}"
 
 def desktop_focus_window(title_query: str) -> str:
     """Finds a window whose title matches title_query (case-insensitive) and brings it to the foreground."""
-    print(f"[TRACE] tools.desktop_automation.desktop_focus_window: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.desktop_automation.desktop_focus_window: enter")
     gw = _get_gw()
     pyautogui = _get_pyautogui()
     if not gw: return "ERROR: pygetwindow not available"
@@ -284,7 +285,7 @@ def desktop_focus_window(title_query: str) -> str:
         try:
             win.activate()
         except Exception as act_err:
-            print(f"[TRACE] tools.desktop_automation.desktop_focus_window: except {str(act_err)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.desktop_automation.desktop_focus_window: except {str(act_err)[:80]}")
             logger.debug(f"win.activate() failed (normal for Windows foreground lock): {act_err}")
         time.sleep(activate_wait)
 
@@ -296,7 +297,7 @@ def desktop_focus_window(title_query: str) -> str:
             cur = gw.getActiveWindow()
             already_focused = bool(cur and title_query_lower in (cur.title or "").lower())
         except Exception:
-            print(f"[TRACE] tools.desktop_automation.desktop_focus_window: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.desktop_automation.desktop_focus_window: except Exception")
             already_focused = False
 
         if not already_focused:
@@ -311,14 +312,14 @@ def desktop_focus_window(title_query: str) -> str:
                     pyautogui.click()
                     time.sleep(0.15 if fast else 0.3)
             except Exception as click_err:
-                print(f"[TRACE] tools.desktop_automation.desktop_focus_window: except {str(click_err)[:80]}", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] tools.desktop_automation.desktop_focus_window: except {str(click_err)[:80]}")
                 logger.warning(f"Failed to execute Win32 focus bypass click: {click_err}")
 
         active_win = gw.getActiveWindow()
         active_title = active_win.title.encode('ascii', errors='replace').decode('ascii') if active_win else "None"
         return f"Successfully focused window: '{clean_title}'. Currently active focused window is: '{active_title}'"
     except Exception as e:
-        print(f"[TRACE] tools.desktop_automation.desktop_focus_window: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.desktop_automation.desktop_focus_window: except {str(e)[:80]}")
         logger.error(f"Failed to focus window matching '{title_query}': {e}")
         return f"ERROR: {e}"
 
@@ -412,13 +413,13 @@ def desktop_batch_actions(actions: list) -> str:
         summary = "\n".join(f"  - {r}" for r in results)
         return f"Successfully executed all {len(actions)} batched actions:\n{summary}"
     except Exception as e:
-        print(f"[TRACE] tools.desktop_automation.desktop_batch_actions: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.desktop_automation.desktop_batch_actions: except {str(e)[:80]}")
         logger.error(f"Failed during batch actions execution: {e}")
         return f"ERROR: {e}"
 
 def desktop_screenshot() -> str:
     """Takes a full physical screenshot of the current desktop and returns the file path."""
-    print(f"[TRACE] tools.desktop_automation.desktop_screenshot: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.desktop_automation.desktop_screenshot: enter")
     pyautogui = _get_pyautogui()
     if not pyautogui: return "ERROR: pyautogui not installed"
     try:
@@ -431,6 +432,6 @@ def desktop_screenshot() -> str:
         pyautogui.screenshot(path)
         return f"[SUCCESS] Desktop screenshot captured and saved at: {path}"
     except Exception as e:
-        print(f"[TRACE] tools.desktop_automation.desktop_screenshot: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.desktop_automation.desktop_screenshot: except {str(e)[:80]}")
         logger.error(f"Failed to capture desktop screenshot: {e}")
         return f"ERROR: {e}"

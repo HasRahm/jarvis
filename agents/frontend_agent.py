@@ -6,6 +6,7 @@ Includes extra retry logic for Gemini's known harness instability
 (tendency to break out of tool loops and print raw tool outputs).
 """
 import sys
+from core.trace import trace as _jtrace
 
 import os
 import json
@@ -24,7 +25,7 @@ def safe_parse_response(raw: str) -> dict:
     Repair and parse malformed/truncated JSON output.
     """
     # 1. Clean markdown fences
-    print(f"[TRACE] agents.frontend_agent.safe_parse_response: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.frontend_agent.safe_parse_response: enter")
     clean = raw.strip()
     if clean.startswith("```"):
         lines = clean.split("\n")
@@ -38,7 +39,7 @@ def safe_parse_response(raw: str) -> dict:
     try:
         return json.loads(clean)
     except json.JSONDecodeError:
-        print(f"[TRACE] agents.frontend_agent.safe_parse_response: except JSONDecodeError", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] agents.frontend_agent.safe_parse_response: except JSONDecodeError")
         pass
 
     # Try to find a JSON block in the clean text
@@ -47,7 +48,7 @@ def safe_parse_response(raw: str) -> dict:
         try:
             return json.loads(match.group())
         except json.JSONDecodeError:
-            print(f"[TRACE] agents.frontend_agent.safe_parse_response: except JSONDecodeError", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] agents.frontend_agent.safe_parse_response: except JSONDecodeError")
             pass
             
     # Best effort repair for truncated JSON by backtracking
@@ -94,7 +95,7 @@ def safe_parse_response(raw: str) -> dict:
         try:
             return json.loads(repaired)
         except json.JSONDecodeError:
-            print(f"[TRACE] agents.frontend_agent.safe_parse_response: except JSONDecodeError", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] agents.frontend_agent.safe_parse_response: except JSONDecodeError")
             continue
             
     # Raise the JSONRepairError if everything fails
@@ -105,7 +106,7 @@ def safe_parse_response(raw: str) -> dict:
 
 async def call_gemini(prompt: str) -> str:
     """Helper to satisfy call_with_retry by invoking Google Gemini API via llm_adapter."""
-    print(f"[TRACE] agents.frontend_agent.call_gemini: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.frontend_agent.call_gemini: enter")
     from core.system.llm_adapter import call_llm
     loop = asyncio.get_event_loop()
     response = await loop.run_in_executor(
@@ -115,7 +116,7 @@ async def call_gemini(prompt: str) -> str:
     return response.get("content", "") if isinstance(response, dict) else str(response)
 
 async def call_with_retry(prompt: str, max_retries: int = 3) -> dict:
-    print(f"[TRACE] agents.frontend_agent.call_with_retry: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.frontend_agent.call_with_retry: enter")
     import os
     from agents.base_agent import PROJECT_ROOT
     from datetime import datetime
@@ -124,7 +125,7 @@ async def call_with_retry(prompt: str, max_retries: int = 3) -> dict:
             raw = await call_gemini(prompt)
             return safe_parse_response(raw)
         except JSONRepairError as e:
-            print(f"[TRACE] agents.frontend_agent.call_with_retry: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] agents.frontend_agent.call_with_retry: except {str(e)[:80]}")
             if attempt == max_retries - 1:
                 raise
             wait = 2 ** attempt  # 1s, 2s, 4s
@@ -138,7 +139,7 @@ async def call_with_retry(prompt: str, max_retries: int = 3) -> dict:
                     with open(os.path.join(log_dir, "task.log"), "a", encoding="utf-8") as f:
                         f.write(f"[{datetime.now().isoformat()}] [frontend] {msg}\n")
                 except Exception:
-                    print(f"[TRACE] agents.frontend_agent.call_with_retry: except Exception", file=sys.stderr, flush=True)
+                    _jtrace(f"[TRACE] agents.frontend_agent.call_with_retry: except Exception")
                     pass
             await asyncio.sleep(wait)
 
@@ -194,7 +195,7 @@ class FrontendAgent(BaseAgent):
 
     def run(self, task: str) -> dict:
         """Execute a frontend/UI task."""
-        print(f"[TRACE] agents.frontend_agent.FrontendAgent.run: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] agents.frontend_agent.FrontendAgent.run: enter")
         self.update_status("WORKING", "Analyzing task")
         self.append_log(f"Started: {task}")
 
@@ -211,7 +212,7 @@ class FrontendAgent(BaseAgent):
                         _gbrain_ctx = f"\nHistorical GBrain API contracts:\n{_qr}\n"
                         logger.info("[frontend] Injected GBrain historical contract context.")
                 except Exception as _qe:
-                    print(f"[TRACE] agents.frontend_agent.FrontendAgent.run: except {str(_qe)[:80]}", file=sys.stderr, flush=True)
+                    _jtrace(f"[TRACE] agents.frontend_agent.FrontendAgent.run: except {str(_qe)[:80]}")
                     logger.warning(f"[frontend] GBrain query failed: {_qe}")
 
             full_prompt = f"""<task>{task}</task>
@@ -235,7 +236,7 @@ class FrontendAgent(BaseAgent):
                 from agents.design_system import get_design_brief
                 system_prompt = SYSTEM_PROMPT + "\n" + get_design_brief(task)
             except Exception as _de:
-                print(f"[TRACE] agents.frontend_agent.FrontendAgent.run: except {str(_de)[:80]}", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] agents.frontend_agent.FrontendAgent.run: except {str(_de)[:80]}")
                 logger.warning(f"[frontend] design brief unavailable: {_de}")
                 system_prompt = SYSTEM_PROMPT
 
@@ -249,7 +250,7 @@ class FrontendAgent(BaseAgent):
                     result = safe_parse_response(response)
                     break
                 except JSONRepairError as e:
-                    print(f"[TRACE] agents.frontend_agent.FrontendAgent.run: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                    _jtrace(f"[TRACE] agents.frontend_agent.FrontendAgent.run: except {str(e)[:80]}")
                     last_err = e
                     wait = 2 ** attempt  # 1s, 2s, 4s
                     msg = f"JSON repair/parse attempt {attempt + 1}/{max_attempts} failed: {e}. Retrying in {wait}s..."
@@ -266,7 +267,7 @@ class FrontendAgent(BaseAgent):
                         with open(os.path.join(scratch_dir, f"failed_response_{attempt+1}.txt"), "w", encoding="utf-8") as f:
                             f.write(response)
                     except Exception as save_err:
-                        print(f"[TRACE] agents.frontend_agent.FrontendAgent.run: except {str(save_err)[:80]}", file=sys.stderr, flush=True)
+                        _jtrace(f"[TRACE] agents.frontend_agent.FrontendAgent.run: except {str(save_err)[:80]}")
                         logger.warning(f"Failed to save raw response: {save_err}")
                     
                     for log_dir in [self.workspace, PROJECT_ROOT]:
@@ -275,7 +276,7 @@ class FrontendAgent(BaseAgent):
                             with open(os.path.join(log_dir, "task.log"), "a", encoding="utf-8") as f:
                                 f.write(f"[{datetime.now().isoformat()}] [frontend] {msg}\n")
                         except Exception as log_err:
-                            print(f"[TRACE] agents.frontend_agent.FrontendAgent.run: except {str(log_err)[:80]}", file=sys.stderr, flush=True)
+                            _jtrace(f"[TRACE] agents.frontend_agent.FrontendAgent.run: except {str(log_err)[:80]}")
                             logger.warning(f"Failed to write to task.log in {log_dir}: {log_err}")
                     
                     if attempt < max_attempts - 1:
@@ -300,7 +301,7 @@ class FrontendAgent(BaseAgent):
             }
 
         except Exception as e:
-            print(f"[TRACE] agents.frontend_agent.FrontendAgent.run: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] agents.frontend_agent.FrontendAgent.run: except {str(e)[:80]}")
             self.update_status("ERROR", str(e)[:50])
             self.append_log(f"ERROR: {e}")
             return {"status": "error", "output": str(e), "files": []}

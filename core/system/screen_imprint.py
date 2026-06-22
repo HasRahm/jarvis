@@ -1,4 +1,5 @@
 import sys
+from core.trace import trace as _jtrace
 # core/system/screen_imprint.py
 import mss
 import cv2
@@ -78,7 +79,7 @@ class ScreenImprintGraph:
             }
 
     def _compute_deltas(self, prev: Dict[str, Any], curr: Dict[str, Any]) -> Dict[str, Any]:
-        print(f"[TRACE] core.system.screen_imprint.ScreenImprintGraph._compute_deltas: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.screen_imprint.ScreenImprintGraph._compute_deltas: enter")
         p_dens = np.array(prev["density"])
         c_dens = np.array(curr["density"])
         
@@ -111,7 +112,7 @@ class ScreenImprintGraph:
     # --- Open Question 2: Async background watcher ---
     async def watch_screen(self, callback: Callable[[Dict[str, Any]], Awaitable[None]], poll_interval: float = 0.25):
         """Monitors the screen for changes and fires callback automatically on visual changes."""
-        print(f"[TRACE] core.system.screen_imprint.ScreenImprintGraph.watch_screen: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.screen_imprint.ScreenImprintGraph.watch_screen: enter")
         self.last_imprint = None
         while True:
             try:
@@ -119,6 +120,6 @@ class ScreenImprintGraph:
                 if res["changes"]["changed"]:
                     await callback(res)  # Await the async callback
             except Exception as e:
-                print(f"[TRACE] core.system.screen_imprint.ScreenImprintGraph.watch_screen: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.system.screen_imprint.ScreenImprintGraph.watch_screen: except {str(e)[:80]}")
                 print(f"[ScreenImprintGraph Watcher Error]: {e}")
             await asyncio.sleep(poll_interval)

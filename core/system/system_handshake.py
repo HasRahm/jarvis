@@ -1,6 +1,7 @@
 import os
 import shutil
 import sys
+from core.trace import trace as _jtrace
 import threading
 import time
 from typing import Dict, List, Optional
@@ -45,7 +46,7 @@ class EnvironmentHandshake:
     def _is_cache_valid(self) -> bool:
         """Checks if any tracked system state has changed since the last scan."""
         # 1. Check PATH environment variable
-        print(f"[TRACE] core.system.system_handshake.EnvironmentHandshake._is_cache_valid: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.system_handshake.EnvironmentHandshake._is_cache_valid: enter")
         current_path = os.environ.get("PATH", "")
         if current_path != self._cached_path_env:
             return False
@@ -61,7 +62,7 @@ class EnvironmentHandshake:
                 try:
                     mtime = os.path.getmtime(d)
                 except OSError:
-                    print(f"[TRACE] core.system.system_handshake.EnvironmentHandshake._is_cache_valid: except OSError", file=sys.stderr, flush=True)
+                    _jtrace(f"[TRACE] core.system.system_handshake.EnvironmentHandshake._is_cache_valid: except OSError")
                     mtime = 0.0
                 if self._cached_mtimes.get(d, 0.0) != mtime:
                     return False
@@ -92,7 +93,7 @@ class EnvironmentHandshake:
                     try:
                         self._cached_mtimes[d] = os.path.getmtime(d)
                     except OSError:
-                        print(f"[TRACE] core.system.system_handshake.EnvironmentHandshake.scan: except OSError", file=sys.stderr, flush=True)
+                        _jtrace(f"[TRACE] core.system.system_handshake.EnvironmentHandshake.scan: except OSError")
                         self._cached_mtimes[d] = 0.0
 
             capabilities = {
@@ -141,19 +142,19 @@ class EnvironmentHandshake:
             return self._cached_scan
 
     def _check_wsl(self) -> bool:
-        print(f"[TRACE] core.system.system_handshake.EnvironmentHandshake._check_wsl: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.system_handshake.EnvironmentHandshake._check_wsl: enter")
         if sys.platform.startswith("linux"):
             try:
                 with open("/proc/version", "r") as f:
                     if "microsoft" in f.read().lower():
                         return True
             except IOError:
-                print(f"[TRACE] core.system.system_handshake.EnvironmentHandshake._check_wsl: except IOError", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.system.system_handshake.EnvironmentHandshake._check_wsl: except IOError")
                 pass
         return False
 
     def _check_docker(self) -> bool:
-        print(f"[TRACE] core.system.system_handshake.EnvironmentHandshake._check_docker: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.system_handshake.EnvironmentHandshake._check_docker: enter")
         if os.path.exists(self._docker_socket):
             return os.access(self._docker_socket, os.W_OK)
         return shutil.which("docker") is not None

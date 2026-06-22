@@ -9,6 +9,7 @@ Also exposes vocab_learn() so the agent can append new discoveries
 to the learned/ directory, growing the dataset over time.
 """
 import sys
+from core.trace import trace as _jtrace
 
 import os
 import datetime
@@ -30,7 +31,7 @@ def _read_file_safe(path: str) -> str:
         with open(path, "r", encoding="utf-8") as f:
             return f.read().strip()
     except Exception as e:
-        print(f"[TRACE] core.system.visual_vocab._read_file_safe: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.visual_vocab._read_file_safe: except {str(e)[:80]}")
         logger.warning(f"[VisualVocab] Could not read {path}: {e}")
         return ""
 
@@ -59,7 +60,7 @@ class VisualVocabulary:
 
     def _load(self):
         """Read all vocabulary files into memory."""
-        print(f"[TRACE] core.system.visual_vocab.VisualVocabulary._load: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.visual_vocab.VisualVocabulary._load: enter")
         self.icons = _read_file_safe(os.path.join(self.vocab_dir, "icons.md"))
         self.logos = _read_file_safe(os.path.join(self.vocab_dir, "app-logos.md"))
         self.patterns = _read_file_safe(os.path.join(self.vocab_dir, "ui-patterns.md"))
@@ -71,7 +72,7 @@ class VisualVocabulary:
         so most recent is at the end — most recent knowledge read last = highest priority).
         Returns concatenated content, or empty string if none.
         """
-        print(f"[TRACE] core.system.visual_vocab.VisualVocabulary._load_learned: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.visual_vocab.VisualVocabulary._load_learned: enter")
         if not os.path.isdir(self.learned_dir):
             return ""
         files = sorted(
@@ -130,7 +131,7 @@ COMMON LAYOUT (where things live):
 
     def get_cheatsheet(self) -> str:
         """Return the compact always-injected summary, plus any learned patterns."""
-        print(f"[TRACE] core.system.visual_vocab.VisualVocabulary.get_cheatsheet: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.visual_vocab.VisualVocabulary.get_cheatsheet: enter")
         cs = self._CHEATSHEET
         if self.learned:
             cs += (
@@ -142,7 +143,7 @@ COMMON LAYOUT (where things live):
 
     def lookup(self, category: str) -> str:
         """Return the FULL table for a category: 'icons', 'logos', or 'patterns'."""
-        print(f"[TRACE] core.system.visual_vocab.VisualVocabulary.lookup: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.visual_vocab.VisualVocabulary.lookup: enter")
         cat = (category or "").strip().lower()
         if cat in ("icon", "icons"):
             return self.icons or "No icon vocabulary loaded."
@@ -163,7 +164,7 @@ COMMON LAYOUT (where things live):
         Returns empty string if all vocabulary files are missing (graceful
         degradation — no crash if visual-vocab/ doesn't exist yet).
         """
-        print(f"[TRACE] core.system.visual_vocab.VisualVocabulary.get_context_addition: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.visual_vocab.VisualVocabulary.get_context_addition: enter")
         if not self.icons and not self.logos and not self.patterns:
             return ""
         return "\n\n" + self.get_cheatsheet() + "\n\n"
@@ -182,7 +183,7 @@ COMMON LAYOUT (where things live):
 
         Returns a confirmation string.
         """
-        print(f"[TRACE] core.system.visual_vocab.VisualVocabulary.learn: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.visual_vocab.VisualVocabulary.learn: enter")
         if not heading or not heading.strip():
             return "ERROR: heading is required."
         if not content or not content.strip():
@@ -212,7 +213,7 @@ COMMON LAYOUT (where things live):
                 f"Learned: '{heading}' saved to visual-vocab/learned/{today}.md"
             )
         except Exception as e:
-            print(f"[TRACE] core.system.visual_vocab.VisualVocabulary.learn: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.visual_vocab.VisualVocabulary.learn: except {str(e)[:80]}")
             return f"ERROR saving learned pattern: {e}"
 
 

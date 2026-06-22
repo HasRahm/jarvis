@@ -24,6 +24,7 @@ Never raises — verification failures degrade to returning the original result 
 import os
 import ast
 import sys
+from core.trace import trace as _jtrace
 import json
 import sqlite3
 import logging
@@ -34,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 def _enabled() -> bool:
-    print(f"[TRACE] core.orchestrator.self_correct._enabled: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.self_correct._enabled: enter")
     if os.environ.get("JARVIS_CI") == "true":
         return False
     return os.environ.get("JARVIS_SELF_CORRECT", "1") not in ("0", "false", "False")
@@ -43,7 +44,7 @@ def _enabled() -> bool:
 def _collect_files(agent, result: dict) -> dict:
     """Map the agent's written files (relative paths in result['files']) to their content,
     read back from the agent workspace. Returns {relative_path: content}."""
-    print(f"[TRACE] core.orchestrator.self_correct._collect_files: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.self_correct._collect_files: enter")
     files = {}
     workspace = getattr(agent, "workspace", None)
     for rel in result.get("files", []) or []:
@@ -54,7 +55,7 @@ def _collect_files(agent, result: dict) -> dict:
                     with open(abs_path, "r", encoding="utf-8", errors="replace") as f:
                         files[rel] = f.read()
         except Exception as e:
-            print(f"[TRACE] core.orchestrator.self_correct._collect_files: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.orchestrator.self_correct._collect_files: except {str(e)[:80]}")
             logger.debug(f"[self_correct] could not read {rel}: {e}")
     return files
 
@@ -63,7 +64,7 @@ def _collect_files(agent, result: dict) -> dict:
 
 def _check_python_local(files: dict) -> list:
     """Compile-check every .py file. Returns a list of human-readable error strings."""
-    print(f"[TRACE] core.orchestrator.self_correct._check_python_local: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.self_correct._check_python_local: enter")
     errors = []
     for rel, content in files.items():
         if not rel.endswith(".py"):
@@ -71,7 +72,7 @@ def _check_python_local(files: dict) -> list:
         try:
             ast.parse(content, filename=rel)
         except SyntaxError as e:
-            print(f"[TRACE] core.orchestrator.self_correct._check_python_local: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.orchestrator.self_correct._check_python_local: except {str(e)[:80]}")
             errors.append(f"{rel}: SyntaxError line {e.lineno}: {e.msg}")
     return errors
 
@@ -80,7 +81,7 @@ def _check_sql_local(files: dict) -> list:
     """Execute every .sql migration against an in-memory SQLite DB to validate it runs.
     Returns a list of error strings. (Postgres-specific syntax may false-positive; we only
     flag hard parse/execution failures, which still catch most real mistakes.)"""
-    print(f"[TRACE] core.orchestrator.self_correct._check_sql_local: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.self_correct._check_sql_local: enter")
     errors = []
     for rel, content in files.items():
         if not rel.endswith(".sql"):
@@ -90,14 +91,14 @@ def _check_sql_local(files: dict) -> list:
             con.executescript(content)
             con.close()
         except Exception as e:
-            print(f"[TRACE] core.orchestrator.self_correct._check_sql_local: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.orchestrator.self_correct._check_sql_local: except {str(e)[:80]}")
             errors.append(f"{rel}: SQL error: {e}")
     return errors
 
 
 def _verify_local(files: dict) -> tuple:
     """Run all safe local checks. Returns (passed: bool, errors: list[str])."""
-    print(f"[TRACE] core.orchestrator.self_correct._verify_local: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.self_correct._verify_local: enter")
     errors = _check_python_local(files) + _check_sql_local(files)
     return (len(errors) == 0, errors)
 
@@ -106,7 +107,7 @@ def _verify_local(files: dict) -> tuple:
 
 def _verify_e2b(sandbox, files: dict) -> tuple:
     """Push files into the sandbox and run them. Returns (passed, errors)."""
-    print(f"[TRACE] core.orchestrator.self_correct._verify_e2b: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.self_correct._verify_e2b: enter")
     from tools.sandbox import write_files_to_sandbox, run_in_sandbox
     base = "/home/user/workspace"
     if not write_files_to_sandbox(sandbox, files, base=base):
@@ -158,7 +159,7 @@ def verify_and_correct(agent, result: dict, sandbox=None, max_iters: int = 3) ->
 
     Returns the (possibly corrected) result with a `verification` report attached.
     """
-    print(f"[TRACE] core.orchestrator.self_correct.verify_and_correct: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.self_correct.verify_and_correct: enter")
     if not _enabled() or result.get("status") != "success":
         return result
 
@@ -178,7 +179,7 @@ def verify_and_correct(agent, result: dict, sandbox=None, max_iters: int = 3) ->
             else:
                 passed, errors = _verify_local(files)
         except Exception as e:
-            print(f"[TRACE] core.orchestrator.self_correct.verify_and_correct: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.orchestrator.self_correct.verify_and_correct: except {str(e)[:80]}")
             logger.warning(f"[self_correct] verification crashed for {role}: {e}")
             result["verification"] = {"ran": False, "passed": True, "iterations": iterations,
                                       "note": f"verification error: {e}"}
@@ -206,7 +207,7 @@ def verify_and_correct(agent, result: dict, sandbox=None, max_iters: int = 3) ->
         try:
             new_result = agent.run(feedback)
         except Exception as e:
-            print(f"[TRACE] core.orchestrator.self_correct.verify_and_correct: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.orchestrator.self_correct.verify_and_correct: except {str(e)[:80]}")
             logger.warning(f"[self_correct] {role} correction run crashed: {e}")
             break
         if new_result.get("status") == "success":

@@ -6,6 +6,7 @@ Model strings and overrides are read from .env so a single config change
 swaps models without touching agent code.
 """
 import sys
+from core.trace import trace as _jtrace
 
 import os
 import json
@@ -32,12 +33,12 @@ _overrides_mtime: float = -1.0
 
 def _load_overrides() -> dict:
     """Return the persisted overrides, re-reading the file only when it changes (mtime cache)."""
-    print(f"[TRACE] agents.model_router._load_overrides: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.model_router._load_overrides: enter")
     global _overrides_cache, _overrides_mtime
     try:
         mtime = os.path.getmtime(_AGENT_MODELS_PATH)
     except OSError:
-        print(f"[TRACE] agents.model_router._load_overrides: except OSError", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] agents.model_router._load_overrides: except OSError")
         _overrides_cache, _overrides_mtime = {}, -1.0
         return _overrides_cache
     if mtime != _overrides_mtime:
@@ -46,7 +47,7 @@ def _load_overrides() -> dict:
                 data = json.load(f)
             _overrides_cache = data if isinstance(data, dict) else {}
         except Exception as e:
-            print(f"[TRACE] agents.model_router._load_overrides: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] agents.model_router._load_overrides: except {str(e)[:80]}")
             logger.warning(f"[model_router] could not read agent_models.json: {e}")
             _overrides_cache = {}
         _overrides_mtime = mtime
@@ -57,7 +58,7 @@ def normalize_model(model: str) -> str:
     """Normalize a user-supplied model string. A bare `vendor/model` slug (e.g.
     `anthropic/claude-opus-4.8`) is treated as an OpenRouter model → `openrouter/<slug>`.
     Bare native names (`gemini-3.5-flash`) and already-`openrouter/...` values are kept as-is."""
-    print(f"[TRACE] agents.model_router.normalize_model: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.model_router.normalize_model: enter")
     m = (model or "").strip()
     if not m or m.startswith("openrouter/"):
         return m
@@ -68,7 +69,7 @@ def normalize_model(model: str) -> str:
 
 def set_agent_model(target: str, model: str) -> str:
     """Persist a model choice for an agent target. Returns the normalized stored value."""
-    print(f"[TRACE] agents.model_router.set_agent_model: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.model_router.set_agent_model: enter")
     target = (target or "").strip().lower()
     normalized = normalize_model(model)
     overrides = dict(_load_overrides())
@@ -84,7 +85,7 @@ def set_agent_model(target: str, model: str) -> str:
 
 def reset_agent_model(target: str) -> bool:
     """Remove a persisted override. Returns True if one was removed."""
-    print(f"[TRACE] agents.model_router.reset_agent_model: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.model_router.reset_agent_model: enter")
     target = (target or "").strip().lower()
     overrides = dict(_load_overrides())
     if target not in overrides:
@@ -174,7 +175,7 @@ _OPENROUTER_SLUG = {
 def get_model(role: str) -> str:
     """Get the model string for a role. Priority: AGENT_MODEL_<ROLE> env > persisted
     JSON override (config/agent_models.json) > built-in default."""
-    print(f"[TRACE] agents.model_router.get_model: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.model_router.get_model: enter")
     role_key = (role or "").lower()
     env_key = f"AGENT_MODEL_{role_key.upper()}"
     override = os.getenv(env_key)
@@ -191,7 +192,7 @@ def get_model(role: str) -> str:
 def get_all_agent_models() -> dict:
     """Return {role: {"model": str, "source": "env"|"config"|"default"}} for every known role
     plus any extra targets present in the persisted config (e.g. skill:<name>)."""
-    print(f"[TRACE] agents.model_router.get_all_agent_models: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.model_router.get_all_agent_models: enter")
     overrides = _load_overrides()
     result = {}
     for role in _DEFAULTS:
@@ -222,7 +223,7 @@ def get_provider(model: str) -> str:
       3. gpt-oss…               → nvidia (NVIDIA Build hosts gpt-oss)
       4. bare vendor/model slug → nvidia (google/…, qwen/…, meta/… — NVIDIA Build's 40 RPM tier)
     """
-    print(f"[TRACE] agents.model_router.get_provider: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.model_router.get_provider: enter")
     if model.startswith("openrouter/"):
         return "openrouter"
     provider = _PROVIDERS.get(model)
@@ -244,7 +245,7 @@ def get_provider(model: str) -> str:
 
 def _looks_ollama(model: str) -> bool:
     """Local-Ollama-routable name (no slash; gemma/llama/qwen/… or :cloud/:latest)."""
-    print(f"[TRACE] agents.model_router._looks_ollama: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.model_router._looks_ollama: enter")
     ml = model.lower()
     return ("/" not in ml and (
         ml.endswith(":cloud") or ml.endswith(":latest") or
@@ -260,7 +261,7 @@ def validate_model(model: str) -> tuple[bool, str]:
     instead of silently falling through to a different model. NOTE: scope is the chat/code path —
     this does NOT validate the separate vision chain or doc-gen.
     """
-    print(f"[TRACE] agents.model_router.validate_model: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.model_router.validate_model: enter")
     if not model or not model.strip():
         return False, "empty model name"
     m = model.strip()
@@ -281,7 +282,7 @@ def validate_model(model: str) -> tuple[bool, str]:
 
 def get_api_key(provider: str) -> str | None:
     """Get the API key for a provider from environment."""
-    print(f"[TRACE] agents.model_router.get_api_key: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.model_router.get_api_key: enter")
     var = _API_KEY_VARS.get(provider)
     if var is None:
         return None
@@ -296,7 +297,7 @@ def openrouter_mirror(model: str) -> str | None:
     billing-blocked direct API can be retried via OpenRouter's separate credit pool before
     degrading to the local model.
     """
-    print(f"[TRACE] agents.model_router.openrouter_mirror: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.model_router.openrouter_mirror: enter")
     if model.startswith("openrouter/"):
         return None
     override = _OPENROUTER_SLUG.get(model)
@@ -343,7 +344,7 @@ def get_skill_model(skill_name: str) -> str:
     keyword hint → orchestrator default.
     Set SKILL_MODEL_CS_SENIOR_ENGINEER=gemma4:31b-cloud to override a specific skill.
     """
-    print(f"[TRACE] agents.model_router.get_skill_model: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.model_router.get_skill_model: enter")
     env_key = f"SKILL_MODEL_{skill_name.upper().replace('-', '_')}"
     override = os.getenv(env_key)
     if override:

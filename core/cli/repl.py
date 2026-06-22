@@ -10,6 +10,7 @@ rendering, shows tool calls as cards, and offers inline slash autocomplete,
 """
 import os
 import sys
+from core.trace import trace as _jtrace
 import importlib.util
 import subprocess
 
@@ -488,7 +489,7 @@ class JarvisRepl:
 
         cli  = self._lazy_jarvis_cli()
         task = self._expand_file_refs(task)
-        print(f"[TRACE] {__name__}._agent_turn: enter mode={mode} force_coding={force_coding} task={task[:60]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] {__name__}._agent_turn: enter mode={mode} force_coding={force_coding} task={task[:60]}")
 
         # Coding intent detection — runs in < 1 ms, no LLM cost
         if force_coding:
@@ -545,44 +546,8 @@ class JarvisRepl:
             def write(self, *a, **k): pass
             def flush(self): pass
 
-        # Trace-preserving stderr sink. The REPL must swallow the adapter's raw routing
-        # chatter (it would corrupt the Live display), but the always-on [TRACE] lines are
-        # debug signal we DON'T want to lose. This sink drops normal noise but tees any line
-        # containing "[TRACE]" to logs/repl_trace.log (and to the real stderr when
-        # JARVIS_TRACE_CONSOLE=1, for users who redirect stderr to a file on launch).
-        _trace_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "logs", "repl_trace.log")
-        _trace_to_console = os.environ.get("JARVIS_TRACE_CONSOLE") == "1"
-
-        class _TraceSink:
-            def __init__(self, real):
-                self._real = real
-                self._buf = ""
-
-            def write(self, s):
-                try:
-                    self._buf += s
-                    while "\n" in self._buf:
-                        line, self._buf = self._buf.split("\n", 1)
-                        if "[TRACE]" in line:
-                            try:
-                                os.makedirs(os.path.dirname(_trace_path), exist_ok=True)
-                                with open(_trace_path, "a", encoding="utf-8") as _tf:
-                                    _tf.write(line + "\n")
-                            except Exception:
-                                pass
-                            if _trace_to_console and self._real is not None:
-                                self._real.write(line + "\n")
-                except Exception:
-                    pass
-
-            def flush(self):
-                try:
-                    if _trace_to_console and self._real is not None:
-                        self._real.flush()
-                except Exception:
-                    pass
+        # [TRACE] lines no longer touch stderr — they route through core.trace.trace() to
+        # logs/jarvis_trace.log (gated by JARVIS_TRACE), so the sink can drop everything.
 
         # Phase 39: harness-enforced autonomy + verification state.
         from core.orchestrator import exec_guard
@@ -626,7 +591,7 @@ class JarvisRepl:
                     real_stderr = sys.stderr
                     if coding:
                         sys.stdout = _Sink()
-                        sys.stderr = _TraceSink(real_stderr)  # keep [TRACE] lines, drop UI noise
+                        sys.stderr = _Sink()
                         try:
                             msg = call_llm(messages=messages, model=model, tools=TOOL_DEFINITIONS)
                         finally:
@@ -641,7 +606,7 @@ class JarvisRepl:
                             set_stream_hook(hook)
                             # Swallow the adapter's raw prints on stdout; keep [TRACE] on stderr.
                             sys.stdout = _Sink()
-                            sys.stderr = _TraceSink(real_stderr)
+                            sys.stderr = _Sink()
                             try:
                                 msg = call_llm(messages=messages, model=model, tools=TOOL_DEFINITIONS)
                             finally:
@@ -727,7 +692,7 @@ class JarvisRepl:
 
                     # Part 3: permission gate — ask y/N before risky/irreversible actions.
                     risky, reason = exec_guard.is_risky(fn, args)
-                    print(f"[TRACE] {__name__}._agent_turn: tool_call fn={fn} risky={risky} consequential={exec_guard.is_consequential(fn)}", file=sys.stderr, flush=True)
+                    _jtrace(f"[TRACE] {__name__}._agent_turn: tool_call fn={fn} risky={risky} consequential={exec_guard.is_consequential(fn)}")
                     if risky and os.environ.get("JARVIS_AUTO_APPROVE") != "1":
                         if not self._ask_yes_no(f"⚠ Jarvis wants to {reason}: {fn}({args_str}). Proceed?"):
                             denied = (f"User DENIED the action {fn}. Do NOT retry it. Find a safe alternative "
@@ -759,7 +724,7 @@ class JarvisRepl:
                         baseline = exec_guard.capture_baseline()
 
                     result = self._dispatch_with_timeout(dispatch, fn, args)
-                    print(f"[TRACE] {__name__}._agent_turn: tool_result fn={fn} result={str(result)[:80]}", file=sys.stderr, flush=True)
+                    _jtrace(f"[TRACE] {__name__}._agent_turn: tool_result fn={fn} result={str(result)[:80]}")
                     if not coding:
                         preview = str(result)[:400]
                         _w = _warm()

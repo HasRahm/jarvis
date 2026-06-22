@@ -9,6 +9,7 @@ delegate_task instead of answering conversationally.
 No API calls, no imports beyond stdlib re. Runs in < 1 ms.
 """
 import sys
+from core.trace import trace as _jtrace
 import re
 
 # Verbs that signal "build something"
@@ -73,7 +74,7 @@ _COMPLAINT_PHRASES = {
 
 def _is_question(text: str) -> bool:
     """Return True when the text is clearly a question or complaint, not a build request."""
-    print(f"[TRACE] core.orchestrator.intent_router._is_question: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.intent_router._is_question: enter")
     lower = text.strip().lower()
     # Ends with a question mark — almost always a question.
     if lower.endswith("?"):
@@ -107,7 +108,7 @@ def classify(text: str) -> dict:
     # Hard veto: questions and complaints are never build tasks, even if they mention
     # verbs like "create" or nouns like "game".  "why are you creating a game" is a
     # question about past behaviour, not a request to build one.
-    print(f"[TRACE] core.orchestrator.intent_router.classify: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.intent_router.classify: enter")
     if _is_question(text):
         return {"mode": "general", "agents": [], "mandate": "", "rationale": "question/complaint detected"}
 
@@ -163,13 +164,13 @@ def route(task: str) -> dict:
     Returns {"path", "domain", "mode", "agents", "mandate"} where path ∈
     {"desktop", "build", "research", "qa", "chat"}.
     """
-    print(f"[TRACE] core.orchestrator.intent_router.route: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.intent_router.route: enter")
     intent = classify(task)
     try:
         from core.orchestrator.task_classifier import _heuristic
         domain = _heuristic(task)["domain"]
     except Exception:
-        print(f"[TRACE] core.orchestrator.intent_router.route: except Exception", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.orchestrator.intent_router.route: except Exception")
         domain = "ORCHESTRATION_ONLY"
 
     if domain in ("DESKTOP_AUTOMATION", "SYSTEM_HEALTH"):
@@ -194,7 +195,7 @@ def route(task: str) -> dict:
 
 
 def _build_mandate(task: str, agents: list[str], primary_call: str) -> str:
-    print(f"[TRACE] core.orchestrator.intent_router._build_mandate: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.intent_router._build_mandate: enter")
     agent_guide = (
         "  - run_frontend_agent  → UI, games, websites, HTML/CSS/JS, React, Pygame, canvas\n"
         "  - run_backend_agent   → APIs, servers, Python/Node backends, databases, SQL\n"

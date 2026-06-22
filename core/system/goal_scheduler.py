@@ -1,4 +1,5 @@
 import sys
+from core.trace import trace as _jtrace
 import os
 import json
 import time
@@ -18,7 +19,7 @@ class GoalScheduler:
         self.last_fired = {} # goal_name -> timestamp of last fire to prevent double firing in same minute
 
     def add_goal(self, name: str, trigger: dict, task: str):
-        print(f"[TRACE] core.system.goal_scheduler.GoalScheduler.add_goal: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.goal_scheduler.GoalScheduler.add_goal: enter")
         self.goals.append({
             "name": name,
             "trigger": trigger,
@@ -27,7 +28,7 @@ class GoalScheduler:
         logger.info(f"[Scheduler] Registered goal: {name} (Trigger: {trigger})")
 
     def start(self):
-        print(f"[TRACE] core.system.goal_scheduler.GoalScheduler.start: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.goal_scheduler.GoalScheduler.start: enter")
         if self.running:
             return
         self.running = True
@@ -36,7 +37,7 @@ class GoalScheduler:
         logger.info("[Scheduler] Started background goal scheduler daemon.")
 
     def stop(self):
-        print(f"[TRACE] core.system.goal_scheduler.GoalScheduler.stop: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.goal_scheduler.GoalScheduler.stop: enter")
         self.running = False
         if self.thread:
             self.thread.join(timeout=2.0)
@@ -47,7 +48,7 @@ class GoalScheduler:
             try:
                 self._check_triggers()
             except Exception as e:
-                print(f"[TRACE] core.system.goal_scheduler.GoalScheduler._loop: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.system.goal_scheduler.GoalScheduler._loop: except {str(e)[:80]}")
                 logger.error(f"[Scheduler] Error checking triggers: {e}")
             # Sleep in small increments to respond quickly to shutdown/stop signals
             elapsed = 0.0
@@ -56,7 +57,7 @@ class GoalScheduler:
                 elapsed += 0.5
 
     def _check_triggers(self):
-        print(f"[TRACE] core.system.goal_scheduler.GoalScheduler._check_triggers: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.goal_scheduler.GoalScheduler._check_triggers: enter")
         now = datetime.now()
         current_minute = now.strftime("%Y-%m-%d %H:%M")
         
@@ -90,7 +91,7 @@ class GoalScheduler:
                 threading.Thread(target=self._run_goal_task, args=(goal["task"],), daemon=True).start()
 
     def _match_cron(self, schedule: str, dt) -> bool:
-        print(f"[TRACE] core.system.goal_scheduler.GoalScheduler._match_cron: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.goal_scheduler.GoalScheduler._match_cron: enter")
         parts = schedule.split()
         if len(parts) != 5:
             return False
@@ -118,7 +119,7 @@ class GoalScheduler:
         return True
 
     def _check_condition(self, check_str: str) -> bool:
-        print(f"[TRACE] core.system.goal_scheduler.GoalScheduler._check_condition: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.goal_scheduler.GoalScheduler._check_condition: enter")
         try:
             from brain.write import _GBRAIN_PATH
             import subprocess
@@ -154,7 +155,7 @@ class GoalScheduler:
                             if match_all:
                                 return True
         except Exception:
-            print(f"[TRACE] core.system.goal_scheduler.GoalScheduler._check_condition: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.goal_scheduler.GoalScheduler._check_condition: except Exception")
             pass
         return False
 
@@ -166,5 +167,5 @@ class GoalScheduler:
             run_dag(task, task_id=task_id)
             logger.info(f"[Scheduler] Goal task completed: '{task}'")
         except Exception as e:
-            print(f"[TRACE] core.system.goal_scheduler.GoalScheduler._run_goal_task: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.goal_scheduler.GoalScheduler._run_goal_task: except {str(e)[:80]}")
             logger.error(f"[Scheduler] Error executing goal task '{task}': {e}")

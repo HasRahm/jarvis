@@ -1,4 +1,5 @@
 import sys
+from core.trace import trace as _jtrace
 import time
 import logging
 
@@ -16,7 +17,7 @@ class CircuitBreaker:
         self.state      = "CLOSED"  # CLOSED=normal, OPEN=disabled, HALF_OPEN=testing
         
     def record_failure(self):
-        print(f"[TRACE] core.system.circuit_breaker.CircuitBreaker.record_failure: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.circuit_breaker.CircuitBreaker.record_failure: enter")
         self.failures  += 1
         self.last_fail  = time.time()
         if self.failures >= self.threshold:
@@ -24,12 +25,12 @@ class CircuitBreaker:
             logger.warning(f"⚡ Circuit breaker OPEN: {self.tool} disabled for {self.recovery}s")
             
     def record_success(self):
-        print(f"[TRACE] core.system.circuit_breaker.CircuitBreaker.record_success: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.circuit_breaker.CircuitBreaker.record_success: enter")
         self.failures = 0
         self.state    = "CLOSED"
         
     def is_available(self) -> bool:
-        print(f"[TRACE] core.system.circuit_breaker.CircuitBreaker.is_available: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.circuit_breaker.CircuitBreaker.is_available: enter")
         if self.state == "CLOSED":
             return True
         # Auto-recover after timeout

@@ -21,6 +21,7 @@ Usage pattern (in agent tool calls):
 
 import os
 import sys
+from core.trace import trace as _jtrace
 import io
 import base64
 import logging
@@ -55,7 +56,7 @@ def visual_inspect(question: str, resize_width: int = 1280) -> str:
     # ------------------------------------------------------------------ #
     # 1. Capture screen via mss (same approach as screen_ocr in dispatcher)
     # ------------------------------------------------------------------ #
-    print(f"[TRACE] tools.visual_inspect.visual_inspect: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.visual_inspect.visual_inspect: enter")
     try:
         import mss
         from PIL import Image
@@ -66,7 +67,7 @@ def visual_inspect(question: str, resize_width: int = 1280) -> str:
                 raw = sct.grab(sct.monitors[1])
                 img = Image.frombytes("RGB", (raw.width, raw.height), raw.bgra, "raw", "BGRX")
     except Exception as exc:
-        print(f"[TRACE] tools.visual_inspect.visual_inspect: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect.visual_inspect: except {str(exc)[:80]}")
         return f"ERROR: screenshot capture failed: {exc}"
 
     # Agent view: record that the full screen was sent to the vision model
@@ -77,7 +78,7 @@ def visual_inspect(question: str, resize_width: int = 1280) -> str:
                             note=f"inspect: {question[:100]}")
         _vs.save()
     except Exception:
-        print(f"[TRACE] tools.visual_inspect.visual_inspect: except Exception", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect.visual_inspect: except Exception")
         pass
 
     # ------------------------------------------------------------------ #
@@ -89,7 +90,7 @@ def visual_inspect(question: str, resize_width: int = 1280) -> str:
         new_h = int(orig_h * scale)
         img = img.resize((resize_width, new_h), Image.LANCZOS)
     except Exception as exc:
-        print(f"[TRACE] tools.visual_inspect.visual_inspect: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect.visual_inspect: except {str(exc)[:80]}")
         return f"ERROR: resize failed: {exc}"
 
     # ------------------------------------------------------------------ #
@@ -100,7 +101,7 @@ def visual_inspect(question: str, resize_width: int = 1280) -> str:
         img.save(buf, format="PNG", optimize=True)
         b64_data = base64.b64encode(buf.getvalue()).decode("utf-8")
     except Exception as exc:
-        print(f"[TRACE] tools.visual_inspect.visual_inspect: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect.visual_inspect: except {str(exc)[:80]}")
         return f"ERROR: base64 encoding failed: {exc}"
 
     # ------------------------------------------------------------------ #
@@ -154,11 +155,11 @@ def _call_nvidia_vision(b64_data: str, question: str, api_key: str, max_tokens: 
     Uses the OpenAI-compatible /v1/chat/completions endpoint at
     https://integrate.api.nvidia.com with multimodal image_url content.
     """
-    print(f"[TRACE] tools.visual_inspect._call_nvidia_vision: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.visual_inspect._call_nvidia_vision: enter")
     try:
         import httpx
     except ImportError:
-        print(f"[TRACE] tools.visual_inspect._call_nvidia_vision: except ImportError", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect._call_nvidia_vision: except ImportError")
         return "ERROR: httpx not installed — run: pip install httpx"
 
     payload = {
@@ -198,10 +199,10 @@ def _call_nvidia_vision(b64_data: str, question: str, api_key: str, max_tokens: 
             timeout=45.0,
         )
     except httpx.TimeoutException:
-        print(f"[TRACE] tools.visual_inspect._call_nvidia_vision: except TimeoutException", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect._call_nvidia_vision: except TimeoutException")
         return "ERROR: NVIDIA API timeout (45s)"
     except Exception as exc:
-        print(f"[TRACE] tools.visual_inspect._call_nvidia_vision: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect._call_nvidia_vision: except {str(exc)[:80]}")
         return f"ERROR: NVIDIA API request failed: {exc}"
 
     if resp.status_code != 200:
@@ -211,17 +212,17 @@ def _call_nvidia_vision(b64_data: str, question: str, api_key: str, max_tokens: 
         choices = resp.json()["choices"]
         return choices[0]["message"]["content"].strip()
     except Exception as exc:
-        print(f"[TRACE] tools.visual_inspect._call_nvidia_vision: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect._call_nvidia_vision: except {str(exc)[:80]}")
         return f"ERROR: NVIDIA response parse failed: {exc}"
 
 
 def _call_anthropic_vision(b64_data: str, question: str, api_key: str, max_tokens: int = 1024) -> str:
     """Call Claude claude-sonnet-4-6 with a base64 PNG screenshot."""
-    print(f"[TRACE] tools.visual_inspect._call_anthropic_vision: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.visual_inspect._call_anthropic_vision: enter")
     try:
         import httpx
     except ImportError:
-        print(f"[TRACE] tools.visual_inspect._call_anthropic_vision: except ImportError", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect._call_anthropic_vision: except ImportError")
         return "ERROR: httpx not installed — run: pip install httpx"
 
     payload = {
@@ -260,10 +261,10 @@ def _call_anthropic_vision(b64_data: str, question: str, api_key: str, max_token
             timeout=30.0,
         )
     except httpx.TimeoutException:
-        print(f"[TRACE] tools.visual_inspect._call_anthropic_vision: except TimeoutException", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect._call_anthropic_vision: except TimeoutException")
         return "ERROR: Anthropic API timeout (30s)"
     except Exception as exc:
-        print(f"[TRACE] tools.visual_inspect._call_anthropic_vision: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect._call_anthropic_vision: except {str(exc)[:80]}")
         return f"ERROR: Anthropic API request failed: {exc}"
 
     if resp.status_code != 200:
@@ -274,17 +275,17 @@ def _call_anthropic_vision(b64_data: str, question: str, api_key: str, max_token
         text_blocks = [b["text"] for b in content if b.get("type") == "text"]
         return "\n".join(text_blocks).strip()
     except Exception as exc:
-        print(f"[TRACE] tools.visual_inspect._call_anthropic_vision: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect._call_anthropic_vision: except {str(exc)[:80]}")
         return f"ERROR: Anthropic response parse failed: {exc}"
 
 
 def _call_gemini_vision(b64_data: str, question: str, api_key: str, max_tokens: int = 1024) -> str:
     """Call Gemini 2.0 Flash with a base64 PNG screenshot."""
-    print(f"[TRACE] tools.visual_inspect._call_gemini_vision: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.visual_inspect._call_gemini_vision: enter")
     try:
         import httpx
     except ImportError:
-        print(f"[TRACE] tools.visual_inspect._call_gemini_vision: except ImportError", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect._call_gemini_vision: except ImportError")
         return "ERROR: httpx not installed — run: pip install httpx"
 
     url = (
@@ -311,10 +312,10 @@ def _call_gemini_vision(b64_data: str, question: str, api_key: str, max_tokens: 
     try:
         resp = httpx.post(url, json=payload, timeout=30.0)
     except httpx.TimeoutException:
-        print(f"[TRACE] tools.visual_inspect._call_gemini_vision: except TimeoutException", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect._call_gemini_vision: except TimeoutException")
         return "ERROR: Gemini API timeout (30s)"
     except Exception as exc:
-        print(f"[TRACE] tools.visual_inspect._call_gemini_vision: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect._call_gemini_vision: except {str(exc)[:80]}")
         return f"ERROR: Gemini API request failed: {exc}"
 
     if resp.status_code != 200:
@@ -326,5 +327,5 @@ def _call_gemini_vision(b64_data: str, question: str, api_key: str, max_tokens: 
         text_parts = [p["text"] for p in parts if "text" in p]
         return "\n".join(text_parts).strip()
     except Exception as exc:
-        print(f"[TRACE] tools.visual_inspect._call_gemini_vision: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_inspect._call_gemini_vision: except {str(exc)[:80]}")
         return f"ERROR: Gemini response parse failed: {exc}"

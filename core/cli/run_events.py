@@ -22,6 +22,7 @@ bad subscriber can never break a producer (or another subscriber).
 
 from __future__ import annotations
 import sys
+from core.trace import trace as _jtrace
 
 import os
 import threading
@@ -37,7 +38,7 @@ _DEBUG = os.environ.get("JARVIS_EVENTS_DEBUG") == "1"
 
 def subscribe(handler: Handler) -> Callable[[], None]:
     """Register a handler. Returns a zero-arg unsubscribe function."""
-    print(f"[TRACE] core.cli.run_events.subscribe: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.cli.run_events.subscribe: enter")
     with _lock:
         _subscribers.append(handler)
 
@@ -52,27 +53,27 @@ def unsubscribe(handler: Handler) -> None:
         try:
             _subscribers.remove(handler)
         except ValueError:
-            print(f"[TRACE] core.cli.run_events.unsubscribe: except ValueError", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.run_events.unsubscribe: except ValueError")
             pass
 
 
 def emit(event: str, **payload) -> None:
     """Publish an event to every subscriber. Never raises."""
-    print(f"[TRACE] core.cli.run_events.emit: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.cli.run_events.emit: enter")
     with _lock:
         targets = list(_subscribers)
     if _DEBUG:
         try:
             print(f"[events] {event} {payload}")
         except Exception:
-            print(f"[TRACE] core.cli.run_events.emit: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.run_events.emit: except Exception")
             pass
     for handler in targets:
         try:
             handler(event, payload)
         except Exception:
             # A subscriber's failure must never propagate into the producer.
-            print(f"[TRACE] core.cli.run_events.emit: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.run_events.emit: except Exception")
             if _DEBUG:
                 import traceback
                 traceback.print_exc()

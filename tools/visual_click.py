@@ -27,6 +27,7 @@ import os
 import io
 import re
 import sys
+from core.trace import trace as _jtrace
 import base64
 import logging
 
@@ -64,7 +65,7 @@ def visual_click(
     Returns:
         "[VisualClick] SUCCESS / FAILED" trace string with coords at each stage.
     """
-    print(f"[TRACE] tools.visual_click.visual_click: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.visual_click.visual_click: enter")
     if not description or not description.strip():
         return "ERROR: visual_click requires a non-empty 'description' parameter"
     description = description.strip()
@@ -85,7 +86,7 @@ def visual_click(
                 raw = sct.grab(mon)
                 img = Image.frombytes("RGB", (raw.width, raw.height), raw.bgra, "raw", "BGRX")
     except Exception as exc:
-        print(f"[TRACE] tools.visual_click.visual_click: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_click.visual_click: except {str(exc)[:80]}")
         return f"[VisualClick] FAILED: screenshot capture error: {exc}"
 
     # Agent view session (no-op unless JARVIS_AGENT_VIEW=1)
@@ -119,7 +120,7 @@ def visual_click(
                 titles = [n.get("title", "") for n in nodes[:5]]
                 graph_note = f"window_hint '{window_hint}' not in graph {titles}; trying foreground"
         except Exception as exc:
-            print(f"[TRACE] tools.visual_click.visual_click: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.visual_click.visual_click: except {str(exc)[:80]}")
             graph_note = f"graph lookup failed ({exc}); trying foreground"
 
     if target_win is None:
@@ -129,7 +130,7 @@ def visual_click(
             if target_win:
                 graph_note = f"auto-scoped to foreground '{target_win.get('title', '?')}'"
         except Exception as exc:
-            print(f"[TRACE] tools.visual_click.visual_click: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.visual_click.visual_click: except {str(exc)[:80]}")
             graph_note = f"foreground lookup failed ({exc}); using full screen minus taskbar"
 
     if target_win:
@@ -164,7 +165,7 @@ def visual_click(
         new_h = int(crop_h * scale)
         img = img.resize((resize_width, new_h), Image.LANCZOS)
     except Exception as exc:
-        print(f"[TRACE] tools.visual_click.visual_click: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_click.visual_click: except {str(exc)[:80]}")
         return f"[VisualClick] FAILED: resize error: {exc}"
 
     # ------------------------------------------------------------------ #
@@ -175,7 +176,7 @@ def visual_click(
         img.save(buf, format="PNG", optimize=True)
         b64_data = base64.b64encode(buf.getvalue()).decode("utf-8")
     except Exception as exc:
-        print(f"[TRACE] tools.visual_click.visual_click: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_click.visual_click: except {str(exc)[:80]}")
         return f"[VisualClick] FAILED: encoding error: {exc}"
 
     # ------------------------------------------------------------------ #
@@ -297,7 +298,7 @@ def visual_click(
         from tools.desktop_automation import desktop_smooth_click
         click_result = desktop_smooth_click(actual_x, actual_y, duration=duration, window_bounds=match)
     except Exception as exc:
-        print(f"[TRACE] tools.visual_click.visual_click: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.visual_click.visual_click: except {str(exc)[:80]}")
         return (
             f"[VisualClick] FAILED: smooth_click error at ({actual_x},{actual_y}): {exc}\n"
             f"Vision response: {vision_response[:200]}"

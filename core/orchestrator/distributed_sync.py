@@ -4,6 +4,7 @@ Distributed Sync — Concurrency and access synchronization wrapper.
 Provides a cross-platform file lock to prevent overlapping writes to the shared AGENTS.md.
 """
 import sys
+from core.trace import trace as _jtrace
 
 import os
 import time
@@ -20,7 +21,7 @@ def agents_md_lock(lock_file_path: str = None):
     A cross-platform file-based lock to prevent concurrent writes to AGENTS.md.
     Uses fcntl on Unix/Linux and msvcrt on Windows.
     """
-    print(f"[TRACE] core.orchestrator.distributed_sync.agents_md_lock: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.distributed_sync.agents_md_lock: enter")
     if lock_file_path is None:
         # Resolve to root-level AGENTS.md.lock
         lock_file_path = os.path.join(
@@ -46,7 +47,7 @@ def agents_md_lock(lock_file_path: str = None):
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                     acquired = True
             except (IOError, OSError):
-                print(f"[TRACE] core.orchestrator.distributed_sync.agents_md_lock: except ?", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.orchestrator.distributed_sync.agents_md_lock: except ?")
                 if time.time() - start_time > 10.0:
                     logger.warning("Still waiting to acquire file lock for AGENTS.md...")
                     start_time = time.time()
@@ -66,11 +67,11 @@ def agents_md_lock(lock_file_path: str = None):
                         import fcntl
                         fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
             except Exception as e:
-                print(f"[TRACE] core.orchestrator.distributed_sync.agents_md_lock: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.orchestrator.distributed_sync.agents_md_lock: except {str(e)[:80]}")
                 logger.warning(f"Error releasing file lock: {e}")
             lock_file.close()
             try:
                 os.remove(lock_file_path)
             except Exception:
-                print(f"[TRACE] core.orchestrator.distributed_sync.agents_md_lock: except Exception", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.orchestrator.distributed_sync.agents_md_lock: except Exception")
                 pass

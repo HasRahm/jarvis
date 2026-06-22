@@ -10,6 +10,7 @@ discipline so the agent physically cannot report success it hasn't verified:
 Pure logic is unit-testable; screen functions degrade to no-ops without a display.
 """
 import sys
+from core.trace import trace as _jtrace
 
 import re
 import logging
@@ -103,7 +104,7 @@ def is_verify(tool_name: str) -> bool:
 
 def should_challenge(final_text: str, pending_unverified: bool) -> bool:
     """True if the model claims success while the last action is unverified."""
-    print(f"[TRACE] core.orchestrator.exec_guard.should_challenge: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.exec_guard.should_challenge: enter")
     if not pending_unverified:
         return False
     return bool(_SUCCESS_RE.search(final_text or ""))
@@ -120,7 +121,7 @@ def is_premature_exit(final_text: str, tool_turns: int) -> bool:
     Catches patterns like 'I couldn't find the search box', 'Unfortunately I was unable'
     when the model hasn't even made enough tool-calling attempts yet.
     """
-    print(f"[TRACE] core.orchestrator.exec_guard.is_premature_exit: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.exec_guard.is_premature_exit: enter")
     if tool_turns >= MIN_TOOL_TURNS:
         return False  # model has tried enough, let it exit
     return bool(_GIVE_UP_RE.search(final_text or ""))
@@ -131,7 +132,7 @@ def is_risky(tool_name: str, args) -> tuple[bool, str]:
 
     Risky = destructive (delete/format/drop/force-push) or outward-facing/irreversible
     (send email, submit form, purchase, post). Pure reads/navigation are never risky."""
-    print(f"[TRACE] core.orchestrator.exec_guard.is_risky: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.exec_guard.is_risky: enter")
     name = (tool_name or "").lower()
     if name in _RISKY_TOOLS:
         return True, f"{tool_name} is an irreversible/outward-facing action"
@@ -164,7 +165,7 @@ def active_window_title() -> str:
         info = desktop_get_active_window()
         return str(info)[:200] if info else ""
     except Exception as e:
-        print(f"[TRACE] core.orchestrator.exec_guard.active_window_title: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.orchestrator.exec_guard.active_window_title: except {str(e)[:80]}")
         logger.warning(f"[exec_guard] active_window_title failed: {e}")
         return ""
 
@@ -177,7 +178,7 @@ def capture_baseline():
     Uses a fast downscaled grayscale thumbnail CRC instead of the full
     ScreenImprintGraph. Runs in ~5ms.
     """
-    print(f"[TRACE] core.orchestrator.exec_guard.capture_baseline: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.exec_guard.capture_baseline: enter")
     global _HEADLESS_MODE
     try:
         import os
@@ -192,7 +193,7 @@ def capture_baseline():
             pixel_hash = hashlib.md5(screenshot.rgb[::64]).hexdigest()
             return {"hash": pixel_hash, "w": monitor["width"], "h": monitor["height"]}
     except Exception as e:
-        print(f"[TRACE] core.orchestrator.exec_guard.capture_baseline: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.orchestrator.exec_guard.capture_baseline: except {str(e)[:80]}")
         logger.warning(f"[exec_guard] baseline capture failed (disabling future captures): {e}")
         _HEADLESS_MODE = True
         return None
@@ -205,7 +206,7 @@ def observe_change(baseline) -> tuple[bool, str]:
     was destructive (Ctrl+A/Ctrl+C on active window). The model can call
     read_screen_text explicitly if it needs on-screen content.
     """
-    print(f"[TRACE] core.orchestrator.exec_guard.observe_change: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.exec_guard.observe_change: enter")
     global _HEADLESS_MODE
     try:
         import os
@@ -224,7 +225,7 @@ def observe_change(baseline) -> tuple[bool, str]:
                           "it may not have worked. Call verify_outcome or get_unstuck.")
         return True, "[observe] screen changed since your last action. Use read_screen_text or verify_outcome to check the result."
     except Exception as e:
-        print(f"[TRACE] core.orchestrator.exec_guard.observe_change: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.orchestrator.exec_guard.observe_change: except {str(e)[:80]}")
         logger.warning(f"[exec_guard] observe failed (disabling future captures): {e}")
         _HEADLESS_MODE = True
         return False, ""

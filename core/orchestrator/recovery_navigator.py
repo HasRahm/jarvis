@@ -10,6 +10,7 @@ When an action fails or the agent is blocked, this maps a recovery path:
 Returns an ordered, numbered recovery-steps string. Never raises.
 """
 import sys
+from core.trace import trace as _jtrace
 
 import os
 import logging
@@ -59,7 +60,7 @@ say WHY clearly. Keep it under 150 words, numbered."""
 
 
 def _diagnose(what_failed: str) -> str:
-    print(f"[TRACE] core.orchestrator.recovery_navigator._diagnose: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.recovery_navigator._diagnose: enter")
     r = (what_failed or "").lower()
     if "dialog" in r or "popup" in r or "pop-up" in r:
         return "unexpected_dialog"
@@ -76,7 +77,7 @@ def _diagnose(what_failed: str) -> str:
 
 def get_unstuck(goal: str, what_failed: str) -> str:
     """Return an ordered recovery-steps string for the given stuck situation."""
-    print(f"[TRACE] core.orchestrator.recovery_navigator.get_unstuck: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.recovery_navigator.get_unstuck: enter")
     goal = (goal or "").strip()
     what_failed = (what_failed or "").strip()
 
@@ -101,7 +102,7 @@ def get_unstuck(goal: str, what_failed: str) -> str:
             from tools.windows import get_window_stack
             windows = ", ".join(w.get("title", "") for w in get_window_stack()[:8]) or "unknown"
         except Exception:
-            print(f"[TRACE] core.orchestrator.recovery_navigator.get_unstuck: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.orchestrator.recovery_navigator.get_unstuck: except Exception")
             windows = "unknown"
 
         result = call_llm(
@@ -116,7 +117,7 @@ def get_unstuck(goal: str, what_failed: str) -> str:
                         "1. re-read the screen with visual_inspect\n"
                         "2. retry the action, then call verify_outcome")
     except Exception as e:
-        print(f"[TRACE] core.orchestrator.recovery_navigator.get_unstuck: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.orchestrator.recovery_navigator.get_unstuck: except {str(e)[:80]}")
         logger.warning(f"[recovery] get_unstuck reasoning failed: {e}")
         return ("Recovery plan (diagnosis: unknown):\n"
                 "1. re-read the screen with visual_inspect\n"

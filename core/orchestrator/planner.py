@@ -9,6 +9,7 @@ The returned plan string is injected into the system message as a <task_plan> bl
 so the model follows its own plan. Never raises.
 """
 import sys
+from core.trace import trace as _jtrace
 
 import os
 import logging
@@ -42,7 +43,7 @@ _COMPLEX_KEYWORDS = (
 
 def is_complex(task: str) -> bool:
     """Cheap heuristic gate. True = needs a plan; False = trivial one-shot task."""
-    print(f"[TRACE] core.orchestrator.planner.is_complex: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.planner.is_complex: enter")
     t = (task or "").strip().lower()
     if not t:
         return False
@@ -58,7 +59,7 @@ def is_complex(task: str) -> bool:
 
 def plan_task(task: str) -> str:
     """Return a compact plan string for complex tasks, or "" to skip planning."""
-    print(f"[TRACE] core.orchestrator.planner.plan_task: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.planner.plan_task: enter")
     task = (task or "").strip()
     if not task or not is_complex(task):
         return ""
@@ -84,6 +85,6 @@ def plan_task(task: str) -> str:
         plan = (result.get("content") if isinstance(result, dict) else str(result)) or ""
         return plan.strip()
     except Exception as e:
-        print(f"[TRACE] core.orchestrator.planner.plan_task: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.orchestrator.planner.plan_task: except {str(e)[:80]}")
         logger.warning(f"[planner] plan generation failed, proceeding without plan: {e}")
         return ""

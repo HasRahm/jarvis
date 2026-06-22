@@ -1,4 +1,5 @@
 import sys
+from core.trace import trace as _jtrace
 import subprocess
 import os
 
@@ -29,11 +30,11 @@ def _gbrain_enrich(query: str) -> str:
     is swallowed and returns "" — the design allows this path to be
     "completely lost" without affecting the agent.
     """
-    print(f"[TRACE] brain.query._gbrain_enrich: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] brain.query._gbrain_enrich: enter")
     import concurrent.futures
 
     def _call():
-        print(f"[TRACE] brain.query._gbrain_enrich._call: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] brain.query._gbrain_enrich._call: enter")
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         cmd = [_GBRAIN_PATH, "query", query]
         if os.name == "nt" and _GBRAIN_PATH.endswith(".cmd"):
@@ -55,7 +56,7 @@ def _gbrain_enrich(query: str) -> str:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
             return ex.submit(_call).result(timeout=GBRAIN_QUERY_TIMEOUT + 2)
     except Exception:
-        print(f"[TRACE] brain.query._gbrain_enrich: except Exception", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] brain.query._gbrain_enrich: except Exception")
         return ""
 
 
@@ -69,7 +70,7 @@ def brain_query(query: str) -> str:
     on the happy/empty path (callers gate on those strings).
     """
     # 1. Supabase text search — the reliable primary path.
-    print(f"[TRACE] brain.query.brain_query: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] brain.query.brain_query: enter")
     supa_text = ""
     try:
         from brain.supabase_store import mem_search
@@ -82,7 +83,7 @@ def brain_query(query: str) -> str:
                 blocks.append(f"### {slug}\n{content}" if slug else content)
             supa_text = "\n\n".join(b for b in blocks if b)
     except Exception:
-        print(f"[TRACE] brain.query.brain_query: except Exception", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] brain.query.brain_query: except Exception")
         supa_text = ""
 
     # 2. Optional gbrain enrichment — best-effort, allowed to be lost.

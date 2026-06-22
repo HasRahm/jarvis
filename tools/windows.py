@@ -2,6 +2,7 @@ import ctypes
 import logging
 import os
 import sys
+from core.trace import trace as _jtrace
 
 logger = logging.getLogger(__name__)
 
@@ -13,13 +14,13 @@ def _setup_dpi_awareness():
             ctypes.windll.shcore.SetProcessDpiAwareness(2)
             logger.info("[WINDOWS] Per-Monitor DPI awareness set successfully.")
         except Exception:
-            print(f"[TRACE] tools.windows._setup_dpi_awareness: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.windows._setup_dpi_awareness: except Exception")
             try:
                 # Fallback to SetProcessDPIAware (Windows Vista+)
                 ctypes.windll.user32.SetProcessDPIAware()
                 logger.info("[WINDOWS] Standard DPI awareness set successfully.")
             except Exception as e:
-                print(f"[TRACE] tools.windows._setup_dpi_awareness: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] tools.windows._setup_dpi_awareness: except {str(e)[:80]}")
                 logger.warning(f"[WINDOWS] Failed to set DPI awareness: {e}")
 
 _setup_dpi_awareness()
@@ -30,26 +31,26 @@ _pyautogui = None
 _gw = None
 
 def _get_pyautogui():
-    print(f"[TRACE] tools.windows._get_pyautogui: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.windows._get_pyautogui: enter")
     global _pyautogui
     if _pyautogui is None and os.environ.get("JARVIS_CI") != "true":
         try:
             import pyautogui
             _pyautogui = pyautogui
         except (ImportError, KeyError, Exception):
-            print(f"[TRACE] tools.windows._get_pyautogui: except ?", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.windows._get_pyautogui: except ?")
             pass
     return _pyautogui
 
 def _get_gw():
-    print(f"[TRACE] tools.windows._get_gw: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.windows._get_gw: enter")
     global _gw
     if _gw is None and os.environ.get("JARVIS_CI") != "true":
         try:
             import pygetwindow as gw
             _gw = gw
         except (ImportError, NotImplementedError, Exception):
-            print(f"[TRACE] tools.windows._get_gw: except ?", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.windows._get_gw: except ?")
             pass
     return _gw
 
@@ -106,7 +107,7 @@ def get_window_stack() -> list:
             hwnd = user32.GetWindow(hwnd, 2)  # GW_HWNDNEXT = 2
         return stack
     except Exception as e:
-        print(f"[TRACE] tools.windows.get_window_stack: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.windows.get_window_stack: except {str(e)[:80]}")
         logger.error(f"Failed to query native window stack: {e}")
         # Fallback to pygetwindow if ctypes fails
         fallback_stack = []
@@ -126,7 +127,7 @@ def get_window_stack() -> list:
                         })
             return fallback_stack
         except Exception as e2:
-            print(f"[TRACE] tools.windows.get_window_stack: except {str(e2)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.windows.get_window_stack: except {str(e2)[:80]}")
             logger.error(f"Fallback window query also failed: {e2}")
             return []
 
@@ -135,7 +136,7 @@ def get_foreground_window() -> dict | None:
 
     Used to auto-scope visual clicks to where the user is working, so the taskbar and other
     windows are never click candidates. Excludes the shell/taskbar. CI-safe (returns None)."""
-    print(f"[TRACE] tools.windows.get_foreground_window: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.windows.get_foreground_window: enter")
     if os.environ.get("JARVIS_CI") == "true":
         return None
     _SHELL = {"Program Manager", "Start", "Taskbar", "Task View", ""}
@@ -156,20 +157,20 @@ def get_foreground_window() -> dict | None:
             if title and title not in _SHELL and w > 120 and h > 120:
                 return {"title": title, "x": rect.left, "y": rect.top, "w": w, "h": h}
     except Exception as e:
-        print(f"[TRACE] tools.windows.get_foreground_window: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.windows.get_foreground_window: except {str(e)[:80]}")
         logger.warning(f"[WINDOWS] get_foreground_window failed: {e}")
     # Fallback: topmost non-taskbar window from the stack.
     try:
         stack = get_window_stack()
         return stack[0] if stack else None
     except Exception:
-        print(f"[TRACE] tools.windows.get_foreground_window: except Exception", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.windows.get_foreground_window: except Exception")
         return None
 
 
 def find_occlusions(stack: list) -> list:
     """Calculates rectangular intersections between overlapping windows to find occlusions."""
-    print(f"[TRACE] tools.windows.find_occlusions: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.windows.find_occlusions: enter")
     occlusions = []
     for i, win in enumerate(stack):
         win_rect = (win["x"], win["y"], win["x"] + win["w"], win["y"] + win["h"])
@@ -217,7 +218,7 @@ def get_3d_window_graph() -> dict:
             "navigation_plan": []
         }
     except Exception as e:
-        print(f"[TRACE] tools.windows.get_3d_window_graph: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.windows.get_3d_window_graph: except {str(e)[:80]}")
         logger.error(f"Error compiling 3D window graph: {e}")
         return {
             "nodes": [],

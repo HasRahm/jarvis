@@ -1,4 +1,5 @@
 import sys
+from core.trace import trace as _jtrace
 import json
 import os
 from core.hermes.server import get_visual_context_history, get_speech_history
@@ -14,7 +15,7 @@ def compile_converged_context() -> str:
     Returns:
         str: Fresh compiled markdown context segment.
     """
-    print(f"[TRACE] core.orchestrator.context_sync.compile_converged_context: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.orchestrator.context_sync.compile_converged_context: enter")
     context_sections = []
 
     # 1. Visual Grounding History
@@ -62,7 +63,7 @@ def compile_converged_context() -> str:
                         total_output_tokens += entry.get("output_tokens", 0)
                         total_cost_usd += entry.get("cost_usd", 0.0)
         except Exception:
-            print(f"[TRACE] core.orchestrator.context_sync.compile_converged_context: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.orchestrator.context_sync.compile_converged_context: except Exception")
             pass
 
     context_sections.append(
@@ -81,7 +82,7 @@ def compile_converged_context() -> str:
                 content = f.read()
                 context_sections.append(f"### Current AGENTS.md Protocol Status\n```markdown\n{content[:1500]}\n```")
         except Exception:
-            print(f"[TRACE] core.orchestrator.context_sync.compile_converged_context: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.orchestrator.context_sync.compile_converged_context: except Exception")
             pass
 
     # 6. SPEC.md Artifact (Phase 36C) — the blueprint every agent builds against.
@@ -93,7 +94,7 @@ def compile_converged_context() -> str:
                 context_sections.append(
                     f"### Implementation SPEC (build to this blueprint)\n```markdown\n{spec_content[:2500]}\n```")
         except Exception:
-            print(f"[TRACE] core.orchestrator.context_sync.compile_converged_context: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.orchestrator.context_sync.compile_converged_context: except Exception")
             pass
 
     return "\n\n".join(context_sections)

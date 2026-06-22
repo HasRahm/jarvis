@@ -10,6 +10,7 @@ Themes are named token sets. The default ("aurora") is a clean, modern, accessib
 palette. Callers may pass a theme name to switch palettes while keeping the same structure.
 """
 import sys
+from core.trace import trace as _jtrace
 
 # Named palettes (semantic tokens). Keep these tasteful and high-contrast (WCAG AA).
 _THEMES = {
@@ -47,7 +48,7 @@ def list_themes() -> list:
 
 
 def _tokens_block(theme: str) -> str:
-    print(f"[TRACE] agents.design_system._tokens_block: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.design_system._tokens_block: enter")
     t = _THEMES.get(theme, _THEMES[DEFAULT_THEME])
     return (
         ":root {\n"
@@ -74,7 +75,7 @@ def _tokens_block(theme: str) -> str:
 def get_design_brief(task: str = "", theme: str | None = None) -> str:
     """Return a `<design_system>` prompt block grounding the frontend agent in a real design
     system. `theme` selects a palette (defaults to DEFAULT_THEME)."""
-    print(f"[TRACE] agents.design_system.get_design_brief: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] agents.design_system.get_design_brief: enter")
     theme = theme if theme in _THEMES else DEFAULT_THEME
     return f"""
 <design_system theme="{theme}">

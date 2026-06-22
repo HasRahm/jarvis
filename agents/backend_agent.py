@@ -5,6 +5,7 @@ Uses claude-sonnet-4-6 via the Anthropic SDK.
 Falls back to gemini-3.1-pro-preview if Anthropic is rate-limited.
 """
 import sys
+from core.trace import trace as _jtrace
 
 import os
 import json
@@ -68,7 +69,7 @@ class BackendAgent(BaseAgent):
 
     def run(self, task: str) -> dict:
         """Execute a backend/database task."""
-        print(f"[TRACE] agents.backend_agent.BackendAgent.run: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] agents.backend_agent.BackendAgent.run: enter")
         self.update_status("WORKING", "Analyzing task")
         self.append_log(f"Started: {task}")
 
@@ -118,7 +119,7 @@ class BackendAgent(BaseAgent):
                         mem_upsert(f"contract/{_slug_suffix}", contract_str)
                         logger.info(f"[backend] Contract stored to memory: contract/{_slug_suffix}")
                     except Exception as _be:
-                        print(f"[TRACE] agents.backend_agent.BackendAgent.run: except {str(_be)[:80]}", file=sys.stderr, flush=True)
+                        _jtrace(f"[TRACE] agents.backend_agent.BackendAgent.run: except {str(_be)[:80]}")
                         logger.warning(f"[backend] GBrain contract write failed: {_be}")
 
             self.update_status("DONE", f"Created {len(files_written)} files")
@@ -132,13 +133,13 @@ class BackendAgent(BaseAgent):
             }
 
         except json.JSONDecodeError as e:
-            print(f"[TRACE] agents.backend_agent.BackendAgent.run: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] agents.backend_agent.BackendAgent.run: except {str(e)[:80]}")
             self.update_status("ERROR", "Invalid JSON response")
             self.append_log(f"ERROR: Model returned invalid JSON: {e}")
             return {"status": "error", "output": f"JSON parse error: {e}", "files": []}
 
         except Exception as e:
-            print(f"[TRACE] agents.backend_agent.BackendAgent.run: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] agents.backend_agent.BackendAgent.run: except {str(e)[:80]}")
             self.update_status("ERROR", str(e)[:50])
             self.append_log(f"ERROR: {e}")
             return {"status": "error", "output": str(e), "files": []}

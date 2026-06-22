@@ -1,4 +1,5 @@
 import sys
+from core.trace import trace as _jtrace
 import subprocess
 import os
 
@@ -25,7 +26,7 @@ def run_command(command: str, cwd: str = None, sandbox=None) -> str:
              sandbox= are completely unaffected.
     """
     # Fail closed for jailed deployments that haven't wired a real sandbox.
-    print(f"[TRACE] tools.shell.run_command: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.shell.run_command: enter")
     if _jailed_local_exec_blocked() and not (sandbox and _SANDBOX_MODE == "e2b"):
         return ("ERROR: raw local shell execution is disabled in this deployment "
                 "(JARVIS_WORKSPACE_JAIL is set). Configure JARVIS_SANDBOX_MODE=e2b or =docker "
@@ -82,6 +83,6 @@ def run_command(command: str, cwd: str = None, sandbox=None) -> str:
         
         return output.strip() if output else "Command executed successfully with no output."
     except Exception as e:
-        print(f"[TRACE] tools.shell.run_command: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.shell.run_command: except {str(e)[:80]}")
         return f"Error executing command: {str(e)}"
 

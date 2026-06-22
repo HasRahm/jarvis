@@ -1,4 +1,5 @@
 import sys
+from core.trace import trace as _jtrace
 import os
 import json
 import logging
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def get_config_paths() -> list[Path]:
     """Find MCP configs on any OS in priority order."""
-    print(f"[TRACE] core.system.mcp_bridge.get_config_paths: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.system.mcp_bridge.get_config_paths: enter")
     candidates = []
     
     # 1. Claude Desktop - Windows
@@ -50,14 +51,14 @@ class JarvisMCPBridge:
         
     def _load_configs(self):
         """Loads and merges configs from Claude and Warp."""
-        print(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._load_configs: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._load_configs: enter")
         configured_servers = {}
         paths = get_config_paths()
         
         # Sort paths to process Warp, then .claude.json, then claude_desktop
         # This ensures Claude Desktop wins on conflicts as requested
         def get_priority(p: Path):
-            print(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._load_configs.get_priority: enter", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._load_configs.get_priority: enter")
             name = p.name
             if name == "claude_desktop_config.json": return 3
             if name == ".claude.json": return 2
@@ -74,7 +75,7 @@ class JarvisMCPBridge:
                     for name, params in servers.items():
                         configured_servers[name] = params
             except Exception as e:
-                print(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._load_configs: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._load_configs: except {str(e)[:80]}")
                 logger.warning(f"Failed to read MCP config from {path}: {e}")
                 
         # Probe servers
@@ -87,13 +88,13 @@ class JarvisMCPBridge:
                 }
                 logger.info(f"MCP server ready: {name} ({len(tools)} tools)")
             except Exception as e:
-                print(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._load_configs: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._load_configs: except {str(e)[:80]}")
                 logger.warning(f"MCP server unavailable: {name} - {e} (skipping)")
 
     def _probe_server_sync(self, name: str, params: dict) -> list:
-        print(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._probe_server_sync: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._probe_server_sync: enter")
         def run_in_thread():
-            print(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._probe_server_sync.run_in_thread: enter", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._probe_server_sync.run_in_thread: enter")
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
@@ -105,7 +106,7 @@ class JarvisMCPBridge:
         return future.result(timeout=15)
         
     async def _async_probe(self, params: dict) -> list:
-        print(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._async_probe: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._async_probe: enter")
         env = os.environ.copy()
         if "env" in params:
             # We must cast env values to string because StdioServerParameters expects dict[str, str]
@@ -125,7 +126,7 @@ class JarvisMCPBridge:
                 
     def get_mcp_tool_definitions(self) -> list:
         """Convert all loaded MCP tools into LLM-compatible definitions."""
-        print(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge.get_mcp_tool_definitions: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge.get_mcp_tool_definitions: enter")
         definitions = []
         for server_name, server_data in self.available_servers.items():
             for tool in server_data["tools"]:
@@ -141,9 +142,9 @@ class JarvisMCPBridge:
         return definitions
 
     def execute_mcp_tool(self, server: str, tool: str, args: dict) -> Any:
-        print(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge.execute_mcp_tool: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge.execute_mcp_tool: enter")
         def run_in_thread():
-            print(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge.execute_mcp_tool.run_in_thread: enter", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge.execute_mcp_tool.run_in_thread: enter")
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
@@ -155,7 +156,7 @@ class JarvisMCPBridge:
         return future.result(timeout=60)
         
     async def _async_execute(self, server: str, tool: str, args: dict) -> Any:
-        print(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._async_execute: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.mcp_bridge.JarvisMCPBridge._async_execute: enter")
         params = self.available_servers[server]["params"]
         env = os.environ.copy()
         if "env" in params:

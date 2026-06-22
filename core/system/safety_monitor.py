@@ -2,6 +2,7 @@ import os
 import re
 import subprocess
 import sys
+from core.trace import trace as _jtrace
 import psutil
 from typing import Callable, List, Optional, Tuple
 
@@ -31,7 +32,7 @@ class SafetyMonitor:
     def scan_stream(cls, text: str) -> Tuple[Optional[str], Optional[str]]:
         """Scans a stream text segment against error regexes, returning (category, type)."""
         # Check ESCALATE first to prioritize human attention
-        print(f"[TRACE] core.system.safety_monitor.SafetyMonitor.scan_stream: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.safety_monitor.SafetyMonitor.scan_stream: enter")
         for cat, pat in cls.PATTERNS_ESCALATE.items():
             if re.search(pat, text, re.IGNORECASE):
                 # Custom safety check for permission denied outside /workspace/
@@ -64,7 +65,7 @@ class SafetyMonitor:
         Executes a terminal command with dynamic real-time stream scanning.
         Automatically resolves known port, cache, and browser issues, and escalates database/git blockages.
         """
-        print(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored: enter")
         cmd_str = cmd if isinstance(cmd, str) else ' '.join(cmd)
         print(f"[SAFETY MONITOR] Launching command: {cmd_str}")
         
@@ -99,18 +100,18 @@ class SafetyMonitor:
                 for line in iter(stream.readline, ''):
                     q.put(line)
             except Exception:
-                print(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored.reader_thread: except Exception", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored.reader_thread: except Exception")
                 pass
             finally:
                 try:
                     stream.close()
                 except Exception:
-                    print(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored.reader_thread: except Exception", file=sys.stderr, flush=True)
+                    _jtrace(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored.reader_thread: except Exception")
                     pass
 
         def _attach_readers(proc):
             """Start fresh reader threads bound to a (possibly retried) process."""
-            print(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored._attach_readers: enter", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored._attach_readers: enter")
             t_out = Thread(target=reader_thread, args=(proc.stdout, stdout_queue), daemon=True)
             t_err = Thread(target=reader_thread, args=(proc.stderr, stderr_queue), daemon=True)
             t_out.start()
@@ -153,7 +154,6 @@ class SafetyMonitor:
                                 _attach_readers(process)
                                 start = time.monotonic()   # reset the clock for the retry
                     except queue.Empty:
-                        print(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored: except Empty", file=sys.stderr, flush=True)
                         break
 
                 # Drain stderr
@@ -174,19 +174,18 @@ class SafetyMonitor:
                                 _attach_readers(process)
                                 start = time.monotonic()
                     except queue.Empty:
-                        print(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored: except Empty", file=sys.stderr, flush=True)
                         break
 
                 if not has_data:
                     time.sleep(0.01)
 
         except Exception as e:
-            print(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored: except {str(e)[:80]}")
             process.terminate()
             try:
                 process.wait(timeout=2.0)
             except subprocess.TimeoutExpired:
-                print(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored: except TimeoutExpired", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored: except TimeoutExpired")
                 process.kill()
             raise e
 
@@ -196,7 +195,7 @@ class SafetyMonitor:
             try:
                 process.wait(timeout=2.0)
             except subprocess.TimeoutExpired:
-                print(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored: except TimeoutExpired", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.system.safety_monitor.SafetyMonitor.run_monitored: except TimeoutExpired")
                 process.kill()
             raise subprocess.TimeoutExpired(cmd, timeout,
                                             output="".join(stdout_accum),
@@ -227,7 +226,7 @@ class SafetyMonitor:
         Returns the new retry `subprocess.Popen` when the command was re-launched (so the caller's
         monitoring loop can adopt it), or `None` when there is no retry. Escalations raise.
         """
-        print(f"[TRACE] core.system.safety_monitor.SafetyMonitor._handle_action: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.safety_monitor.SafetyMonitor._handle_action: enter")
         print(f"\n[SAFETY GUARD] Detected matched pattern {error_type} in stream! Action tier: {action.upper()}")
 
         # Gracefully terminate the blocked process first
@@ -235,7 +234,7 @@ class SafetyMonitor:
         try:
             process.wait(timeout=1.0)
         except subprocess.TimeoutExpired:
-            print(f"[TRACE] core.system.safety_monitor.SafetyMonitor._handle_action: except TimeoutExpired", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.safety_monitor.SafetyMonitor._handle_action: except TimeoutExpired")
             process.kill()
 
         if action == "escalate":
@@ -276,7 +275,7 @@ class SafetyMonitor:
     @classmethod
     def _resolve_port_conflict(cls, port: int):
         """Identifies PIDs bound to the port. Automatically terminates if it's a known Jarvis-owned process."""
-        print(f"[TRACE] core.system.safety_monitor.SafetyMonitor._resolve_port_conflict: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.safety_monitor.SafetyMonitor._resolve_port_conflict: enter")
         print(f"[SAFETY GUARD] Auditing port {port} tcp connections...")
         resolved = False
         
@@ -303,7 +302,7 @@ class SafetyMonitor:
                         else:
                             print(f"[SAFETY GUARD WARNING] Port {port} held by non-Jarvis process (PID: {pid}, Command: {p.name()}). Will not kill.")
                     except Exception as e:
-                        print(f"[TRACE] core.system.safety_monitor.SafetyMonitor._resolve_port_conflict: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                        _jtrace(f"[TRACE] core.system.safety_monitor.SafetyMonitor._resolve_port_conflict: except {str(e)[:80]}")
                         print(f"[SAFETY GUARD WARNING] Could not inspect process {pid}: {e}")
         
         if not resolved:

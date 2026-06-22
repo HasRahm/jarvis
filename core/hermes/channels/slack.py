@@ -1,5 +1,6 @@
 import os
 import sys
+from core.trace import trace as _jtrace
 import time
 import json
 import urllib.request
@@ -18,7 +19,7 @@ logger = logging.getLogger("slack_channel")
 router = APIRouter()
 
 def verify_slack_signature(request_body: str, timestamp: str, signature: str) -> bool:
-    print(f"[TRACE] core.hermes.channels.slack.verify_slack_signature: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.hermes.channels.slack.verify_slack_signature: enter")
     signing_secret = os.environ.get("JARVIS_SLACK_SIGNING_SECRET", "").strip()
     if not signing_secret:
         # If signing secret is not configured, bypass signature verification (useful for dev/testing)
@@ -29,7 +30,7 @@ def verify_slack_signature(request_body: str, timestamp: str, signature: str) ->
         if abs(time.time() - int(timestamp)) > 60 * 5:
             return False
     except ValueError:
-        print(f"[TRACE] core.hermes.channels.slack.verify_slack_signature: except ValueError", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.hermes.channels.slack.verify_slack_signature: except ValueError")
         return False
         
     sig_basestring = f"v0:{timestamp}:{request_body}".encode("utf-8")
@@ -42,7 +43,7 @@ def verify_slack_signature(request_body: str, timestamp: str, signature: str) ->
     return hmac.compare_digest(my_signature, signature)
 
 def send_slack_message(channel: str, text: str, thread_ts: str = None) -> str:
-    print(f"[TRACE] core.hermes.channels.slack.send_slack_message: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.hermes.channels.slack.send_slack_message: enter")
     token = os.environ.get("JARVIS_SLACK_BOT_TOKEN", "").strip()
     if not token:
         logger.info(f"[MOCK SEND] Channel {channel}: {text}")
@@ -71,12 +72,12 @@ def send_slack_message(channel: str, text: str, thread_ts: str = None) -> str:
             if data.get("ok"):
                 return data.get("ts")
     except Exception as e:
-        print(f"[TRACE] core.hermes.channels.slack.send_slack_message: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.hermes.channels.slack.send_slack_message: except {str(e)[:80]}")
         logger.error(f"Failed to send Slack message: {e}")
     return ""
 
 def update_slack_message(channel: str, ts: str, text: str):
-    print(f"[TRACE] core.hermes.channels.slack.update_slack_message: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.hermes.channels.slack.update_slack_message: enter")
     token = os.environ.get("JARVIS_SLACK_BOT_TOKEN", "").strip()
     if not token:
         logger.info(f"[MOCK UPDATE] Channel {channel} TS {ts}: {text}")
@@ -101,11 +102,11 @@ def update_slack_message(channel: str, ts: str, text: str):
         with urllib.request.urlopen(req, timeout=5) as resp:
             resp.read()
     except Exception as e:
-        print(f"[TRACE] core.hermes.channels.slack.update_slack_message: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.hermes.channels.slack.update_slack_message: except {str(e)[:80]}")
         logger.error(f"Failed to update Slack message: {e}")
 
 def execute_slack_prompt(channel: str, prompt: str, thread_ts: str):
-    print(f"[TRACE] core.hermes.channels.slack.execute_slack_prompt: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.hermes.channels.slack.execute_slack_prompt: enter")
     logger.info(f"[Slack] Routing prompt: '{prompt}' to Jarvis CLI...")
     msg_ts = None
     try:
@@ -164,7 +165,7 @@ def execute_slack_prompt(channel: str, prompt: str, thread_ts: str):
             
         update_slack_message(channel, msg_ts, f"✅ *Task Completed!*\n\n```\n{clean_output[:3800]}\n```")
     except Exception as e:
-        print(f"[TRACE] core.hermes.channels.slack.execute_slack_prompt: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.hermes.channels.slack.execute_slack_prompt: except {str(e)[:80]}")
         logger.error(f"Failed executing Slack prompt: {e}")
         if msg_ts:
             update_slack_message(channel, msg_ts, f"❌ *Error executing task:* {e}")
@@ -172,7 +173,7 @@ def execute_slack_prompt(channel: str, prompt: str, thread_ts: str):
             send_slack_message(channel, f"❌ *Error executing task:* {e}", thread_ts)
 
 def _parse_list(s: str) -> set[str]:
-    print(f"[TRACE] core.hermes.channels.slack._parse_list: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.hermes.channels.slack._parse_list: enter")
     if not s or not s.strip():
         return set()
     return {item.strip() for item in s.split(",") if item.strip()}
@@ -183,7 +184,7 @@ async def slack_events(
     x_slack_request_timestamp: str = Header(default=""),
     x_slack_signature: str = Header(default="")
 ):
-    print(f"[TRACE] core.hermes.channels.slack.slack_events: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.hermes.channels.slack.slack_events: enter")
     body = await request.body()
     body_str = body.decode("utf-8")
     
@@ -193,7 +194,7 @@ async def slack_events(
     try:
         payload = json.loads(body_str)
     except Exception:
-        print(f"[TRACE] core.hermes.channels.slack.slack_events: except Exception", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.hermes.channels.slack.slack_events: except Exception")
         raise HTTPException(status_code=400, detail="Invalid JSON body")
     
     if payload.get("type") == "url_verification":

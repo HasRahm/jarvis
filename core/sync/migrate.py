@@ -1,4 +1,5 @@
 import sys
+from core.trace import trace as _jtrace
 import os
 import subprocess
 import logging
@@ -14,7 +15,7 @@ logger = logging.getLogger("Migrate")
 
 def sync_files():
     """Sync static files/assets from a remote mapped drive to local using robocopy"""
-    print(f"[TRACE] core.sync.migrate.sync_files: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.sync.migrate.sync_files: enter")
     remote_path = os.getenv("REMOTE_SYNC_PATH")
     local_path = os.path.join(project_root, "data")
     
@@ -34,12 +35,12 @@ def sync_files():
         else:
             logger.error(f"Robocopy failed with code {result.returncode}: {result.stdout}")
     except Exception as e:
-        print(f"[TRACE] core.sync.migrate.sync_files: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.sync.migrate.sync_files: except {str(e)[:80]}")
         logger.error(f"Failed to run robocopy: {e}")
 
 def sync_gbrain():
     """Sync GBrain memory using its native migrate command to prevent PGLite corruption"""
-    print(f"[TRACE] core.sync.migrate.sync_gbrain: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.sync.migrate.sync_gbrain: enter")
     GBRAIN = shutil.which("gbrain")
     if not GBRAIN:
         if os.name == "nt":
@@ -64,7 +65,7 @@ def sync_gbrain():
         else:
             logger.error(f"GBrain migration failed: {result.stderr or result.stdout}")
     except Exception as e:
-        print(f"[TRACE] core.sync.migrate.sync_gbrain: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.sync.migrate.sync_gbrain: except {str(e)[:80]}")
         logger.error(f"Error running gbrain migrate: {e}")
 
 if __name__ == "__main__":

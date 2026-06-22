@@ -1,4 +1,5 @@
 import sys
+from core.trace import trace as _jtrace
 import os
 import re
 import json
@@ -21,7 +22,7 @@ def classify_correction_intent(text: str, visual_history: list) -> dict | None:
     Returns {"selector": str, "instruction": str} if correction detected, else None.
     Short-circuits to None under JARVIS_CI=true to keep CI offline.
     """
-    print(f"[TRACE] core.hermes.intent_classifier.classify_correction_intent: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.hermes.intent_classifier.classify_correction_intent: enter")
     if os.environ.get("JARVIS_CI") == "true":
         return None
 
@@ -47,7 +48,7 @@ def classify_correction_intent(text: str, visual_history: list) -> dict | None:
         response = call_llm(messages, model="gemma4:31b-cloud")
         raw = response.get("content", "") if isinstance(response, dict) else str(response)
     except Exception as e:
-        print(f"[TRACE] core.hermes.intent_classifier.classify_correction_intent: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.hermes.intent_classifier.classify_correction_intent: except {str(e)[:80]}")
         logger.warning(f"Intent classifier call failed: {e}. Treating as non-correction.")
         return None
 
@@ -63,6 +64,6 @@ def classify_correction_intent(text: str, visual_history: list) -> dict | None:
             }
         return None
     except Exception as e:
-        print(f"[TRACE] core.hermes.intent_classifier.classify_correction_intent: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.hermes.intent_classifier.classify_correction_intent: except {str(e)[:80]}")
         logger.warning(f"Failed to parse intent classification response: {e}")
         return None

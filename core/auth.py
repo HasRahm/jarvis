@@ -9,6 +9,7 @@ environment.  When it is set, every token that arrives over the WebSocket is tre
 as a Supabase access token rather than the raw HERMES_SECRET string.
 """
 import sys
+from core.trace import trace as _jtrace
 
 import os
 import secrets
@@ -25,7 +26,7 @@ def _validate_supabase_jwt(token: str) -> dict | None:
     Returns the payload dict on success, or None on failure.
     Requires PyJWT (`pip install PyJWT`).
     """
-    print(f"[TRACE] core.auth._validate_supabase_jwt: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.auth._validate_supabase_jwt: enter")
     jwt_secret = os.getenv("SUPABASE_JWT_SECRET", "")
     if not jwt_secret:
         return None
@@ -39,7 +40,7 @@ def _validate_supabase_jwt(token: str) -> dict | None:
         )
         return payload
     except Exception as exc:
-        print(f"[TRACE] core.auth._validate_supabase_jwt: except {str(exc)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.auth._validate_supabase_jwt: except {str(exc)[:80]}")
         logger.warning(f"[auth] Supabase JWT validation failed: {exc}")
         return None
 
@@ -59,7 +60,7 @@ def authenticate(token: str) -> tuple[bool, str | None]:
         • Otherwise → compare directly against HERMES_SECRET (self-hosted mode).
           On success, user_id is None (single-user; no per-user scoping needed).
     """
-    print(f"[TRACE] core.auth.authenticate: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.auth.authenticate: enter")
     supabase_jwt_secret = os.getenv("SUPABASE_JWT_SECRET", "")
 
     if supabase_jwt_secret:
@@ -93,7 +94,7 @@ def _output_root() -> str:
     else the install dir — so unset behaviour (tests, direct module use) is byte-identical to
     before, while CLI runs write into the user's project instead of the install directory.
     """
-    print(f"[TRACE] core.auth._output_root: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.auth._output_root: enter")
     env = os.environ.get("JARVIS_OUTPUT_ROOT")
     if env:
         return env
@@ -107,7 +108,7 @@ def get_agents_md_path(user_id: str | None = None) -> str:
     Self-hosted (user_id=None): <output_root>/AGENTS.md
     SaaS       (user_id set):   <output_root>/workspaces/<user_id>/AGENTS.md
     """
-    print(f"[TRACE] core.auth.get_agents_md_path: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.auth.get_agents_md_path: enter")
     root = _output_root()
     if user_id:
         workspace = os.path.join(root, "workspaces", user_id)
@@ -123,7 +124,7 @@ def get_workspace_path(role: str, user_id: str | None = None) -> str:
     Self-hosted: <output_root>/workspaces/<role>/
     SaaS:        <output_root>/workspaces/<user_id>/<role>/
     """
-    print(f"[TRACE] core.auth.get_workspace_path: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.auth.get_workspace_path: enter")
     root = _output_root()
     if user_id:
         path = os.path.join(root, "workspaces", user_id, role)

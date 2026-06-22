@@ -1,4 +1,5 @@
 import sys
+from core.trace import trace as _jtrace
 import time
 import hashlib
 import asyncio
@@ -33,7 +34,7 @@ class SpatialContextCortex:
         self.loop = None
         
     def start(self):
-        print(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex.start: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex.start: enter")
         if self.running:
             return
         self.running = True
@@ -42,7 +43,7 @@ class SpatialContextCortex:
         logger.info("[Cortex] Started background spatial context cortex daemon.")
         
     def stop(self):
-        print(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex.stop: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex.stop: enter")
         self.running = False
         if self.thread:
             self.thread.join(timeout=2.0)
@@ -52,7 +53,7 @@ class SpatialContextCortex:
         self.callbacks.append(cb)
         
     def _run_loop(self):
-        print(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex._run_loop: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex._run_loop: enter")
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         self.loop.run_until_complete(self._main_loop())
@@ -80,14 +81,14 @@ class SpatialContextCortex:
                         
                 self.current_fingerprint = fingerprint
             except Exception as e:
-                print(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex._main_loop: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex._main_loop: except {str(e)[:80]}")
                 logger.error(f"[Cortex] Error in sensory loop: {e}")
                 
             await asyncio.sleep(self.check_interval)
             
     def _fuse_streams(self) -> dict:
         """Read all four streams and build fingerprint."""
-        print(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex._fuse_streams: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex._fuse_streams: enter")
         b = self.braille.read()
         s = self.sound.read()
         v = self.vibration.read()
@@ -114,7 +115,7 @@ class SpatialContextCortex:
         How different are two fingerprints?
         Returns 0.0 (identical) to 1.0 (completely different).
         """
-        print(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex._fingerprint_delta: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex._fingerprint_delta: enter")
         score = 0.0
         weight = 0.0
         
@@ -148,12 +149,12 @@ class SpatialContextCortex:
                 else:
                     callback(event_type, fingerprint)
             except Exception as e:
-                print(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex._fire: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex._fire: except {str(e)[:80]}")
                 logger.error(f"[Cortex] Error in event callback: {e}")
                 
     def register_task(self, task_id: str):
         """Register current context as home for this task."""
-        print(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex.register_task: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex.register_task: enter")
         if not self.current_fingerprint:
             self.current_fingerprint = self._fuse_streams()
         self.task_registry[task_id] = {
@@ -164,7 +165,7 @@ class SpatialContextCortex:
         
     def is_home_context(self, task_id: str) -> bool:
         """Is the current context the home for this task?"""
-        print(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex.is_home_context: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.spatial_cortex.SpatialContextCortex.is_home_context: enter")
         if task_id not in self.task_registry:
             return True
             

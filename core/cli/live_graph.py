@@ -26,6 +26,7 @@ it degrades to terse line prints instead of a live region.
 
 from __future__ import annotations
 import sys
+from core.trace import trace as _jtrace
 
 import os
 from rich.console import Console
@@ -50,7 +51,7 @@ _DEFAULT_PRICE = 1.0
 
 def estimate_cost(tokens: int, model: str | None = None) -> float:
     """Rough USD cost for a token count under the active model."""
-    print(f"[TRACE] core.cli.live_graph.estimate_cost: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.cli.live_graph.estimate_cost: enter")
     m = (model or os.environ.get("JARVIS_PRIMARY_MODEL", "gemma")).lower()
     price = next((p for key, p in _PRICE_PER_MTOK.items() if key in m), _DEFAULT_PRICE)
     return tokens / 1_000_000 * price
@@ -100,7 +101,7 @@ class GraphSession:
     # ── token / cost accounting ───────────────────────────────────────────────
     def add_tokens(self, agent: str, tokens: int, absolute: bool = False) -> None:
         """Record tokens for an agent (delta by default) and refresh cost."""
-        print(f"[TRACE] core.cli.live_graph.GraphSession.add_tokens: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.live_graph.GraphSession.add_tokens: enter")
         if absolute:
             self._tokens_by_agent[agent] = int(tokens)
         else:
@@ -128,12 +129,12 @@ class GraphSession:
                 self.finish(p.get("summary"))
         except Exception:
             # Rendering must never crash a run.
-            print(f"[TRACE] core.cli.live_graph.GraphSession._on_event: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.live_graph.GraphSession._on_event: except Exception")
             pass
 
     # ── convenience finish ─────────────────────────────────────────────────────
     def finish(self, summary: list[str] | None = None) -> None:
-        print(f"[TRACE] core.cli.live_graph.GraphSession.finish: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.live_graph.GraphSession.finish: enter")
         if summary is None:
             total = sum(self._tokens_by_agent.values())
             n_files = "?"  # callers can pass a richer summary

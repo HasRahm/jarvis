@@ -1,4 +1,5 @@
 import sys
+from core.trace import trace as _jtrace
 import subprocess
 import os
 
@@ -23,11 +24,11 @@ def brain_write(slug: str, content: str) -> str:
     internal callers should use brain.supabase_store.mem_upsert (synchronous)
     instead.
     """
-    print(f"[TRACE] brain.write.brain_write: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] brain.write.brain_write: enter")
     try:
         from brain.supabase_store import enqueue_upsert
         enqueue_upsert(slug, content)
     except Exception as e:
-        print(f"[TRACE] brain.write.brain_write: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] brain.write.brain_write: except {str(e)[:80]}")
         return f"Error queuing write for slug '{slug}': {e}"
     return f"Queued write to memory under slug '{slug}'."

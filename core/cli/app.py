@@ -1,5 +1,6 @@
 import os
 import sys
+from core.trace import trace as _jtrace
 import importlib.util
 from datetime import datetime
 from rich.text import Text
@@ -112,7 +113,7 @@ _THEMES = {
 
 
 def _build_css(theme: str = "dark") -> str:
-    print(f"[TRACE] core.cli.app._build_css: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.cli.app._build_css: enter")
     t = _THEMES.get(theme, _THEMES["dark"])
     return f"""
     Screen {{
@@ -181,12 +182,12 @@ class AgentStrip(Static):
     """Horizontal status strip showing agents from AGENTS.md."""
 
     def on_mount(self) -> None:
-        print(f"[TRACE] core.cli.app.AgentStrip.on_mount: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.AgentStrip.on_mount: enter")
         self.update_status()
         self.set_interval(2.0, self.update_status)
 
     def update_status(self) -> None:
-        print(f"[TRACE] core.cli.app.AgentStrip.update_status: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.AgentStrip.update_status: enter")
         agents = []
         try:
             path = os.path.join(os.getcwd(), "AGENTS.md")
@@ -198,7 +199,7 @@ class AgentStrip(Static):
                             if len(parts) >= 3:
                                 agents.append(parts)
         except Exception:
-            print(f"[TRACE] core.cli.app.AgentStrip.update_status: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.app.AgentStrip.update_status: except Exception")
             pass
 
         if not agents:
@@ -236,12 +237,12 @@ class StatusBar(Static):
         self._start = datetime.now()
 
     def on_mount(self) -> None:
-        print(f"[TRACE] core.cli.app.StatusBar.on_mount: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.StatusBar.on_mount: enter")
         self.update_status()
         self.set_interval(5.0, self.update_status)
 
     def update_status(self) -> None:
-        print(f"[TRACE] core.cli.app.StatusBar.update_status: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.StatusBar.update_status: enter")
         elapsed = int((datetime.now() - self._start).total_seconds())
         h, rem = divmod(elapsed, 3600)
         m, s   = divmod(rem, 60)
@@ -251,7 +252,7 @@ class StatusBar(Static):
             from tools.dispatcher import TOOL_DEFINITIONS
             tool_count = len(TOOL_DEFINITIONS)
         except Exception:
-            print(f"[TRACE] core.cli.app.StatusBar.update_status: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.app.StatusBar.update_status: except Exception")
             tool_count = "?"
 
         model  = os.environ.get("JARVIS_PRIMARY_MODEL", "gemma4:31b-cloud")
@@ -287,7 +288,7 @@ class JarvisTuiApp(App):
     CSS = _build_css("warm")
 
     def compose(self) -> ComposeResult:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp.compose: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp.compose: enter")
         yield Label("JARVIS // OPERATOR CONSOLE", id="header_title")
         yield AgentStrip()
         yield RichLog(id="output_stream", highlight=True, markup=True)
@@ -297,7 +298,7 @@ class JarvisTuiApp(App):
         yield StatusBar(self, id="status_bar")
 
     def on_mount(self) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp.on_mount: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp.on_mount: enter")
         self.log_stream = self.query_one("#output_stream", RichLog)
         self.dropdown   = self.query_one("#dropdown_palette", ListView)
         self.cli_input  = self.query_one("#cli_input", Input)
@@ -318,7 +319,7 @@ class JarvisTuiApp(App):
     # ── Command palette dropdown ──────────────────────────────────────────────
 
     def on_input_changed(self, event: Input.Changed) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp.on_input_changed: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp.on_input_changed: enter")
         val = event.value
         if val.startswith("/"):
             search  = val.lower()
@@ -337,7 +338,7 @@ class JarvisTuiApp(App):
             self.dropdown.remove_class("visible")
 
     def on_key(self, event) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp.on_key: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp.on_key: enter")
         if "visible" not in self.dropdown.classes:
             return
         if event.key == "up":
@@ -359,7 +360,7 @@ class JarvisTuiApp(App):
     # ── Input submission ──────────────────────────────────────────────────────
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp.on_input_submitted: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp.on_input_submitted: enter")
         if "visible" in self.dropdown.classes:
             return
         text = event.value.strip()
@@ -392,7 +393,7 @@ class JarvisTuiApp(App):
 
     def _get_cmd_text(self, text: str) -> str | None:
         """Return the matched inline command or None."""
-        print(f"[TRACE] core.cli.app.JarvisTuiApp._get_cmd_text: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._get_cmd_text: enter")
         for cmd in _INLINE_COMMANDS:
             if text.startswith(cmd):
                 return cmd
@@ -439,7 +440,7 @@ class JarvisTuiApp(App):
             self._show_vocab()
 
     def _show_help(self) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp._show_help: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._show_help: enter")
         t = Table(title="Jarvis Commands", style="cyan", header_style="bold cyan",
                   show_lines=False, expand=False)
         t.add_column("Command",     style="bold", width=14)
@@ -449,7 +450,7 @@ class JarvisTuiApp(App):
         self.log_stream.write(t)
 
     def _switch_theme(self, name: str) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp._switch_theme: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._switch_theme: enter")
         if name not in _THEMES:
             available = " | ".join(_THEMES.keys())
             self.log_stream.write(Text.from_markup(
@@ -464,7 +465,7 @@ class JarvisTuiApp(App):
         ))
 
     def _model_command(self, arg: str) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp._model_command: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._model_command: enter")
         current = os.environ.get("JARVIS_PRIMARY_MODEL", "gemma4:31b-cloud")
         if not arg:
             self.log_stream.write(Text.from_markup(
@@ -480,14 +481,14 @@ class JarvisTuiApp(App):
         self.query_one("#status_bar", StatusBar).update_status()
 
     def _show_models(self, query: str = "") -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp._show_models: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._show_models: enter")
         query = (query or "").strip()
         if query:
             try:
                 from core.system.openrouter_catalog import list_models
                 results = list_models(query, limit=40)
             except Exception as e:
-                print(f"[TRACE] core.cli.app.JarvisTuiApp._show_models: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._show_models: except {str(e)[:80]}")
                 self.log_stream.write(Text.from_markup(f"[red]catalog error: {e}[/]"))
                 return
             if not results:
@@ -536,12 +537,12 @@ class JarvisTuiApp(App):
         ))
 
     def _show_agents(self) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp._show_agents: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._show_agents: enter")
         try:
             from agents.model_router import get_all_agent_models
             data = get_all_agent_models()
         except Exception as e:
-            print(f"[TRACE] core.cli.app.JarvisTuiApp._show_agents: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._show_agents: except {str(e)[:80]}")
             self.log_stream.write(Text.from_markup(f"[red]{e}[/]"))
             return
         t = Table(title="Agent Models", style="cyan", header_style="bold cyan",
@@ -557,7 +558,7 @@ class JarvisTuiApp(App):
             "Browse: /models <query>[/]"))
 
     def _set_agent_model_cmd(self, arg: str) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp._set_agent_model_cmd: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._set_agent_model_cmd: enter")
         parts = (arg or "").split()
         if len(parts) < 2:
             self.log_stream.write(Text.from_markup(
@@ -569,7 +570,7 @@ class JarvisTuiApp(App):
             from agents.model_router import set_agent_model
             stored = set_agent_model(target, model)
         except Exception as e:
-            print(f"[TRACE] core.cli.app.JarvisTuiApp._set_agent_model_cmd: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._set_agent_model_cmd: except {str(e)[:80]}")
             self.log_stream.write(Text.from_markup(f"[red]{e}[/]"))
             return
         self.log_stream.write(Text.from_markup(
@@ -577,7 +578,7 @@ class JarvisTuiApp(App):
             "[dim](persisted to config/agent_models.json)[/]"))
 
     def _reset_agent_model_cmd(self, arg: str) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp._reset_agent_model_cmd: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._reset_agent_model_cmd: enter")
         target = (arg or "").strip()
         if not target:
             self.log_stream.write(Text.from_markup("[yellow]Usage:[/] /resetmodel <agent>"))
@@ -586,7 +587,7 @@ class JarvisTuiApp(App):
             from agents.model_router import reset_agent_model
             removed = reset_agent_model(target)
         except Exception as e:
-            print(f"[TRACE] core.cli.app.JarvisTuiApp._reset_agent_model_cmd: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._reset_agent_model_cmd: except {str(e)[:80]}")
             self.log_stream.write(Text.from_markup(f"[red]{e}[/]"))
             return
         self.log_stream.write(Text.from_markup(
@@ -609,11 +610,11 @@ class JarvisTuiApp(App):
                 t.add_row(str(i), fn["name"], desc)
             self.log_stream.write(t)
         except Exception as e:
-            print(f"[TRACE] core.cli.app.JarvisTuiApp._show_tools: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._show_tools: except {str(e)[:80]}")
             self.log_stream.write(Text.from_markup(f"[red]Error loading tools: {e}[/]"))
 
     def _show_history(self) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp._show_history: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._show_history: enter")
         log_path = os.path.join(os.getcwd(), "@AutomationLog.txt")
         if os.path.exists(log_path):
             try:
@@ -624,7 +625,7 @@ class JarvisTuiApp(App):
                     self.log_stream.write(Text.from_ansi(line.rstrip()))
                 return
             except Exception as e:
-                print(f"[TRACE] core.cli.app.JarvisTuiApp._show_history: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._show_history: except {str(e)[:80]}")
                 self.log_stream.write(Text.from_markup(f"[red]Error reading log: {e}[/]"))
         # Fall back to in-session log
         if self._session_log:
@@ -635,7 +636,7 @@ class JarvisTuiApp(App):
             self.log_stream.write(Text.from_markup("[dim]No history yet.[/]"))
 
     def _export_session(self, filename: str) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp._export_session: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._export_session: enter")
         if not filename:
             filename = f"jarvis_session_{datetime.now():%Y%m%d_%H%M%S}.md"
         if not filename.endswith(".md"):
@@ -654,7 +655,7 @@ class JarvisTuiApp(App):
                 f"[bold green]Session exported →[/] [dim]{out_path}[/]"
             ))
         except Exception as e:
-            print(f"[TRACE] core.cli.app.JarvisTuiApp._export_session: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._export_session: except {str(e)[:80]}")
             self.log_stream.write(Text.from_markup(f"[red]Export failed: {e}[/]"))
 
     def _show_vocab(self) -> None:
@@ -669,7 +670,7 @@ class JarvisTuiApp(App):
                 if chunk.strip():
                     self.log_stream.write(Text(chunk))
         except Exception as e:
-            print(f"[TRACE] core.cli.app.JarvisTuiApp._show_vocab: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp._show_vocab: except {str(e)[:80]}")
             self.log_stream.write(Text.from_markup(
                 f"[yellow]Visual vocab not loaded: {e}[/]\n"
                 "[dim]Run /jarvis desktop task first to initialise vocab.[/]"
@@ -678,13 +679,13 @@ class JarvisTuiApp(App):
     # ── Background worker: generic Jarvis task ────────────────────────────────
 
     def enable_input(self) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp.enable_input: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp.enable_input: enter")
         self.cli_input.disabled = False
         self.cli_input.focus()
 
     @work(thread=True)
     def run_task_worker(self, mode: str, task: str) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp.run_task_worker: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp.run_task_worker: enter")
         self.call_from_thread(self.log_stream.write, Text.from_markup(
             f"\n[bold cyan]Jarvis [{mode}][/] [dim]{task[:80]}[/]"
         ))
@@ -692,7 +693,7 @@ class JarvisTuiApp(App):
         old_out, old_err = sys.stdout, sys.stderr
 
         def _write(data: str) -> None:
-            print(f"[TRACE] core.cli.app.JarvisTuiApp.run_task_worker._write: enter", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp.run_task_worker._write: enter")
             self.call_from_thread(self.log_stream.write, Text.from_ansi(data))
             self._session_log.append(data.rstrip())
 
@@ -747,7 +748,7 @@ class JarvisTuiApp(App):
                     try:
                         result = dispatch(fn, fn_args)
                     except Exception as e:
-                        print(f"[TRACE] core.cli.app.JarvisTuiApp.run_task_worker: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp.run_task_worker: except {str(e)[:80]}")
                         result = f"ERROR: {e}"
                     print(f"  [Result] {str(result)[:200]}")
                     tool_msg = {"role": "tool", "content": str(result)}
@@ -759,7 +760,7 @@ class JarvisTuiApp(App):
             print("\n✅ Done")
 
         except Exception as e:
-            print(f"[TRACE] core.cli.app.JarvisTuiApp.run_task_worker: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp.run_task_worker: except {str(e)[:80]}")
             print(f"\n❌ {e}")
         finally:
             sys.stdout = old_out
@@ -768,7 +769,7 @@ class JarvisTuiApp(App):
 
     @work(thread=True)
     def run_doctor(self) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp.run_doctor: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp.run_doctor: enter")
         self.call_from_thread(self.log_stream.write,
                               Text.from_markup("\n[bold cyan]Running health check…[/]"))
         old_out, old_err = sys.stdout, sys.stderr
@@ -784,7 +785,7 @@ class JarvisTuiApp(App):
             spec.loader.exec_module(cli)
             cli.doctor()
         except Exception as e:
-            print(f"[TRACE] core.cli.app.JarvisTuiApp.run_doctor: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp.run_doctor: except {str(e)[:80]}")
             print(f"Error: {e}")
         finally:
             sys.stdout = old_out
@@ -793,7 +794,7 @@ class JarvisTuiApp(App):
 
     @work(thread=True)
     def run_screen(self) -> None:
-        print(f"[TRACE] core.cli.app.JarvisTuiApp.run_screen: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp.run_screen: enter")
         self.call_from_thread(self.log_stream.write,
                               Text.from_markup("\n[bold cyan]Fetching screen context…[/]"))
         old_out, old_err = sys.stdout, sys.stderr
@@ -809,7 +810,7 @@ class JarvisTuiApp(App):
             spec.loader.exec_module(cli)
             cli.run_screen_dashboard()
         except Exception as e:
-            print(f"[TRACE] core.cli.app.JarvisTuiApp.run_screen: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.app.JarvisTuiApp.run_screen: except {str(e)[:80]}")
             print(f"Error: {e}")
         finally:
             sys.stdout = old_out

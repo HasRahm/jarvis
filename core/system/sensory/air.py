@@ -1,4 +1,5 @@
 import sys
+from core.trace import trace as _jtrace
 import os
 import math
 import logging
@@ -18,14 +19,14 @@ try:
         HAS_WIN32API = True
         HAS_WIN32GUI = True
 except ImportError:
-    print(f"[TRACE] core.system.sensory.air.<module>: except ImportError", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.system.sensory.air.<module>: except ImportError")
     pass
 
 try:
     import psutil
     HAS_PSUTIL = True
 except ImportError:
-    print(f"[TRACE] core.system.sensory.air.<module>: except ImportError", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.system.sensory.air.<module>: except ImportError")
     HAS_PSUTIL = False
 
 class AirMovementLayer:
@@ -36,7 +37,7 @@ class AirMovementLayer:
         self.mouse_history = []
         
     def read(self) -> dict:
-        print(f"[TRACE] core.system.sensory.air.AirMovementLayer.read: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.sensory.air.AirMovementLayer.read: enter")
         mouse_x, mouse_y = self._get_cursor_pos()
         focus_hwnd = self._get_focus_hwnd()
         focus_proc = self._get_process(focus_hwnd)
@@ -60,27 +61,27 @@ class AirMovementLayer:
         }
         
     def _get_cursor_pos(self) -> tuple[int, int]:
-        print(f"[TRACE] core.system.sensory.air.AirMovementLayer._get_cursor_pos: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.sensory.air.AirMovementLayer._get_cursor_pos: enter")
         if HAS_WIN32API:
             try:
                 return win32api.GetCursorPos()
             except Exception:
-                print(f"[TRACE] core.system.sensory.air.AirMovementLayer._get_cursor_pos: except Exception", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.system.sensory.air.AirMovementLayer._get_cursor_pos: except Exception")
                 pass
         return (0, 0)
         
     def _get_focus_hwnd(self) -> int:
-        print(f"[TRACE] core.system.sensory.air.AirMovementLayer._get_focus_hwnd: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.sensory.air.AirMovementLayer._get_focus_hwnd: enter")
         if HAS_WIN32GUI:
             try:
                 return win32gui.GetForegroundWindow()
             except Exception:
-                print(f"[TRACE] core.system.sensory.air.AirMovementLayer._get_focus_hwnd: except Exception", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.system.sensory.air.AirMovementLayer._get_focus_hwnd: except Exception")
                 pass
         return 0
         
     def _get_process(self, hwnd) -> str:
-        print(f"[TRACE] core.system.sensory.air.AirMovementLayer._get_process: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.sensory.air.AirMovementLayer._get_process: enter")
         if not hwnd or not HAS_PSUTIL or not HAS_WIN32GUI:
             return "unknown"
         try:
@@ -88,11 +89,11 @@ class AirMovementLayer:
             proc = psutil.Process(pid)
             return proc.name()
         except Exception:
-            print(f"[TRACE] core.system.sensory.air.AirMovementLayer._get_process: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.sensory.air.AirMovementLayer._get_process: except Exception")
             return "unknown"
             
     def _in_task_region(self, x: int, y: int) -> bool:
-        print(f"[TRACE] core.system.sensory.air.AirMovementLayer._in_task_region: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.sensory.air.AirMovementLayer._in_task_region: enter")
         if not self.task_region:
             return True
         tr = self.task_region
@@ -104,7 +105,7 @@ class AirMovementLayer:
         
     def _compute_drift(self) -> float:
         """How far mouse has moved from task center recently."""
-        print(f"[TRACE] core.system.sensory.air.AirMovementLayer._compute_drift: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.sensory.air.AirMovementLayer._compute_drift: enter")
         if len(self.mouse_history) < 2 or not self.task_region:
             return 0.0
         tr = self.task_region

@@ -2,6 +2,7 @@
 
 import os
 import sys
+from core.trace import trace as _jtrace
 import time
 import subprocess
 import threading
@@ -20,7 +21,7 @@ try:
     import ctypes
     WIN32_AVAILABLE = True
 except ImportError:
-    print(f"[TRACE] core.system.app_controller.<module>: except ImportError", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.system.app_controller.<module>: except ImportError")
     WIN32_AVAILABLE = False
 
 class AppNotFoundError(Exception):
@@ -80,7 +81,7 @@ class UniversalAppController:
         Execute a task on any app.
         Automatically selects the right tier.
         """
-        print(f"[TRACE] core.system.app_controller.UniversalAppController.execute: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController.execute: enter")
         app_key = self._normalize_name(app_name)
         caps = self.registry.get(app_key)
 
@@ -115,7 +116,7 @@ class UniversalAppController:
         """
         Execute via HTTP API or SDK. App doesn't need to be open.
         """
-        print(f"[TRACE] core.system.app_controller.UniversalAppController._execute_api: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._execute_api: enter")
         client_class = caps.get("api")
         if not client_class:
             return await self._execute_mcp(app_key, caps, task)
@@ -136,7 +137,7 @@ class UniversalAppController:
 
     async def _execute_mcp(self, app_key: str, caps: dict, task: dict) -> Any:
         """Execute via MCP tool calls. No window interaction."""
-        print(f"[TRACE] core.system.app_controller.UniversalAppController._execute_mcp: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._execute_mcp: enter")
         mcp_name = caps.get("mcp")
         if not mcp_name:
             return await self._execute_background(app_key, caps, task)
@@ -153,7 +154,7 @@ class UniversalAppController:
         Execute by sending messages directly to window handle.
         Window does NOT need to be visible or focused.
         """
-        print(f"[TRACE] core.system.app_controller.UniversalAppController._execute_background: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._execute_background: enter")
         if not WIN32_AVAILABLE:
             # Mock fallback for headless environments
             return {"status": "SUCCESS", "message": "Headless fallback: background messaging simulated."}
@@ -186,7 +187,7 @@ class UniversalAppController:
 
     def _capture_background(self, hwnd: int) -> Image.Image:
         """Capture any window even if hidden or minimized using PrintWindow."""
-        print(f"[TRACE] core.system.app_controller.UniversalAppController._capture_background: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._capture_background: enter")
         if not WIN32_AVAILABLE:
             return Image.new("RGB", (800, 600), (0, 0, 0))
 
@@ -218,12 +219,12 @@ class UniversalAppController:
             win32gui.ReleaseDC(hwnd, hwnd_dc)
             return img
         except Exception:
-            print(f"[TRACE] core.system.app_controller.UniversalAppController._capture_background: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._capture_background: except Exception")
             return Image.new("RGB", (800, 600), (0, 0, 0))
 
     async def _send_action_background(self, hwnd: int, action: dict):
         """Send click/type/key to window without focusing it."""
-        print(f"[TRACE] core.system.app_controller.UniversalAppController._send_action_background: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._send_action_background: enter")
         if not WIN32_AVAILABLE:
             return
 
@@ -247,12 +248,12 @@ class UniversalAppController:
                 for key in reversed(action["keys"]):
                     win32api.PostMessage(hwnd, win32con.WM_KEYUP, key, 0)
         except Exception:
-            print(f"[TRACE] core.system.app_controller.UniversalAppController._send_action_background: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._send_action_background: except Exception")
             pass
 
     async def _execute_com(self, app_key: str, hwnd: int, task: dict) -> Any:
         """Microsoft Office COM automation. Full read/write without window focus."""
-        print(f"[TRACE] core.system.app_controller.UniversalAppController._execute_com: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._execute_com: enter")
         if not WIN32_AVAILABLE:
             return {"status": "SUCCESS", "message": "Mock COM: background Excel/Word action complete."}
 
@@ -270,7 +271,7 @@ class UniversalAppController:
             app.Visible = False
             return await self._run_com_task(app, task)
         except Exception:
-            print(f"[TRACE] core.system.app_controller.UniversalAppController._execute_com: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._execute_com: except Exception")
             return {"status": "SUCCESS", "message": "Mock COM active connection bypassed."}
 
     # ─────────────────────────────────────────────────────
@@ -281,7 +282,7 @@ class UniversalAppController:
         """
         Execute in foreground. Protected by state watcher.
         """
-        print(f"[TRACE] core.system.app_controller.UniversalAppController._execute_foreground: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._execute_foreground: enter")
         if caps.get("virtual_display"):
             return await self._execute_virtual_display(app_key, caps, task)
 
@@ -308,7 +309,7 @@ class UniversalAppController:
             return result
         except WrongWindowError:
             # Re-acquire and retry once
-            print(f"[TRACE] core.system.app_controller.UniversalAppController._execute_foreground: except WrongWindowError", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._execute_foreground: except WrongWindowError")
             hwnd = self._find_or_launch(app_key)
             if hwnd:
                 self._ensure_foreground(hwnd)
@@ -321,7 +322,7 @@ class UniversalAppController:
 
     async def _execute_virtual_display(self, app_key: str, caps: dict, task: dict) -> Any:
         """Run app on invisible virtual display."""
-        print(f"[TRACE] core.system.app_controller.UniversalAppController._execute_virtual_display: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._execute_virtual_display: enter")
         if not self.virtual_display:
             self.virtual_display = VirtualDisplayManager()
             self.virtual_display.start()
@@ -335,7 +336,7 @@ class UniversalAppController:
 
     async def _discover_capabilities(self, app_name: str) -> dict:
         """For unknown apps — discover capabilities at runtime."""
-        print(f"[TRACE] core.system.app_controller.UniversalAppController._discover_capabilities: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._discover_capabilities: enter")
         caps = {"tier": 4}
 
         if WIN32_AVAILABLE:
@@ -345,7 +346,7 @@ class UniversalAppController:
                 caps["tier"] = 3
                 caps["api"] = f"{app_name.title()}COMClient"
             except Exception:
-                print(f"[TRACE] core.system.app_controller.UniversalAppController._discover_capabilities: except Exception", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._discover_capabilities: except Exception")
                 pass
 
         mcp_name = f"{app_name.lower()}-mcp"
@@ -365,7 +366,7 @@ class UniversalAppController:
     # ─────────────────────────────────────────────────────
 
     def _get_state(self, hwnd: int) -> str:
-        print(f"[TRACE] core.system.app_controller.UniversalAppController._get_state: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._get_state: enter")
         if not WIN32_AVAILABLE:
             return "normal"
         try:
@@ -375,12 +376,12 @@ class UniversalAppController:
             if state == win32con.SW_SHOWMAXIMIZED: return "maximized"
             if not win32gui.IsWindowVisible(hwnd):  return "hidden"
         except Exception:
-            print(f"[TRACE] core.system.app_controller.UniversalAppController._get_state: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._get_state: except Exception")
             pass
         return "normal"
 
     def _ensure_foreground(self, hwnd: int):
-        print(f"[TRACE] core.system.app_controller.UniversalAppController._ensure_foreground: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._ensure_foreground: enter")
         if not WIN32_AVAILABLE:
             return
         try:
@@ -391,11 +392,11 @@ class UniversalAppController:
             win32gui.BringWindowToTop(hwnd)
             time.sleep(0.1)
         except Exception:
-            print(f"[TRACE] core.system.app_controller.UniversalAppController._ensure_foreground: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._ensure_foreground: except Exception")
             pass
 
     def _find_window(self, app_key: str) -> int | None:
-        print(f"[TRACE] core.system.app_controller.UniversalAppController._find_window: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._find_window: enter")
         if not WIN32_AVAILABLE:
             return None
         try:
@@ -415,11 +416,11 @@ class UniversalAppController:
             win32gui.EnumWindows(enum_win, None)
             return found_hwnd[0]
         except Exception:
-            print(f"[TRACE] core.system.app_controller.UniversalAppController._find_window: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._find_window: except Exception")
             return None
 
     def _find_or_launch(self, app_key: str) -> int | None:
-        print(f"[TRACE] core.system.app_controller.UniversalAppController._find_or_launch: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._find_or_launch: enter")
         hwnd = self._find_window(app_key)
         if hwnd:
             return hwnd
@@ -430,7 +431,7 @@ class UniversalAppController:
                 time.sleep(1.5)
                 return self._find_window(app_key)
             except Exception:
-                print(f"[TRACE] core.system.app_controller.UniversalAppController._find_or_launch: except Exception", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.system.app_controller.UniversalAppController._find_or_launch: except Exception")
                 pass
         return None
 
@@ -454,7 +455,7 @@ class WindowStateWatcher:
         self._last_state = None
 
     def start(self):
-        print(f"[TRACE] core.system.app_controller.WindowStateWatcher.start: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.WindowStateWatcher.start: enter")
         self.running = True
         self._last_state = self._current_state()
         threading.Thread(
@@ -467,7 +468,7 @@ class WindowStateWatcher:
         self.running = False
 
     def _current_state(self) -> str:
-        print(f"[TRACE] core.system.app_controller.WindowStateWatcher._current_state: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.app_controller.WindowStateWatcher._current_state: enter")
         if not WIN32_AVAILABLE:
             return "normal"
         try:
@@ -478,7 +479,7 @@ class WindowStateWatcher:
             if show_cmd == win32con.SW_SHOWMINIMIZED:
                 return "minimized"
         except Exception:
-            print(f"[TRACE] core.system.app_controller.WindowStateWatcher._current_state: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.app_controller.WindowStateWatcher._current_state: except Exception")
             return "closed"
         return "normal"
 

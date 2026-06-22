@@ -1,6 +1,7 @@
 # Force UTF-8 stdout/stderr so emoji and non-ASCII content (e.g. from browser_extract_text)
 # don't crash on Windows where the default codec is cp1252.
 import sys as _sys, io as _io
+from core.trace import trace as _jtrace
 if hasattr(_sys.stdout, "buffer"):
     _sys.stdout = _io.TextIOWrapper(_sys.stdout.buffer, encoding="utf-8", errors="replace")
 if hasattr(_sys.stderr, "buffer"):
@@ -278,7 +279,7 @@ def main():
         with Live(renderer.render(), refresh_per_second=4) as live:
             while turns < MAX_TURNS:
                 turns += 1
-                print(f"[TRACE] {__name__}.run: loop turn={turns}/{MAX_TURNS} history={len(messages)}", file=_sys.stderr, flush=True)
+                _jtrace(f"[TRACE] {__name__}.run: loop turn={turns}/{MAX_TURNS} history={len(messages)}")
 
                 # Trim message history to prevent unbounded token growth
                 messages = _trim_messages(messages)
@@ -294,7 +295,7 @@ def main():
                     tools=TOOL_DEFINITIONS
                 )
                 _stats = llm_adapter.get_last_run()
-                print(f"[TRACE] {__name__}.run: llm returned model_used={_stats.get('model_used')} fallbacks={_stats.get('fallbacks')} tool_calls={len(msg.get('tool_calls', []))}", file=_sys.stderr, flush=True)
+                _jtrace(f"[TRACE] {__name__}.run: llm returned model_used={_stats.get('model_used')} fallbacks={_stats.get('fallbacks')} tool_calls={len(msg.get('tool_calls', []))}")
                 if _stats.get("model_used"):
                     run_models_used.add(_stats["model_used"])
                 if _stats.get("fallbacks", 0) > 0:
@@ -407,11 +408,11 @@ def main():
                     elif "file_path" in fn_args:
                         tool_input["file_path"] = fn_args["file_path"]
 
-                    print(f"[TRACE] {__name__}.run: dispatch fn={fn} args={str(fn_args)[:80]}", file=_sys.stderr, flush=True)
+                    _jtrace(f"[TRACE] {__name__}.run: dispatch fn={fn} args={str(fn_args)[:80]}")
                     try:
                         result = dispatch(fn, fn_args, orch_agent=agent_ctx)
                     except Exception as e:
-                        print(f"[TRACE] {__name__}.run: dispatch EXCEPTION fn={fn} err={str(e)[:80]}", file=_sys.stderr, flush=True)
+                        _jtrace(f"[TRACE] {__name__}.run: dispatch EXCEPTION fn={fn} err={str(e)[:80]}")
                         result = f"ERROR: {e}"
 
                     # Update Graph Renderer on tool return

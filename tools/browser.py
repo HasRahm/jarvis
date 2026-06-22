@@ -1,4 +1,5 @@
 import sys
+from core.trace import trace as _jtrace
 import os
 import logging
 import queue
@@ -20,7 +21,7 @@ _browser_thread_lock = threading.Lock()
 
 def _browser_worker():
     """Worker thread that executes all browser tasks to ensure thread safety with sync Playwright."""
-    print(f"[TRACE] tools.browser._browser_worker: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.browser._browser_worker: enter")
     logger.info("[Browser Thread] Started browser worker thread.")
     while True:
         try:
@@ -36,7 +37,7 @@ def _browser_worker():
                 result_container["result"] = res
                 result_container["success"] = True
             except Exception as e:
-                print(f"[TRACE] tools.browser._browser_worker: except {str(e)[:80]}", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] tools.browser._browser_worker: except {str(e)[:80]}")
                 logger.error(f"[Browser Thread] Error executing task {func.__name__}: {e}", exc_info=True)
                 result_container["error"] = e
                 result_container["success"] = False
@@ -44,12 +45,12 @@ def _browser_worker():
                 event.set()
                 _browser_queue.task_done()
         except Exception as e:
-            print(f"[TRACE] tools.browser._browser_worker: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.browser._browser_worker: except {str(e)[:80]}")
             logger.error(f"[Browser Thread] Error in worker loop: {e}")
 
 def _run_on_browser_thread(func, *args, **kwargs):
     """Executes a function on the browser thread and returns the result."""
-    print(f"[TRACE] tools.browser._run_on_browser_thread: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.browser._run_on_browser_thread: enter")
     global _browser_thread
     with _browser_thread_lock:
         if _browser_thread is None or not _browser_thread.is_alive():
@@ -67,7 +68,7 @@ def _run_on_browser_thread(func, *args, **kwargs):
         try:
             _shutdown_browser_impl()
         except Exception as se:
-            print(f"[TRACE] tools.browser._run_on_browser_thread: except {str(se)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.browser._run_on_browser_thread: except {str(se)[:80]}")
             logger.error(f"[Browser Thread] Error during forced shutdown: {se}")
             
         with _browser_thread_lock:
@@ -83,7 +84,7 @@ def _run_on_browser_thread(func, *args, **kwargs):
 # Internal implementations running on the browser thread
 def _get_browser_page_impl():
     """Retrieve or initialize the persistent Playwright page instance."""
-    print(f"[TRACE] tools.browser._get_browser_page_impl: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.browser._get_browser_page_impl: enter")
     global _playwright, _browser, _context, _page
     if _page is None:
         logger.info("Initializing Playwright headless Chromium instance...")
@@ -96,7 +97,7 @@ def _get_browser_page_impl():
 
 def _shutdown_browser_impl():
     """Cleanly close Playwright components to avoid zombie processes."""
-    print(f"[TRACE] tools.browser._shutdown_browser_impl: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.browser._shutdown_browser_impl: enter")
     global _playwright, _browser, _context, _page
     try:
         if _page:
@@ -108,7 +109,7 @@ def _shutdown_browser_impl():
         if _playwright:
             _playwright.stop()
     except Exception as e:
-        print(f"[TRACE] tools.browser._shutdown_browser_impl: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.browser._shutdown_browser_impl: except {str(e)[:80]}")
         logger.warning(f"Error shutting down Playwright: {e}")
     finally:
         _playwright = None
@@ -131,7 +132,7 @@ def _browser_navigate_impl(url: str) -> str:
         status = response.status if response else "Unknown"
         return f"[SUCCESS] Navigated to {url}. Status: {status}"
     except Exception as e:
-        print(f"[TRACE] tools.browser._browser_navigate_impl: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.browser._browser_navigate_impl: except {str(e)[:80]}")
         return f"[ERROR] Failed to navigate to {url}: {str(e)}"
 
 def _browser_extract_text_impl() -> str:
@@ -141,7 +142,7 @@ def _browser_extract_text_impl() -> str:
         text = page.locator("body").inner_text()
         return text
     except Exception as e:
-        print(f"[TRACE] tools.browser._browser_extract_text_impl: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.browser._browser_extract_text_impl: except {str(e)[:80]}")
         return f"[ERROR] Failed to extract text: {str(e)}"
 
 def _browser_click_impl(selector: str) -> str:
@@ -154,11 +155,11 @@ def _browser_click_impl(selector: str) -> str:
             try:
                 page.click(selector, timeout=2000)
             except Exception:
-                print(f"[TRACE] tools.browser._browser_click_impl: except Exception", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] tools.browser._browser_click_impl: except Exception")
                 page.click(f"text={selector}", timeout=5000)
         return f"[SUCCESS] Clicked element: '{selector}'"
     except Exception as e:
-        print(f"[TRACE] tools.browser._browser_click_impl: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.browser._browser_click_impl: except {str(e)[:80]}")
         return f"[ERROR] Failed to click element '{selector}': {str(e)}"
 
 def _browser_screenshot_impl() -> str:
@@ -172,7 +173,7 @@ def _browser_screenshot_impl() -> str:
         page.screenshot(path=path, full_page=True)
         return f"[SUCCESS] Screenshot captured and saved at: {path}"
     except Exception as e:
-        print(f"[TRACE] tools.browser._browser_screenshot_impl: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.browser._browser_screenshot_impl: except {str(e)[:80]}")
         return f"[ERROR] Failed to capture screenshot: {str(e)}"
 
 def _browser_resolve_element_at_coords_impl(x_ratio: float, y_ratio: float) -> dict:
@@ -255,7 +256,7 @@ def _browser_resolve_element_at_coords_impl(x_ratio: float, y_ratio: float) -> d
         result["success"] = True
         return result
     except Exception as e:
-        print(f"[TRACE] tools.browser._browser_resolve_element_at_coords_impl: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.browser._browser_resolve_element_at_coords_impl: except {str(e)[:80]}")
         logger.error(f"Error resolving element at coordinates: {e}")
         return {
             "success": False,
@@ -300,13 +301,13 @@ def browser_resolve_element_at_coords(x_ratio: float, y_ratio: float) -> dict:
     return _run_on_browser_thread(_browser_resolve_element_at_coords_impl, x_ratio, y_ratio)
 
 def _browser_get_url_impl() -> str:
-    print(f"[TRACE] tools.browser._browser_get_url_impl: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.browser._browser_get_url_impl: enter")
     global _page
     if _page is not None:
         try:
             return _page.url
         except Exception:
-            print(f"[TRACE] tools.browser._browser_get_url_impl: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] tools.browser._browser_get_url_impl: except Exception")
             pass
     return ""
 
@@ -314,6 +315,6 @@ def browser_get_url() -> str:
     try:
         return _run_on_browser_thread(_browser_get_url_impl)
     except Exception:
-        print(f"[TRACE] tools.browser.browser_get_url: except Exception", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.browser.browser_get_url: except Exception")
         return ""
 

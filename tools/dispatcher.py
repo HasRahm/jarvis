@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+from core.trace import trace as _jtrace
 from tools.filesystem import read_file, write_file, list_dir
 from tools.shell import run_command
 from tools.browser import browser_navigate, browser_extract_text, browser_click, browser_screenshot
@@ -884,7 +885,7 @@ def dispatch(fn_name: str, args: dict, orch_agent=None):
     
     logger = logging.getLogger(__name__)
 
-    print(f"[TRACE] {__name__}.dispatch: enter fn={fn_name} arg_keys={list(args.keys()) if isinstance(args, dict) else type(args).__name__}", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] {__name__}.dispatch: enter fn={fn_name} arg_keys={list(args.keys()) if isinstance(args, dict) else type(args).__name__}")
 
     # Desktop/GUI automation tools deliberately change window context — exempt them from the Cortex.
     # The Cortex is designed to protect shell/file ops from running in wrong apps, not to block
@@ -918,7 +919,7 @@ def dispatch(fn_name: str, args: dict, orch_agent=None):
                 
                 # Check if we shifted context
                 if not cortex.is_home_context(orch.task_id):
-                    print(f"[TRACE] {__name__}.dispatch: CORTEX suspend fn={fn_name} task={orch.task_id}", file=sys.stderr, flush=True)
+                    _jtrace(f"[TRACE] {__name__}.dispatch: CORTEX suspend fn={fn_name} task={orch.task_id}")
                     logger.warning(f"[Cortex] Context switch detected! Suspending tool '{fn_name}' until home context returns.")
                     
                     # Update status in AGENTS.md to SUSPENDED
@@ -961,14 +962,14 @@ def dispatch(fn_name: str, args: dict, orch_agent=None):
     try:
         result = _dispatch_raw(fn_name, args)
         _ok = not (isinstance(result, str) and (result.startswith("[ERROR]") or result.startswith("ERROR:")))
-        print(f"[TRACE] {__name__}.dispatch: done fn={fn_name} ok={_ok} result={str(result)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] {__name__}.dispatch: done fn={fn_name} ok={_ok} result={str(result)[:80]}")
         if not _ok:
             breaker.record_failure()
         else:
             breaker.record_success()
         return result
     except Exception as e:
-        print(f"[TRACE] {__name__}.dispatch: EXCEPTION fn={fn_name} err={str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] {__name__}.dispatch: EXCEPTION fn={fn_name} err={str(e)[:80]}")
         breaker.record_failure()
         raise e
 

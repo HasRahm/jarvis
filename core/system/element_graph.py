@@ -8,6 +8,7 @@ no extra deps). Lets the agent navigate to elements by coordinates instead of bl
 pixel guessing.
 """
 import sys
+from core.trace import trace as _jtrace
 
 import os
 import json
@@ -29,7 +30,7 @@ def _load_cache() -> list[dict]:
         with open(_CACHE_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
-        print(f"[TRACE] core.system.element_graph._load_cache: except Exception", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.element_graph._load_cache: except Exception")
         return []
 
 
@@ -39,13 +40,13 @@ def build_graph(refresh: bool = True) -> dict:
     nodes = interactive elements with center coords (cx, cy);
     edges = pairs of nodes within ~150px of each other.
     """
-    print(f"[TRACE] core.system.element_graph.build_graph: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.system.element_graph.build_graph: enter")
     if refresh and os.environ.get("JARVIS_CI") != "true":
         try:
             from tools.desktop_ui_tree import desktop_get_ui_tree
             desktop_get_ui_tree()  # repopulates the cache file
         except Exception as e:
-            print(f"[TRACE] core.system.element_graph.build_graph: except {str(e)[:80]}", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.element_graph.build_graph: except {str(e)[:80]}")
             logger.warning(f"[element_graph] tree refresh failed: {e}")
 
     raw = _load_cache()
@@ -55,7 +56,7 @@ def build_graph(refresh: bool = True) -> dict:
             cx = el["x"] + el["w"] // 2
             cy = el["y"] + el["h"] // 2
         except Exception:
-            print(f"[TRACE] core.system.element_graph.build_graph: except Exception", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.system.element_graph.build_graph: except Exception")
             continue
         nodes.append({
             "index": el.get("index"),
@@ -82,7 +83,7 @@ def build_graph(refresh: bool = True) -> dict:
 
 def find_element(description: str, refresh: bool = True) -> dict | None:
     """Return the best element matching *description*, or None if none clears the threshold."""
-    print(f"[TRACE] core.system.element_graph.find_element: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.system.element_graph.find_element: enter")
     description = (description or "").strip()
     if not description:
         return None
@@ -91,7 +92,7 @@ def find_element(description: str, refresh: bool = True) -> dict | None:
     try:
         from tools.virtual_input import score_element
     except Exception as e:
-        print(f"[TRACE] core.system.element_graph.find_element: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.system.element_graph.find_element: except {str(e)[:80]}")
         logger.warning(f"[element_graph] scorer unavailable: {e}")
         return None
 
@@ -110,7 +111,7 @@ def find_element(description: str, refresh: bool = True) -> dict | None:
 
 def element_graph_tool(description: str | None = None, refresh: bool = True) -> str:
     """Tool entry: with a description -> matched element + coords; without -> node list."""
-    print(f"[TRACE] core.system.element_graph.element_graph_tool: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.system.element_graph.element_graph_tool: enter")
     if description:
         match = find_element(description, refresh=refresh)
         if match:

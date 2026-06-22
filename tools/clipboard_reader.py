@@ -10,6 +10,7 @@ the caller to fall back to screen_ocr / desktop_get_ui_tree.
 The prior clipboard contents are always restored. Never raises.
 """
 import sys
+from core.trace import trace as _jtrace
 
 import time
 import logging
@@ -41,7 +42,7 @@ def _focused_process_name() -> str:
             name = name[:-4]
         return name
     except Exception as e:
-        print(f"[TRACE] tools.clipboard_reader._focused_process_name: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.clipboard_reader._focused_process_name: except {str(e)[:80]}")
         logger.warning(f"[clipboard] could not resolve focused process: {e}")
         return ""
 
@@ -58,7 +59,7 @@ def _read_clipboard_text() -> str:
         finally:
             win32clipboard.CloseClipboard()
     except Exception:
-        print(f"[TRACE] tools.clipboard_reader._read_clipboard_text: except Exception", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.clipboard_reader._read_clipboard_text: except Exception")
         return ""
 
 
@@ -74,7 +75,7 @@ def _set_clipboard_text(text: str) -> None:
         finally:
             win32clipboard.CloseClipboard()
     except Exception as e:
-        print(f"[TRACE] tools.clipboard_reader._set_clipboard_text: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.clipboard_reader._set_clipboard_text: except {str(e)[:80]}")
         logger.warning(f"[clipboard] restore failed: {e}")
 
 
@@ -84,7 +85,7 @@ def read_screen_text(mode: str = "all") -> str:
     Returns the text, or a "[clipboard] ..." marker if the focused app isn't a known
     text app or win32 is unavailable — so the caller can fall back to screen_ocr.
     """
-    print(f"[TRACE] tools.clipboard_reader.read_screen_text: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] tools.clipboard_reader.read_screen_text: enter")
     proc = _focused_process_name()
     if not proc:
         return "[clipboard] could not detect focused app — use screen_ocr or desktop_get_ui_tree instead"
@@ -95,7 +96,7 @@ def read_screen_text(mode: str = "all") -> str:
     try:
         from tools.desktop_automation import desktop_press_keys
     except Exception as e:
-        print(f"[TRACE] tools.clipboard_reader.read_screen_text: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.clipboard_reader.read_screen_text: except {str(e)[:80]}")
         return f"[clipboard] key sender unavailable: {e} — use screen_ocr"
 
     original = _read_clipboard_text()
@@ -110,7 +111,7 @@ def read_screen_text(mode: str = "all") -> str:
             return "[clipboard] no text captured — use screen_ocr or desktop_get_ui_tree"
         return text
     except Exception as e:
-        print(f"[TRACE] tools.clipboard_reader.read_screen_text: except {str(e)[:80]}", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] tools.clipboard_reader.read_screen_text: except {str(e)[:80]}")
         logger.warning(f"[clipboard] read failed: {e}")
         return f"[clipboard] read error: {e} — use screen_ocr"
     finally:

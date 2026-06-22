@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import os
 import sys
+from core.trace import trace as _jtrace
 import time
 import threading
 from dataclasses import dataclass, field
@@ -66,7 +67,7 @@ class Palette:
 
 # ── glyphs, with an ASCII fallback for non-unicode consoles ──────────────────
 def _supports_unicode() -> bool:
-    print(f"[TRACE] core.cli.graph_renderer._supports_unicode: enter", file=sys.stderr, flush=True)
+    _jtrace(f"[TRACE] core.cli.graph_renderer._supports_unicode: enter")
     enc = (getattr(sys.stdout, "encoding", "") or "").lower()
     return "utf" in enc or os.environ.get("JARVIS_FORCE_UNICODE") == "1"
 
@@ -125,7 +126,7 @@ class ExecutionGraphRenderer:
             try:
                 self.project = f"~/{os.path.basename(os.getcwd())}"
             except Exception:
-                print(f"[TRACE] core.cli.graph_renderer.ExecutionGraphRenderer.__post_init__: except Exception", file=sys.stderr, flush=True)
+                _jtrace(f"[TRACE] core.cli.graph_renderer.ExecutionGraphRenderer.__post_init__: except Exception")
                 self.project = "~"
 
     # ── state transitions ────────────────────────────────────────────────────
@@ -182,7 +183,7 @@ class ExecutionGraphRenderer:
 
     def set_agent_status(self, agent: str, status: str):
         """Legacy: status string doubled as state+detail. Map it sensibly."""
-        print(f"[TRACE] core.cli.graph_renderer.ExecutionGraphRenderer.set_agent_status: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.graph_renderer.ExecutionGraphRenderer.set_agent_status: enter")
         s = (status or "").lower()
         if s in ("queued", "pending"):
             with self._lock:
@@ -199,12 +200,12 @@ class ExecutionGraphRenderer:
 
     # ── helpers ───────────────────────────────────────────────────────────────
     def _spin(self) -> str:
-        print(f"[TRACE] core.cli.graph_renderer.ExecutionGraphRenderer._spin: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.graph_renderer.ExecutionGraphRenderer._spin: enter")
         idx = int((time.time() - self.start_time) * 12) % len(SPINNER)
         return SPINNER[idx]
 
     def _icon(self, state: NodeState):
-        print(f"[TRACE] core.cli.graph_renderer.ExecutionGraphRenderer._icon: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.graph_renderer.ExecutionGraphRenderer._icon: enter")
         if state is NodeState.DONE:
             return Text(G_DONE, style=Palette.OK)
         if state is NodeState.FAILED:
@@ -214,7 +215,7 @@ class ExecutionGraphRenderer:
         return Text(G_PEND, style=Palette.FAINT)
 
     def _node_styles(self, state: NodeState):
-        print(f"[TRACE] core.cli.graph_renderer.ExecutionGraphRenderer._node_styles: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.graph_renderer.ExecutionGraphRenderer._node_styles: enter")
         if state is NodeState.PENDING:
             return Palette.FAINT, Palette.FAINT
         if state is NodeState.RUNNING:
@@ -233,7 +234,7 @@ class ExecutionGraphRenderer:
         return self.render()
 
     def _render_locked(self) -> Panel:
-        print(f"[TRACE] core.cli.graph_renderer.ExecutionGraphRenderer._render_locked: enter", file=sys.stderr, flush=True)
+        _jtrace(f"[TRACE] core.cli.graph_renderer.ExecutionGraphRenderer._render_locked: enter")
         elements: list = []
 
         # 1. window chrome
@@ -285,7 +286,7 @@ class ExecutionGraphRenderer:
         tree.add_column()
 
         def row(prefix: str, label: str, state: NodeState, detail: str):
-            print(f"[TRACE] core.cli.graph_renderer.ExecutionGraphRenderer._render_locked.row: enter", file=sys.stderr, flush=True)
+            _jtrace(f"[TRACE] core.cli.graph_renderer.ExecutionGraphRenderer._render_locked.row: enter")
             name_style, det_style = self._node_styles(state)
             line = Text(prefix, style=Palette.FAINT)
             line.append(label, style=f"bold {name_style}")
