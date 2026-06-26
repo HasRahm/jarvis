@@ -6,7 +6,7 @@
 
 ## What we are building
 A Jarvis-style, always-on AI operating system that:
-- Runs primarily using **`gemma4:31b-cloud`** (using an external endpoint/proxy) as the on-device brain.
+- Runs on a **configurable brain** — defaults to **`gemma4:31b-cloud`** (free local Ollama) but any model from any provider can be chosen via `JARVIS_PRIMARY_MODEL` (see Session 2026-06-26).
 - Has specialized agents per task domain (frontend, backend, database, QA, IaC), each using the best model for that job.
 - Coordinates agents through a shared **`AGENTS.md`** protocol.
 - Persists everything in **GBrain** (knowledge graph + hybrid vector search) so it remembers across sessions.
@@ -20,7 +20,7 @@ The project is currently being developed on a **Windows** environment, meaning s
 - **Virtual Environment**: Isolated `.venv` established.
 - **Core Loop**: `core/gemma4_loop.py` serves as the CLI interface, parsing user text, determining tool calls, and maintaining context. 
 - **Tooling**: Implementations for `filesystem.py`, `shell.py`, and a stub for `browser.py` are mapped to JSON schemas in `dispatcher.py`.
-- **Model**: Hardcoded to utilize `gemma4:31b-cloud`. 
+- **Model**: Defaults to `gemma4:31b-cloud`; provider-agnostic since Session 2026-06-26 (`JARVIS_PRIMARY_MODEL` selects any model — cloud choices are no longer overridden back to gemma4).
 
 ### Phase 2: Memory Layer (COMPLETED)
 - **GBrain Setup**: `scripts/bootstrap.sh` handles installing `bun` natively on Windows and clones the third-party GBrain repository to `C:/Users/hasin/tools/gbrain` to avoid nested git repository issues.
@@ -350,6 +350,49 @@ The project is currently being developed on a **Windows** environment, meaning s
 - **Full suite**: 421 passed, 4 pre-existing failures (HERMES_SECRET/websocket in `test_hermes_sync.py` and `test_phase12_robustness.py`), 0 regressions.
 - **Tests**: `tests/test_phase29_grounded.py` — 16 CI-safe tests.
 - **Commit**: `21b2cf4`
+
+### Session 2026-06-26: Trace Gating, Canonical Prompt, Model-Agnostic Loop, Agent Coordination
+> Phases 32–46 are tracked in the auto-memory index (`MEMORY.md`), not here. This entry covers the most
+> recent working session. Items are marked **[committed]** or **[uncommitted]** for honesty.
+
+- **Debug-trace instrumentation → gated sink** **[committed, branch `session-phases-38-46`]**: ~826
+  `[TRACE]` lines across ~91 files (commits `1026d49`→`54b85b1`). Originally always-on raw prints, which
+  FLOODED the live REPL (tool-dispatch traces escape the REPL's stderr sink; hot loops like
+  `SafetyMonitor` per-poll and `agent_view` per-grid-cell spewed thousands of lines). Fixed by routing
+  ALL traces through `core/trace.py:trace()` — a **no-op unless `JARVIS_TRACE=1`**, then writes to
+  `logs/jarvis_trace.log` (and real stderr only if `JARVIS_TRACE_CONSOLE=1`). To debug:
+  `JARVIS_TRACE=1` then `tail -f logs/jarvis_trace.log`.
+- **Canonical system prompt** **[uncommitted]**: `core/jarvis_prompt.py` NEW — one original, tagged
+  `base_prompt(date, output_dir)` (~2k tokens) + `ORCHESTRATOR_ADDON` (build-only office-meeting block).
+  Replaces the 5 drifting "You are Jarvis…" strings in `core/cli/repl.py`, `core/cli/app.py`,
+  `core/hermes/hermes_cli_runner.py`, `core/gemma4_loop.py`, `core/hermes/server.py` — all now import it.
+  Sections: identity, tools (doctrine, not per-tool dup — the full specs already ship via
+  `TOOL_DEFINITIONS`), worked_example, what_you_receive, acting, knowledge_and_search,
+  tone_and_formatting, honesty, refusal_handling, wellbeing, evenhandedness, memory, instruction_boundary.
+  Tests: `tests/test_jarvis_prompt.py` (8). NOTE: a `datetime` NameError regression in `repl._agent_turn`
+  was found via `/diagnose` and fixed (local `from datetime import datetime as _dt`).
+- **Model-agnostic loop** **[uncommitted]**: `core/gemma4_loop.py:get_available_model()` no longer forces
+  cloud choices back to gemma4. A CLOUD `JARVIS_PRIMARY_MODEL` (OpenRouter/NVIDIA/Anthropic/OpenAI/Gemini)
+  is returned as-is (`call_llm` routes + falls back); only a LOCAL Ollama choice is health-checked. Set
+  `JARVIS_PRIMARY_MODEL=<any id>` to run the loop on any model from any provider.
+- **Per-agent coordination** **[uncommitted]**: added original `<when>` (pipeline place) + `<how>` (method)
+  blocks to `SYSTEM_PROMPT` of `agents/{backend,frontend,qa,iac}_agent.py` and a decisive build-vs-analysis
+  line to `skill_agent`'s output contract. backend runs first (publishes contract), frontend after
+  (reads contract, exact endpoints), qa last (real symbols only), iac after-backend scoped-to-workspace.
+
+#### Open harness gaps (analysis done this session — NOT yet implemented)
+The prompt *asks* for behaviors the execution loops don't all *enforce*. The two loops enforce different
+subsets of the same doctrine. Proposed work, prioritized:
+- **G1 (safety) — risky-action gate is REPL-only.** `is_risky` has ZERO hits in `hermes_cli_runner.py`,
+  so a destructive `run_command`/`send`/`submit` on the phone/hermes path runs unguarded. Fix: shared gate;
+  on the non-interactive path, block + feed back "needs explicit approval" (unless `JARVIS_AUTO_APPROVE=1`).
+- **G3 — unify the two loops.** REPL enforces risky-gate but not `is_premature_exit`; hermes the reverse.
+  Extract one shared gate so both enforce the same set (the prompt is already unified now).
+- **G2 — verify-before-advance.** Both set `pending_unverified` but only challenge at the "done" boundary;
+  a new consequential action while unverified should require a verify first.
+- **G4 — build order trusts the model.** `dag.py` executes by `depends_on`, but `parse_task` takes it
+  straight from the LLM. Auto-inject frontend/qa→backend deps so order can't be skipped.
+- **G5 — no loop-breaker.** Nothing blocks N identical consecutive `(fn,args)` calls; add a detector → get_unstuck.
 
 ---
 

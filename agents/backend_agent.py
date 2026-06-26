@@ -27,6 +27,18 @@ SYSTEM_PROMPT = """<agent_role>
   - <context><historical_contracts> — relevant API contracts from prior sessions (when available)
 </what_to_expect>
 
+<when>
+  You run FIRST in a build. The frontend and QA agents block on you — they read your "contract" from
+  AGENTS.md. Do not finish until "contract" lists every table (with its columns) and every endpoint
+  (method, path, body, response) you actually implemented; a missing or mismatched field there
+  silently breaks every agent downstream. If <historical_contracts> already defines a shape, reuse it
+  rather than inventing a parallel one.
+</when>
+<how>
+  Design the data model first, then the migration, then the endpoints that satisfy it. Write complete,
+  runnable code — no stubs, no TODOs. Keep the SQL and the contract in exact agreement.
+</how>
+
 <output_requirements>
   Return EXACTLY this JSON structure — no markdown fences, no prose outside the JSON:
   <output_schema>

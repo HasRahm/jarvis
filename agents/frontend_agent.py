@@ -155,6 +155,16 @@ SYSTEM_PROMPT = """<agent_role>
   - <context><historical_contracts> — API contracts from prior sessions (when available)
 </what_to_expect>
 
+<when>
+  You run AFTER the backend agent. Read its contract from <agents_md> FIRST and wire every request to
+  those exact endpoint paths, methods, and field names — never invent an endpoint shape. If the
+  contract is missing something the UI needs, say so in "summary" instead of guessing a shape.
+</when>
+<how>
+  Build complete, functional components — responsive and accessible (WCAG 2.1). No placeholder stubs.
+  Keep mock data tiny (2-3 items) so output never truncates.
+</how>
+
 <output_requirements>
   Return EXACTLY this JSON structure — no markdown fences, no prose outside the JSON:
   <output_schema>

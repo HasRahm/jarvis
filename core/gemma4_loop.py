@@ -26,18 +26,32 @@ except ImportError:
 
 from tools.dispatcher import dispatch, TOOL_DEFINITIONS
 from core.system.skills import SkillsEngine
-from core.system.llm_adapter import call_llm, is_ollama_available
+from core.system.llm_adapter import call_llm, is_ollama_available, _is_ollama_routable
 
+# The loop runs on WHATEVER model you choose, from any provider. Set JARVIS_PRIMARY_MODEL to a local
+# Ollama name (gemma4:31b-cloud, llama3:70b), an OpenRouter id (openrouter/anthropic/claude-opus-4.8),
+# an NVIDIA vendor slug (nvidia/nemotron-3-ultra-550b-a55b), or a native id (gpt-5.4,
+# gemini-3.1-pro-preview, claude-sonnet-4-6). The default stays the free local model.
 PRIMARY_MODEL = os.environ.get("JARVIS_PRIMARY_MODEL", "gemma4:31b-cloud")
 FALLBACK_MODEL = os.environ.get("JARVIS_FALLBACK_MODEL", "gemma4:31b-cloud")
 
 def get_available_model():
+    """Resolve the model the loop runs on — provider-agnostic.
+
+    A CLOUD choice (OpenRouter / NVIDIA / Anthropic / OpenAI / Gemini) is returned as-is; call_llm
+    routes it and applies its own resilient fallback chain. Only a LOCAL Ollama choice is health-
+    checked here, degrading to JARVIS_FALLBACK_MODEL if the Ollama server or that model is missing —
+    so a cloud model you picked is NEVER silently swapped back to the local default.
+    """
+    chosen = PRIMARY_MODEL
+    if not _is_ollama_routable(chosen.lower()):
+        return chosen
     try:
         if is_ollama_available():
             client = ollama.Client(timeout=5.0)
             models = [m.get("model") or m.get("name") for m in client.list().get("models", [])]
-            if PRIMARY_MODEL in models:
-                return PRIMARY_MODEL
+            if chosen in models:
+                return chosen
         return FALLBACK_MODEL
     except Exception as e:
         _jtrace(f"[TRACE] core.gemma4_loop.get_available_model: except {str(e)[:80]}")
@@ -116,13 +130,12 @@ def jarvis():
     
     from core.system.system_handshake import EnvironmentHandshake
     handshake = EnvironmentHandshake()
+    from core.jarvis_prompt import base_prompt
+    from datetime import datetime as _dt
+    _out_dir = os.environ.get("JARVIS_OUTPUT_ROOT") or os.getcwd()
     system_instruction = (
-        "You are Jarvis, a powerful AI assistant with full access to this computer via tools. Use your tools to accomplish the user's tasks. "
-        "Before answering a user prompt, ALWAYS call brain_query with the user's intent to check past context or memory.\n\n"
-        "For complex build tasks that involve multiple components (database + API + UI), use the delegate_task tool to hand the work to the multi-agent IDE. "
-        "The orchestrator will decompose the task and route subtasks to specialized agents (backend: claude-sonnet-4-6, frontend: gemini-3.1-pro-preview, QA: gpt-5.4). "
-        "Use delegate_task with dry_run=true first to preview the plan.\n"
-        f"{handshake.get_system_prompt_addition()}"
+        base_prompt(date=_dt.now().strftime("%A, %B %d, %Y"), output_dir=_out_dir)
+        + f"\n\n{handshake.get_system_prompt_addition()}"
     )
 
     skills_engine = SkillsEngine()

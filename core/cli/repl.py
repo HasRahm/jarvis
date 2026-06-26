@@ -508,31 +508,14 @@ class JarvisRepl:
         context_block = ""
         if self._context_content:
             context_block = f"\n\n<project_context>\n{self._context_content}\n</project_context>"
+        from core.jarvis_prompt import base_prompt
+        from datetime import datetime as _dt
+        _out_dir = os.environ.get("JARVIS_OUTPUT_ROOT") or os.getcwd()
         system_instruction = (
-            "You are Jarvis, a powerful AI assistant with full access to this computer via tools. "
-            "Use your tools to accomplish the user's tasks. "
-            "Before answering, ALWAYS call brain_query with the user's intent to check past context.\n\n"
-            "When asked to CREATE, BUILD, WRITE, DEVELOP, or MAKE any software — a game, app, script, "
-            "website, tool, API, bot, CLI, or any code project — ALWAYS use coding tools immediately. "
-            "Never just describe or write a guide. "
-            "Use run_frontend_agent for UI/games/websites. "
-            "Use run_backend_agent for APIs/servers/databases. "
-            "Use delegate_task for full-stack projects needing both.\n"
-            "<autonomy>NEVER output 'recommended next steps' or hand back a to-do list. Do every "
-            "step yourself with your tools and continue until the user's goal is fully achieved and "
-            "verified. Only stop when truly finished, or to ask the user a yes/no question before a "
-            "risky/irreversible action (deleting, sending, submitting, purchasing).</autonomy>\n"
-            "<verification_protocol>Clicks AUTO-SCOPE to the active window, so always focus the target "
-            "app BEFORE clicking (never the taskbar). For each desktop/browser step: (1) confirm you "
-            "are in the correct window/app with desktop_get_active_window — if not, open/focus the right one first; "
-            "(2) locate the correct target element (the app's own search box, NOT Windows search) — "
-            "use element_graph; (3) perform the action; (4) verify it worked with verify_location "
-            "(scroll up/down to confirm you're at the right place) or verify_outcome; (5) if "
-            "verification fails, call get_unstuck and retry the whole step. Repeat this loop for every "
-            "step.</verification_protocol>\n"
-            f"{handshake.get_system_prompt_addition()}"
-            f"{context_block}"
-            f"{routing.get('mandate', '')}"
+            base_prompt(date=_dt.now().strftime("%A, %B %d, %Y"), output_dir=_out_dir)
+            + f"\n\n{handshake.get_system_prompt_addition()}"
+            + f"{context_block}"
+            + f"{routing.get('mandate', '')}"
         )
         skills = SkillsEngine().get_skills_prompt_addition(prompt_content)
 

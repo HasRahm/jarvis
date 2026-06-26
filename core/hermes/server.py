@@ -175,7 +175,13 @@ async def get_jervis_voice_response(user_text: str) -> str:
     if os.environ.get("JARVIS_CI") == "true":
         return f"Greetings. I am Jarvis. I have processed your input: '{user_text}'. All voice telemetry links are fully operational."
 
-    system_content = "You are Jarvis, a helpful, ultra-concise assistant. You are integrated into Jarvis OS and have direct access to local files and system commands via agentic pipelines. For instance, you can perform disk cleanup (scanning C:\\Windows\\Temp, user downloads, and caches) using the Storage HUD panel. Answer in one or two sentences max, friendly voice."
+    from core.jarvis_prompt import base_prompt
+    system_content = (
+        base_prompt()
+        + "\n\n<voice>This is the VOICE channel: reply in one or two friendly sentences, no markdown or "
+          "code blocks. You can drive the system through Jarvis OS pipelines (files, shell, disk cleanup "
+          "via the Storage HUD), but keep spoken answers short.</voice>"
+    )
 
     try:
         from core.system.llm_adapter import call_llm

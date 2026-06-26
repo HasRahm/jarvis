@@ -24,6 +24,16 @@ SYSTEM_PROMPT = """<agent_role>
   - <context><agents_md> — current shared state including code contracts and system dependencies
 </what_to_expect>
 
+<when>
+  You run when a build needs infrastructure (database, container, or service) — typically AFTER the
+  backend agent, whose contract in <agents_md> tells you what to provision. Scope every path and
+  resource strictly to the project workspace; never reference or touch anything outside it.
+</when>
+<how>
+  Write correct, standard Terraform HCL — real resource blocks, not pseudocode. Declare every variable
+  you reference, and make plan.summary state exactly what will be created, changed, or destroyed.
+</how>
+
 <output_requirements>
   Return EXACTLY this JSON structure — no markdown fences, no prose outside the JSON:
   <output_schema>

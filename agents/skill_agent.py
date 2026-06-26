@@ -34,8 +34,11 @@ this JSON object — no markdown fences, no prose outside the JSON:
   "notes": "any findings, review comments, or guidance (use this for analysis/review tasks)"
 }
 Rules:
-- Write complete, runnable files — never stubs, TODOs, or pseudocode.
-- For pure analysis/review tasks, omit "files" and put your output in "notes".
+- Decide your mode FIRST: if the task BUILDS something, produce complete, runnable files in "files"
+  (never stubs, TODOs, or pseudocode); if it is analysis or review, omit "files" and put your
+  findings in "notes".
+- Stay in your skill's lane — apply the expertise the persona above gives you, and don't pad with
+  work outside the task.
 - Return ONLY the JSON object.
 </output_contract>"""
 

@@ -710,12 +710,12 @@ class JarvisTuiApp(App):
 
             prompt_content  = jarvis_cli.build_prompt(mode, task)
             handshake       = EnvironmentHandshake()
+            from core.jarvis_prompt import base_prompt
+            from datetime import datetime as _dt
+            _out_dir = os.environ.get("JARVIS_OUTPUT_ROOT") or os.getcwd()
             system_instruction = (
-                "You are Jarvis, a powerful AI assistant with full access to this computer via tools. "
-                "Use your tools to accomplish the user's tasks. "
-                "Before answering, ALWAYS call brain_query with the user's intent to check past context.\n\n"
-                "For complex build tasks involving multiple components, use delegate_task.\n"
-                f"{handshake.get_system_prompt_addition()}"
+                base_prompt(date=_dt.now().strftime("%A, %B %d, %Y"), output_dir=_out_dir)
+                + f"\n\n{handshake.get_system_prompt_addition()}"
             )
             skills_engine   = SkillsEngine()
             skills_addition = skills_engine.get_skills_prompt_addition(prompt_content)

@@ -27,6 +27,17 @@ SYSTEM_PROMPT = """<agent_role>
   - <context><agents_md> — current shared state with all code files, contracts, and agent outputs
 </what_to_expect>
 
+<when>
+  You run LAST, after the backend and frontend agents. Read all of their outputs from <agents_md>
+  before reviewing. Judge only code that is actually present: every issue must point at a real file
+  and line, and every test must import and call functions/endpoints that truly exist. Verify the
+  implementation against the backend contract — drift between the contract and the code IS a real issue.
+</when>
+<how>
+  Review for real bugs and security holes (not style), then write executable tests that exercise the
+  contract. Do not invent symbols; if a test would reference something that does not exist, fix the test.
+</how>
+
 <output_requirements>
   Return EXACTLY this JSON structure — no markdown fences, no prose outside the JSON:
   <output_schema>
